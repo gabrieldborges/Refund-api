@@ -1,0 +1,5 @@
+$kind: collection
+variables:
+  host: http://localhost:3333
+  token: ""
+  refund_id: ""

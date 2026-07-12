@@ -33,6 +33,34 @@ nível por tecnologia, padrões recorrentes e como prefiro que a IA colabore com
   tamanho do arquivo) + driver `ReceiptStorage` (injetado via interface,
   `ReceiptStorageInterface`, porque toca disco — igual repository). Valor
   convertido de reais pro `amount_in_cents` dentro do controller.
+  **Lição aprendida**: o tipo de arquivo é validado pela **extensão do nome**
+  (`.jpg/.jpeg/.png/.pdf`), não pelo `Content-Type` que o cliente manda no
+  upload — esse header é frágil na prática (o Postman mandava
+  `application/octet-stream` pra um JPG de verdade dependendo de como o
+  arquivo foi anexado, e isso travava o upload com 422). `ALLOWED_CONTENT_TYPES`
+  foi removido do `global_config.py` por ficar sem uso.
+- Listagem (`GET /refunds?page=&per_page=&name=`): `RefundListerController` +
+  `RefundListerView`. Query params validados direto na rota via `Query(..., ge=1)`
+  (sem validator próprio, mesmo princípio do `Form(...)`). Regra de autorização
+  fica no controller: `admin` → `user_id=None` (vê todos), `standard` → seu
+  próprio `user_id` (repository só filtra o que mandarem). Resposta inclui
+  `total`/`page`/`per_page`/`total_pages` pro frontend montar a paginação.
+  **Lição aprendida**: o repository devolve `created_at` como `datetime` puro
+  (vindo direto da linha do SQLAlchemy) — isso quebra o `JSONResponse` do
+  FastAPI (`TypeError: Object of type datetime is not JSON serializable`).
+  Convertemos pra `.isoformat()` dentro do `__format_response` do controller
+  (é responsabilidade dele moldar a saída pra HTTP, não do repository).
+- Detalhes (`GET /refunds/{id}`) e exclusão (`DELETE /refunds/{id}`):
+  `RefundFinderController`/`RefundDeleterController` (mesma conversão de
+  `created_at` do lister). **Regra de segurança repetida nos dois**: se o
+  reembolso não existe OU pertence a outro usuário (e quem pede não é admin),
+  devolve `404` nos dois casos — nunca `403`, pra não revelar que aquele ID
+  existe (o mesmo princípio do "Invalid credentials" genérico no login).
+  `RefundDeleterController` também apaga o arquivo do recibo via
+  `ReceiptStorage.delete` depois de remover a linha do banco. Duplicação
+  pequena e aceita entre `RefundFinderView`/`RefundDeleterView` (3 linhas pra
+  extrair `refund_id`/`user_id`/`role`) — documentada com
+  `pylint: disable=duplicate-code`, não virou abstração porque não compensa.
 - **Padrão de código: testes com pytest são obrigatórios junto de cada camada
   nova** (não deixar acumular para uma etapa separada no fim). Um `_test.py`
   ao lado de cada arquivo de origem, seguindo o estilo do projeto `FastAPI`

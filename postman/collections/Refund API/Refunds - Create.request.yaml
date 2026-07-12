@@ -1,0 +1,31 @@
+$kind: http-request
+url: "{{host}}/refunds"
+method: POST
+headers:
+  Authorization: Bearer {{token}}
+body:
+  type: formdata
+  content:
+    - type: text
+      key: name
+      value: Ana Silva
+    - type: text
+      key: amount
+      value: "45.90"
+    - type: text
+      key: category
+      value: food
+    - type: file
+      key: file
+      src:
+        - /Users/gabriel/Desktop/Programing/Projects/React/Refund-api/test_images/eu_1.1.1.jpg
+scripts:
+  - type: afterResponse
+    code: |-
+      const jsonData = pm.response.json();
+      if (jsonData.attributes && jsonData.attributes.id) {
+          pm.collectionVariables.set("refund_id", jsonData.attributes.id);
+          console.log("refund_id salvo: " + jsonData.attributes.id);
+      }
+    language: text/javascript
+order: 4000

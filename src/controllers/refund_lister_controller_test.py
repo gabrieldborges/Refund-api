@@ -1,0 +1,95 @@
+# pylint: disable=w0621
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
+import pytest
+from .refund_lister_controller import RefundListerController
+
+
+@pytest.fixture
+def mock_repository():
+    mock_repo = MagicMock()
+    mock_repo.select_refunds = AsyncMock(return_value=([{"id": 1}, {"id": 2}], 2))
+    return mock_repo
+
+
+# Security: a "standard" user must only ever see their own refunds, so the controller
+# must pass their own user_id as the repository's filter.
+@pytest.mark.asyncio
+async def test_standard_user_lists_only_their_own_refunds(mock_repository):
+    controller = RefundListerController(mock_repository)
+
+    await controller.list(page=1, per_page=10, user_id=7, role="standard")
+
+    mock_repository.select_refunds.assert_awaited_once_with(
+        page=1, per_page=10, name=None, user_id=7
+    )
+
+
+# Security: an "admin" must see everyone's refunds, so the controller must pass
+# user_id=None (no filter) to the repository, ignoring their own id.
+@pytest.mark.asyncio
+async def test_admin_lists_every_users_refunds(mock_repository):
+    controller = RefundListerController(mock_repository)
+
+    await controller.list(page=1, per_page=10, user_id=7, role="admin")
+
+    mock_repository.select_refunds.assert_awaited_once_with(
+        page=1, per_page=10, name=None, user_id=None
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_forwards_the_name_search_term(mock_repository):
+    controller = RefundListerController(mock_repository)
+
+    await controller.list(page=1, per_page=10, user_id=7, role="standard", name="Ana")
+
+    mock_repository.select_refunds.assert_awaited_once_with(
+        page=1, per_page=10, name="Ana", user_id=7
+    )
+
+
+# Pagination metadata (total_pages) must be computed from the repository's total count,
+# not just from how many items came back on this page.
+@pytest.mark.asyncio
+async def test_response_includes_pagination_metadata(mock_repository):
+    mock_repository.select_refunds = AsyncMock(return_value=([{"id": 1}], 25))
+    controller = RefundListerController(mock_repository)
+
+    response = await controller.list(page=2, per_page=10, user_id=7, role="standard")
+
+    assert response["count"] == 1
+    assert response["total"] == 25
+    assert response["page"] == 2
+    assert response["per_page"] == 10
+    assert response["total_pages"] == 3
+    assert response["attributes"] == [{"id": 1, "created_at": None}]
+
+
+# Edge case: zero results must not raise a division-by-zero when computing total_pages.
+@pytest.mark.asyncio
+async def test_response_with_zero_results_has_zero_total_pages(mock_repository):
+    mock_repository.select_refunds = AsyncMock(return_value=([], 0))
+    controller = RefundListerController(mock_repository)
+
+    response = await controller.list(page=1, per_page=10, user_id=7, role="standard")
+
+    assert response["total_pages"] == 0
+
+
+# Regression test: the repository returns created_at as a raw Python datetime (this is
+# exactly what caused a 500 "Object of type datetime is not JSON serializable" in
+# manual testing). The controller must convert it to an ISO string before it reaches
+# the HTTP response.
+@pytest.mark.asyncio
+async def test_created_at_is_serialized_to_an_iso_string(mock_repository):
+    raw_datetime = datetime(2026, 7, 12, 10, 30, 0)
+    mock_repository.select_refunds = AsyncMock(
+        return_value=([{"id": 1, "created_at": raw_datetime}], 1)
+    )
+    controller = RefundListerController(mock_repository)
+
+    response = await controller.list(page=1, per_page=10, user_id=7, role="standard")
+
+    assert response["attributes"][0]["created_at"] == raw_datetime.isoformat()
+    assert isinstance(response["attributes"][0]["created_at"], str)

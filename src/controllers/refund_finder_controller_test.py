@@ -1,0 +1,67 @@
+# pylint: disable=w0621
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
+import pytest
+from src.errors.types.http_not_found_error import HttpNotFoundError
+from .refund_finder_controller import RefundFinderController
+
+
+@pytest.fixture
+def mock_repository():
+    mock_repo = MagicMock()
+    mock_repo.select_refund_by_id = AsyncMock(return_value={"id": 1, "user_id": 7, "name": "Ana"})
+    return mock_repo
+
+
+@pytest.mark.asyncio
+async def test_owner_can_find_their_own_refund(mock_repository):
+    controller = RefundFinderController(mock_repository)
+
+    response = await controller.find(refund_id=1, user_id=7, role="standard")
+
+    assert response["attributes"]["id"] == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_can_find_any_refund(mock_repository):
+    controller = RefundFinderController(mock_repository)
+
+    response = await controller.find(refund_id=1, user_id=999, role="admin")
+
+    assert response["attributes"]["id"] == 1
+
+
+# Security: a standard user trying to reach someone else's refund gets the same
+# "not found" error as a truly missing id — the API never confirms the id exists.
+@pytest.mark.asyncio
+async def test_standard_user_cannot_find_someone_elses_refund(mock_repository):
+    controller = RefundFinderController(mock_repository)
+
+    with pytest.raises(HttpNotFoundError):
+        await controller.find(refund_id=1, user_id=999, role="standard")
+
+
+@pytest.mark.asyncio
+async def test_missing_refund_raises_not_found():
+    mock_repo = MagicMock()
+    mock_repo.select_refund_by_id = AsyncMock(return_value=None)
+    controller = RefundFinderController(mock_repo)
+
+    with pytest.raises(HttpNotFoundError):
+        await controller.find(refund_id=999, user_id=7, role="standard")
+
+
+# Same datetime-serialization rule as RefundListerController: a raw datetime from the
+# database would otherwise break JSON encoding at the HTTP boundary.
+@pytest.mark.asyncio
+async def test_created_at_is_serialized_to_an_iso_string():
+    raw_datetime = datetime(2026, 7, 12, 10, 30, 0)
+    mock_repo = MagicMock()
+    mock_repo.select_refund_by_id = AsyncMock(
+        return_value={"id": 1, "user_id": 7, "created_at": raw_datetime}
+    )
+    controller = RefundFinderController(mock_repo)
+
+    response = await controller.find(refund_id=1, user_id=7, role="standard")
+
+    assert response["attributes"]["created_at"] == raw_datetime.isoformat()

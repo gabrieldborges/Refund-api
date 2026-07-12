@@ -2,6 +2,10 @@
 workspace:
   id: 1968251c-9ed2-40e8-8780-1fb75ff4905d
 
+cloudResources:
+  collections:
+    ../postman/collections/Refund API: d681a9ea-a959-46c6-bc7f-d94516f347da
+
 # All resources in the `postman/` folder are automatically registered in Local View.
 # Point to additional files outside the `postman/` folder to register them individually. Example:
 #localResources:

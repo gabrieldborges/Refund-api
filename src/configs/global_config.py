@@ -7,7 +7,6 @@ database_info = {
 upload_info = {
     "UPLOAD_DIR": os.getenv("UPLOAD_DIR", "uploads/receipts"),
     "MAX_FILE_SIZE_BYTES": 4 * 1024 * 1024,
-    "ALLOWED_CONTENT_TYPES": ["image/jpeg", "image/png", "application/pdf"]
 }
 
 jwt_info = {

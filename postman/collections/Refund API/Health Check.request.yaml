@@ -1,0 +1,4 @@
+$kind: http-request
+url: "{{host}}/health"
+method: GET
+order: 1000

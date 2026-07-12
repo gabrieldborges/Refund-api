@@ -1,0 +1,184 @@
+{
+	"info": {
+		"_postman_id": "b3f1c9a2-4e2a-4b8f-9e1a-8f0a6f5c2a11",
+		"name": "Refund API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "host",
+			"value": "http://localhost:3333"
+		},
+		{
+			"key": "token",
+			"value": ""
+		},
+		{
+			"key": "refund_id",
+			"value": ""
+		}
+	],
+	"item": [
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{host}}/health",
+					"host": ["{{host}}"],
+					"path": ["health"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Auth - Register",
+			"request": {
+				"method": "POST",
+				"header": [
+					{ "key": "Content-Type", "value": "application/json" }
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"name\": \"Ana Silva\",\n  \"email\": \"ana@example.com\",\n  \"password\": \"senha12345\"\n}",
+					"options": { "raw": { "language": "json" } }
+				},
+				"url": {
+					"raw": "{{host}}/auth/register",
+					"host": ["{{host}}"],
+					"path": ["auth", "register"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Auth - Login",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"const jsonData = pm.response.json();",
+							"if (jsonData.token) {",
+							"    pm.collectionVariables.set(\"token\", jsonData.token);",
+							"    console.log(\"Token salvo na variavel {{token}}\");",
+							"}"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{ "key": "Content-Type", "value": "application/json" }
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"email\": \"ana@example.com\",\n  \"password\": \"senha12345\"\n}",
+					"options": { "raw": { "language": "json" } }
+				},
+				"url": {
+					"raw": "{{host}}/auth/login",
+					"host": ["{{host}}"],
+					"path": ["auth", "login"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Refunds - Create",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"const jsonData = pm.response.json();",
+							"if (jsonData.attributes && jsonData.attributes.id) {",
+							"    pm.collectionVariables.set(\"refund_id\", jsonData.attributes.id);",
+							"    console.log(\"refund_id salvo: \" + jsonData.attributes.id);",
+							"}"
+						]
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{ "key": "Authorization", "value": "Bearer {{token}}" }
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{ "key": "name", "value": "Ana Silva", "type": "text" },
+						{ "key": "amount", "value": "45.90", "type": "text" },
+						{ "key": "category", "value": "food", "type": "text" },
+						{
+							"key": "file",
+							"type": "file",
+							"src": "/Users/gabriel/Desktop/Programing/Projects/React/Refund-api/test_images/eu_1.1.1.jpg"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{host}}/refunds",
+					"host": ["{{host}}"],
+					"path": ["refunds"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Refunds - List",
+			"request": {
+				"method": "GET",
+				"header": [
+					{ "key": "Authorization", "value": "Bearer {{token}}" }
+				],
+				"url": {
+					"raw": "{{host}}/refunds?page=1&per_page=10&name=",
+					"host": ["{{host}}"],
+					"path": ["refunds"],
+					"query": [
+						{ "key": "page", "value": "1" },
+						{ "key": "per_page", "value": "10" },
+						{ "key": "name", "value": "", "disabled": true }
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Refunds - Get by ID",
+			"request": {
+				"method": "GET",
+				"header": [
+					{ "key": "Authorization", "value": "Bearer {{token}}" }
+				],
+				"url": {
+					"raw": "{{host}}/refunds/{{refund_id}}",
+					"host": ["{{host}}"],
+					"path": ["refunds", "{{refund_id}}"]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Refunds - Delete",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{ "key": "Authorization", "value": "Bearer {{token}}" }
+				],
+				"url": {
+					"raw": "{{host}}/refunds/{{refund_id}}",
+					"host": ["{{host}}"],
+					"path": ["refunds", "{{refund_id}}"]
+				}
+			},
+			"response": []
+		}
+	]
+}

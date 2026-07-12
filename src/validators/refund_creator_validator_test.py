@@ -11,7 +11,7 @@ def valid_body(**overrides):
         "name": "Ana Silva",
         "category": "food",
         "amount": 45.90,
-        "content_type": "image/jpeg",
+        "filename": "receipt.jpg",
         "content": b"x" * 100,
     }
     body.update(overrides)
@@ -46,15 +46,26 @@ def test_zero_or_negative_amount_raises():
         refund_creator_validator(http_request)
 
 
-def test_disallowed_file_content_type_raises():
-    http_request = HttpRequest(body=valid_body(content_type="application/zip"))
+# Validated by extension, not by the client-declared Content-Type header — that
+# header proved unreliable in practice (Postman sent "application/octet-stream" for
+# a real jpg upload, which a content-type-only check would wrongly accept/reject).
+def test_disallowed_file_extension_raises():
+    http_request = HttpRequest(body=valid_body(filename="malware.exe"))
 
     with pytest.raises(HttpUnprocessableEntityError):
         refund_creator_validator(http_request)
 
 
-# Lemos o limite direto da config e montamos um conteudo 1 byte acima dele. Assim o
-# teste continua valido mesmo que o valor mude no futuro (sem numero magico duplicado).
+# Accepts any casing and any of the allowed extensions, not just ".jpg".
+@pytest.mark.parametrize("filename", ["receipt.JPG", "receipt.jpeg", "receipt.png", "receipt.pdf"])
+def test_allowed_extensions_pass_regardless_of_case(filename):
+    http_request = HttpRequest(body=valid_body(filename=filename))
+
+    refund_creator_validator(http_request)
+
+
+# Reads the limit straight from config and builds content 1 byte over it, so the
+# test stays valid even if the value changes later (no duplicated magic number).
 def test_file_larger_than_the_limit_raises():
     over_limit = upload_info["MAX_FILE_SIZE_BYTES"] + 1
     http_request = HttpRequest(body=valid_body(content=b"x" * over_limit))

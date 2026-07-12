@@ -1,7 +1,0 @@
-$kind: collection
-name: Refund API
-variables:
-  - key: baseUrl
-    value: 'http://localhost:3333'
-  - key: authToken
-    value: ''

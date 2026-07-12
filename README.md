@@ -60,3 +60,14 @@ estaticamente em `/receipts/{filename}`.
 - Rotas protegidas devem usar `Depends(get_current_user)`
   (`src/main/middlewares/auth_jwt.py`), passando o token no header
   `Authorization: Bearer <token>`.
+
+## Testando no Postman
+
+Importe [`Refund-api.postman_collection.json`](Refund-api.postman_collection.json)
+(File > Import). A collection já vem com:
+- Variável `host` (`http://localhost:3333`).
+- **Auth - Login** salva o token automaticamente na variável `{{token}}` (script
+  na aba Tests) — as demais requisições já usam `Authorization: Bearer {{token}}`.
+- **Refunds - Create** salva o `id` criado em `{{refund_id}}`, usado por
+  **Get by ID** e **Delete**.
+- Rode na ordem: Register → Login → Create → List → Get by ID → Delete.

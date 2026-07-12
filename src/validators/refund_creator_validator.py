@@ -1,8 +1,10 @@
+import os
 from src.configs.global_config import upload_info
 from src.errors.types.http_unprocessable_entity_error import HttpUnprocessableEntityError
 from src.views.http_types.http_request import HttpRequest
 
 ALLOWED_CATEGORIES = {"food", "lodging", "transport", "service", "equipment"}
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
 
 
 def refund_creator_validator(http_request: HttpRequest) -> None:
@@ -19,7 +21,12 @@ def refund_creator_validator(http_request: HttpRequest) -> None:
     if body.get("amount") is None or body["amount"] <= 0:
         raise HttpUnprocessableEntityError("Amount must be greater than zero")
 
-    if body.get("content_type") not in upload_info["ALLOWED_CONTENT_TYPES"]:
+    # Validated by extension, not by the client-supplied Content-Type header: that
+    # header is set by whatever HTTP client is uploading (browser, Postman, curl...)
+    # and is unreliable in practice — Postman, for one, sends "application/octet-stream"
+    # for some real image uploads depending on how the file was attached.
+    extension = os.path.splitext(body.get("filename") or "")[1].lower()
+    if extension not in ALLOWED_EXTENSIONS:
         raise HttpUnprocessableEntityError("Receipt file must be JPG, PNG or PDF")
 
     if len(body.get("content", b"")) > upload_info["MAX_FILE_SIZE_BYTES"]:
