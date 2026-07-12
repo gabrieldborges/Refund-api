@@ -7,6 +7,7 @@ from src.models.settings.database_connection_handler import engine
 from src.models.settings.metadata import metadata
 from src.models.entities import users, refunds  # pylint: disable=unused-import
 from src.main.routes.auth_routes import auth_routes
+from src.main.routes.refund_routes import refund_routes
 
 
 @asynccontextmanager
@@ -28,6 +29,7 @@ app.add_middleware(
 app.mount("/receipts", StaticFiles(directory=upload_info["UPLOAD_DIR"]), name="receipts")
 
 app.include_router(auth_routes)
+app.include_router(refund_routes)
 
 
 @app.get("/health")
