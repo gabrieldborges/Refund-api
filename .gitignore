@@ -1,0 +1,9 @@
+.venv
+**/__pycache__
+*venv
+.venv*
+schema.db
+*.db
+.env
+uploads/receipts/*
+!uploads/receipts/.gitkeep
