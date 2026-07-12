@@ -24,3 +24,16 @@ nível por tecnologia, padrões recorrentes e como prefiro que a IA colabore com
   FastAPI que decodifica o JWT do header `Authorization: Bearer`), pronta mas
   ainda não usada em nenhuma rota — será aplicada nas rotas de refund
   (próximo passo), e lá também vamos criar um `require_admin` em cima dela.
+- **Padrão de código: testes com pytest são obrigatórios junto de cada camada
+  nova** (não deixar acumular para uma etapa separada no fim). Um `_test.py`
+  ao lado de cada arquivo de origem, seguindo o estilo do projeto `FastAPI`
+  (fixtures com `MagicMock`/`AsyncMock`, `@pytest.mark.asyncio` em teste
+  assíncrono). Fixtures repetidas entre arquivos de teste no mesmo diretório
+  vão para um `conftest.py` local (ex: `src/models/repositories/conftest.py`).
+  Rodar `pytest` e `pylint src` depois de qualquer mudança antes de dar por
+  concluído.
+- **Comentários nos testes: sempre descritivos e em inglês.** Cada fixture e
+  cada teste devem ter um comentário curto explicando o cenário/porquê (ex:
+  "happy path", "security: never expose the password"), não só o que o
+  código faz. Isso vale mesmo quando o resto do projeto mistura português
+  (notas, comentários gerais) — comentário de teste é sempre inglês.

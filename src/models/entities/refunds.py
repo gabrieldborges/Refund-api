@@ -11,5 +11,5 @@ Refunds = Table(
     Column("category", String, nullable=False),
     Column("amount_in_cents", Integer, nullable=False),
     Column("filename", String, nullable=False),
-    Column("created_at", DateTime, server_default=func.now()),
+    Column("created_at", DateTime, server_default=func.now()),  # pylint: disable=not-callable
 )

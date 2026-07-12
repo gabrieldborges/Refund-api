@@ -10,5 +10,5 @@ Users = Table(
     Column("email", String, nullable=False, unique=True),
     Column("password", String, nullable=False),
     Column("role", String, nullable=False, server_default="standard"),
-    Column("created_at", DateTime, server_default=func.now()),
+    Column("created_at", DateTime, server_default=func.now()),  # pylint: disable=not-callable
 )
