@@ -3,7 +3,7 @@ from src.configs.global_config import upload_info
 from src.errors.types.http_unprocessable_entity_error import HttpUnprocessableEntityError
 from src.views.http_types.http_request import HttpRequest
 
-ALLOWED_CATEGORIES = {"food", "lodging", "transport", "service", "equipment"}
+ALLOWED_CATEGORIES = {"food", "lodging", "transport", "service", "others"}
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
 
 
