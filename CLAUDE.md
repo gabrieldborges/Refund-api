@@ -9,8 +9,17 @@ nível por tecnologia, padrões recorrentes e como prefiro que a IA colabore com
 - Backend do sistema de reembolso (Refund). Frontend irmão em `../Refund` (React).
 - Segue a mesma Clean Architecture dos meus outros projetos Python
   (models/controllers/views/validators/errors/main-composer).
-- Banco: SQLite local por enquanto (`DATABASE_URL` no `.env`). Migração para
-  Postgres em nuvem é um passo futuro planejado, não fazer sem perguntar antes.
+- Banco: Postgres na nuvem (Neon), via `DATABASE_URL` no `.env`
+  (`postgresql+asyncpg://...?ssl=require`). Migrado do SQLite local em
+  2026-07-15. **Lição aprendida**: o driver `asyncpg` não aceita o parâmetro
+  `sslmode` que a maioria dos provedores Postgres coloca por padrão na
+  connection string (`TypeError: connect() got an unexpected keyword argument
+  'sslmode'`) — troque por `ssl=require` na URL, que o dialect do SQLAlchemy
+  repassa corretamente pro `asyncpg`. Nenhum código mudou: as `Table` do
+  SQLAlchemy Core em `src/models/entities/` já eram portáveis entre dialetos;
+  o `metadata.create_all` no `lifespan` do `server.py` cria as tabelas sozinho
+  na primeira subida contra o banco novo. `refund.db` (SQLite antigo) ficou
+  no repo apenas como artefato local, já ignorado no `.gitignore`.
 - Upload de recibo: salvo em disco local (`uploads/receipts/`), servido
   estaticamente em `/receipts/{filename}`. Regras: JPG/PNG/PDF, máx. 4MB.
 - Autenticação: implementada (`POST /auth/register`, `POST /auth/login`),
