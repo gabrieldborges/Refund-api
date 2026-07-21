@@ -1,21 +1,26 @@
 # Refund API
 
-Backend do sistema de reembolso (Clean Architecture, mesmo padrão dos outros
-projetos Python deste workspace). Frontend em `React/Refund`, consumindo esta API.
+Backend do sistema de reembolso, organizado com Clean Architecture. O frontend
+irmão está em [`../Refund-FrontEnd`](../Refund-FrontEnd).
+
+Os requisitos e as decisões compartilhadas do produto estão na
+[documentação canônica](docs/index.md).
 
 ## Environment setup
 
 Crie um `.env` na raiz do projeto:
 
 ```env
-DATABASE_URL=sqlite+aiosqlite:///refund.db
+DATABASE_URL=postgresql+asyncpg://usuario:senha@host/database?ssl=require
 UPLOAD_DIR=uploads/receipts
 JWT_SECRET=uma-chave-secreta-aleatoria
 JWT_ALGORITHM=HS256
 JWT_EXPIRATION_HOURS=8
 ```
 
-> Não commitar `.env` (já está no `.gitignore`).
+`usuario`, `senha` e `host` são valores de exemplo: substitua-os pelas
+credenciais do seu ambiente. Nunca versione o `.env` (ele já está no
+`.gitignore`) nem exponha credenciais reais na documentação.
 
 ## Rodando localmente
 
@@ -29,10 +34,9 @@ python run.py
 A API sobe em `http://localhost:3333`.
 Documentação automática (Swagger) em `http://localhost:3333/docs`.
 
-O banco (`refund.db`) e a tabela `refunds` são criados automaticamente no
-startup do servidor (ver `src/main/server/server.py`), a partir da entidade
-definida em `src/models/entities/refunds.py`. Não é preciso rodar `init/schema.sql`
-manualmente — ele existe só como referência do schema.
+No startup do servidor, `metadata.create_all` cria no PostgreSQL as tabelas que
+ainda não existem (ver `src/main/server/server.py`). Não é preciso rodar
+`init/schema.sql` manualmente — ele existe só como referência do schema.
 
 ## Estrutura
 
