@@ -31,8 +31,9 @@
 
 - Preserve a Clean Architecture existente em
   `models/controllers/views/validators/errors/main`.
-- Em dependencies e middlewares do FastAPI, levante `fastapi.HTTPException`
-  diretamente; esses fluxos não passam pelo `try/except` das views.
+- Em dependencies do FastAPI, especialmente `get_current_user`, levante
+  `fastapi.HTTPException` diretamente; esses fluxos não passam pelo `try/except`
+  das views.
 - Use PostgreSQL pela `DATABASE_URL`; não exponha credenciais reais nem
   versione o `.env`.
 
