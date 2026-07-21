@@ -12,8 +12,6 @@ Visualizar os dados de uma solicitação específica e abrir seu comprovante.
 
 - O usuário possui um JWT válido.
 - O usuário possui o identificador de uma solicitação.
-- Se tiver papel `standard`, o usuário é proprietário da solicitação; um
-  `admin` pode consultar qualquer solicitação existente.
 
 ## Fluxo principal
 

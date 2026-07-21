@@ -44,8 +44,10 @@ Registrar uma despesa e seu comprovante como solicitação de reembolso.
   rejeita a criação.
 - Se o comprovante exceder 4 MiB (`4 * 1024 * 1024` bytes), a API rejeita a
   criação.
-- O frontend também aplica essas validações antes do envio e exibe a mensagem
-  correspondente sem navegar para a tela de sucesso.
+- Antes do envio, o frontend exige uma string de nome não vazia, categoria
+  permitida, valor positivo e comprovante com extensão e tamanho aceitos; em
+  caso de erro, exibe a mensagem correspondente sem navegar para a tela de
+  sucesso. A rejeição de nome composto somente por espaços é feita pela API.
 
 ## Pós-condições
 

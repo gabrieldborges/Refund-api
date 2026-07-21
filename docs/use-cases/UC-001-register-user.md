@@ -11,7 +11,6 @@ Criar uma conta para acessar as funcionalidades de reembolso.
 ## Pré-condições
 
 - O visitante está na tela pública de cadastro.
-- O e-mail informado ainda não pertence a outro usuário.
 
 ## Fluxo principal
 

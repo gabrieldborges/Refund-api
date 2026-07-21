@@ -12,8 +12,7 @@ Remover uma solicitação e seu comprovante armazenado.
 
 - O usuário possui um JWT válido.
 - O usuário está na tela de detalhes de uma solicitação.
-- Se tiver papel `standard`, o usuário é proprietário da solicitação; um
-  `admin` pode excluir qualquer solicitação existente.
+- O frontend possui o identificador da solicitação a excluir.
 
 ## Fluxo principal
 
