@@ -6,6 +6,11 @@ frontend e pela API.
 ## Estado do projeto
 - [Estado atual do projeto](plans/current-state.md) — retrato para sessões
   futuras: arquitetura, progresso da trilha de aprendizado e pendências.
+- [Fluxo de trabalho do Learning Path](plans/learning-path-workflow.md) — contrato
+  permanente para explicar, aprovar, implementar, verificar e encerrar cada
+  item da trilha.
+- [Progresso de aprendizado](learning-path-progress.md) — diário cumulativo com
+  comparações, exemplos antes/depois e conclusões de cada item.
 
 ## Produto
 - [Visão do produto](vision.md)

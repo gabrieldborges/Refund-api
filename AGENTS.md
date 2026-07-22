@@ -11,6 +11,9 @@
 ## Antes de implementar
 
 - Leia no índice os requisitos e ADRs relacionados à mudança.
+- Quando o trabalho fizer parte do Learning Path, leia e siga
+  [o fluxo permanente da trilha](docs/plans/learning-path-workflow.md) antes de
+  propor ou implementar o item.
 - Explique por que uma arquitetura complexa ou biblioteca nova é necessária.
 - Prefira a solução mais simples que resolva o problema e evite abstrações
   prematuras.

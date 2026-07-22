@@ -5,6 +5,12 @@ Este documento é um retrato do projeto para dar contexto a sessões futuras
 trilha de aprendizado e o que fazer a seguir. Não é fonte de requisitos — os
 requisitos canônicos ficam nos demais documentos de [`docs/`](../index.md).
 
+Ao retomar a trilha, leia também o
+[`learning-path-workflow.md`](learning-path-workflow.md), que define como cada
+item deve ser explicado, aprovado, implementado, verificado, documentado e
+commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
+preserva exemplos e aprendizados dos itens concluídos.
+
 Atualizado em: 2026-07-22.
 
 ## Visão geral
@@ -63,7 +69,10 @@ Percorrer o `learning_path.md` **item por item, na ordem das fases**, com
 **aprendizado acima de velocidade**. Para cada item, antes de implementar:
 (1) explicar o conceito e por que é interessante; (2) comparar com o estado atual
 do código; (3) mostrar o custo de não fazer; (4) implementar explicando os
-conceitos novos. Um item por vez, com verificação ao final.
+conceitos novos. Um item por vez, com comparação visual, aprovação antes da
+implementação e verificação, documentação e commits antes de avançar. O processo
+completo e obrigatório está em
+[`learning-path-workflow.md`](learning-path-workflow.md).
 
 ### Progresso
 
