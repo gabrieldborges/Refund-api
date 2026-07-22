@@ -3,6 +3,10 @@
 Esta é a fonte canônica dos requisitos e das decisões compartilhadas pelo
 frontend e pela API.
 
+## Estado do projeto
+- [Estado atual do projeto](plans/current-state.md) — retrato para sessões
+  futuras: arquitetura, progresso da trilha de aprendizado e pendências.
+
 ## Produto
 - [Visão do produto](vision.md)
 - [Glossário](glossary.md)
