@@ -58,8 +58,8 @@ IDs); mensagem genérica no login; validação de comprovante por extensão, nã
 
 `src/components/{atoms,molecules,organisms,core}` para UI; `pages/` (prefixo
 `Page`), `hooks/`, `context/` (Auth via Context + `localStorage`), `lib/`
-(Axios com interceptors), `schemas/` (Zod), `types/`, `constants/`. Server state
-via TanStack Query; formulário de criação com react-hook-form + Zod.
+(Axios com interceptors), `schemas/` (Zod) e `constants/`. Server state via
+TanStack Query; formulário e responses consumidos validados com Zod.
 
 ## Trilha de aprendizado — onde estamos
 
@@ -89,15 +89,31 @@ completo e obrigatório está em
   - Verificação: `npx tsc -b --noEmit` passou (exit 0). Runtime ainda **não**
     validado contra a API (depende de subir backend + banco).
 
-- **Próximo — Fase 1, Item 2 — Schemas como fronteira:** validar os *responses*
-  da API com Zod (hoje são confiados a tipos TypeScript escritos à mão em
-  `src/types/refund.ts` e no `LoginResponse` do Auth Context).
+- **Fase 1, Item 2 — Schemas como fronteira: CONCLUÍDO.**
+  - `src/schemas/auth.ts`: `loginResponseSchema` e tipo derivado.
+  - `src/schemas/refund.ts`: schemas de `Refund`, listagem, detalhe e criação;
+    tipos derivados substituem `src/types/refund.ts`, que foi removido.
+  - Login, listagem, detalhe e criação recebem o response Axios como `unknown` e
+    executam `schema.parse` antes de usar, armazenar ou colocar dados no cache.
+  - O contrato da criação reflete que a API não retorna `created_at`.
+  - Verificação: `npx tsc -b --noEmit` e `npm run build` passaram; runtime contra
+    a API real ainda não foi validado.
+
+- **Próximo — Fase 1, Item 3 — React Router data APIs e estado na URL:** mover
+  paginação e busca para search params validados, introduzir loader com
+  `queryClient.ensureQueryData` e estudar lazy routes/error elements.
 
 ## Pendências e riscos conhecidos
 
 - **Runtime do Item 1 não validado.** Falta subir `npm run dev` + API e conferir
   lista, busca, paginação, criar/excluir, detalhe, e que voltar à Home dentro de
   30s não dispara refetch.
+- **Runtime do Item 2 não validado.** Falta confirmar login, listagem, detalhe e
+  criação contra a API real e observar o comportamento diante de um response
+  incompatível. Os schemas ainda não possuem testes automatizados porque o
+  setup de Vitest é o Item 4.
+- **`localStorage` ainda usa type assertion.** `JSON.parse(raw) as AuthUser` não
+  valida uma sessão persistida; ficou fora do Item 2, restrito a responses HTTP.
 - **Lint do frontend já vermelho antes da trilha.** 18 erros
   `react-refresh/only-export-components` em arquivos de componentes
   (`Icon`, `Text`, `Button`, `Dialog`, etc.). Não faz parte da trilha; candidato

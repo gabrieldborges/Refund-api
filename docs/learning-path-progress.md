@@ -146,9 +146,137 @@ encaminhado ao Axios.
 
 ## Fase 1, Item 2 — Schemas como fronteira
 
-**Status:** próximo item; ainda não implementado.
+**Status:** concluído em 2026-07-22.
 
-O frontend atualmente usa genéricos TypeScript nas chamadas Axios para login,
-listagem, detalhe e criação. Esses tipos ajudam durante o desenvolvimento, mas
-não validam os dados reais recebidos em runtime. O estudo continuará mostrando
-esses pontos antes de definir e aprovar a solução com Zod.
+**Commit da implementação:** `e6b8ea5` —
+`feat: validate API responses with Zod schemas`, no repositório
+`Refund-FrontEnd`.
+
+### Por que estudar
+
+TypeScript verifica o código durante o desenvolvimento, mas seus tipos não
+existem quando a aplicação está executando. Um genérico como
+`api.get<RefundsListResponse>()` apenas pede que o compilador confie naquele
+formato; ele não inspeciona o JSON recebido.
+
+Uma resposta incompatível podia entrar no cache do TanStack Query ou na sessão
+antes de o problema aparecer na UI. O Zod transforma o contrato em código
+executável: a aplicação só aceita o dado depois de validá-lo na fronteira HTTP.
+
+### Estado anterior
+
+Em `Refund-FrontEnd/src/hooks/refundQueries.ts`, a listagem confiava no genérico
+do Axios e devolvia os dados diretamente:
+
+```ts
+const { data } = await api.get<RefundsListResponse>("/refunds", {
+  params: { page: params.page, per_page: params.perPage, name: params.name || undefined },
+  signal,
+});
+return data;
+```
+
+Em `Refund-FrontEnd/src/context/AuthContext.tsx`, `LoginResponse` era uma
+interface manual usada da mesma maneira:
+
+```ts
+const { data } = await api.post<LoginResponse>("/auth/login", { email, password });
+```
+
+Havia ainda uma divergência escondida em
+`Refund-FrontEnd/src/hooks/useCreateRefund.ts`: a chamada afirmava receber um
+`Refund` completo, embora a criação da API não devolva `created_at`.
+
+### Comparação visual
+
+```mermaid
+flowchart LR
+    subgraph Antes
+        A1[JSON da API] --> A2[Axios]
+        T[Tipo TypeScript] -. afirma o formato .-> A2
+        A2 --> A3[Cache ou sessão]
+    end
+
+    subgraph Depois
+        B1[JSON da API] --> B2[Axios como unknown]
+        B2 --> Z[Schema Zod]
+        Z -->|válido| B3[Dado tipado]
+        B3 --> B4[Cache ou sessão]
+        Z -->|inválido| E[Erro na fronteira]
+    end
+```
+
+### Estado ajustado
+
+`Refund-FrontEnd/src/schemas/refund.ts` passou a conter schemas executáveis e
+tipos derivados da mesma fonte:
+
+```ts
+export const refundSchema = refundBaseSchema.extend({
+  created_at: z.string().nullable(),
+});
+
+export const refundsListResponseSchema = z.object({
+  type: z.literal("Refund"),
+  count: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  per_page: z.number().int().min(1).max(100),
+  total_pages: z.number().int().nonnegative(),
+  attributes: z.array(refundSchema),
+});
+
+export type Refund = z.output<typeof refundSchema>;
+```
+
+A listagem agora trata a resposta como desconhecida até a validação:
+
+```ts
+const { data } = await api.get<unknown>("/refunds", {
+  params: { page: params.page, per_page: params.perPage, name: params.name || undefined },
+  signal,
+});
+return refundsListResponseSchema.parse(data);
+```
+
+O mesmo padrão foi aplicado ao login, detalhe e criação. A criação recebeu um
+schema próprio baseado nos campos realmente devolvidos pela API, sem
+`created_at`. O arquivo manual `src/types/refund.ts` deixou de ser necessário.
+
+Neste item não houve coerção nas respostas, portanto `z.input` e `z.output`
+seriam iguais. `z.output` foi usado para derivar os tipos validados; a diferença
+entre entrada e saída continua demonstrada no formulário, onde
+`z.coerce.number()` transforma o valor digitado.
+
+### Arquivos modificados
+
+- Criado `src/schemas/auth.ts`.
+- Ampliado `src/schemas/refund.ts`.
+- Ajustados `src/context/AuthContext.tsx`, `src/hooks/refundQueries.ts` e
+  `src/hooks/useCreateRefund.ts`.
+- Removido `src/types/refund.ts`.
+
+### Verificações e limitações
+
+- `npx tsc -b --noEmit`: passou com código de saída 0.
+- `npm run build`: passou; o Vite manteve o aviso preexistente de chunk acima de
+  500 kB, sem falhar o build.
+- Auditoria com `rg`: login, listagem, detalhe e criação usam response
+  `unknown` seguido de `schema.parse`.
+- Não foi introduzido Vitest porque a infraestrutura de testes frontend é o
+  Item 4. Os testes automatizados dos schemas serão acrescentados naquele item.
+- A validação dos fluxos contra a API real ainda depende de subir frontend,
+  backend e banco.
+- O `JSON.parse(raw) as AuthUser` do `localStorage` continua sem validação. Essa
+  fronteira não é uma resposta HTTP e ficou fora do escopo aprovado.
+
+### O que lembrar
+
+- Tipos TypeScript não validam dados externos em runtime.
+- Dados externos devem ser tratados como `unknown` até atravessarem um schema.
+- Derivar tipos com `z.output<typeof schema>` evita manter interface e schema
+  manualmente em paralelo.
+- Schemas devem representar o contrato real: criação e consulta podem devolver
+  formas diferentes do mesmo recurso.
+- `parse` devolve o dado validado ou lança `ZodError`; assim, dados inválidos não
+  entram silenciosamente no cache ou na sessão.
