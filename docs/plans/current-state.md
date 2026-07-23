@@ -59,7 +59,9 @@ IDs); mensagem genérica no login; validação de comprovante por extensão, nã
 `src/components/{atoms,molecules,organisms,core}` para UI; `pages/` (prefixo
 `Page`), `hooks/`, `context/` (Auth via Context + `localStorage`), `lib/`
 (Axios com interceptors), `schemas/` (Zod) e `constants/`. Server state via
-TanStack Query; formulário e responses consumidos validados com Zod.
+TanStack Query; formulário e responses consumidos validados com Zod. O React
+Router usa Data Mode com loaders, páginas lazy e erro de rota; busca e paginação
+da Home vivem em search params validados.
 
 ## Trilha de aprendizado — onde estamos
 
@@ -99,9 +101,22 @@ completo e obrigatório está em
   - Verificação: `npx tsc -b --noEmit` e `npm run build` passaram; runtime contra
     a API real ainda não foi validado.
 
-- **Próximo — Fase 1, Item 3 — React Router data APIs e estado na URL:** mover
-  paginação e busca para search params validados, introduzir loader com
-  `queryClient.ensureQueryData` e estudar lazy routes/error elements.
+- **Fase 1, Item 3 — React Router data APIs e estado na URL: CONCLUÍDO.**
+  - `src/router.tsx`: `createBrowserRouter`, layouts preservados, páginas lazy e
+    `PageRouteError` como erro de rota.
+  - `src/router-loaders.ts`: loaders da Home e detalhe verificam a sessão e usam
+    `queryClient.ensureQueryData` com os `queryOptions` do Item 1.
+  - `src/schemas/refund.ts`: `page` e `name` validados/coagidos; URLs inválidas
+    são normalizadas antes da consulta.
+  - `PageHome` usa loader data e search params; busca debounced reinicia página,
+    paginação atualiza o histórico e valores padrão são omitidos da URL.
+  - Verificação: typecheck e build passaram; chunks separados foram gerados.
+    HTTP local respondeu corretamente, mas o fluxo visual/autenticado ficou
+    pendente porque não havia navegador conectado.
+
+- **Próximo — Fase 2, Item 4 — Vitest, Testing Library e user-event:** criar a
+  primeira infraestrutura de testes frontend e cobrir função, schema, rota
+  protegida e fluxo de login de forma incremental.
 
 ## Pendências e riscos conhecidos
 
@@ -114,6 +129,10 @@ completo e obrigatório está em
   setup de Vitest é o Item 4.
 - **`localStorage` ainda usa type assertion.** `JSON.parse(raw) as AuthUser` não
   valida uma sessão persistida; ficou fora do Item 2, restrito a responses HTTP.
+- **Runtime visual do Item 3 não validado.** Falta verificar em navegador login,
+  URL direta, reload, busca, paginação, back/forward, detalhe, normalização de
+  parâmetros e a página de erro. Os serviços locais e respostas HTTP foram
+  verificados, mas não havia navegador conectado à sessão.
 - **Lint do frontend já vermelho antes da trilha.** 18 erros
   `react-refresh/only-export-components` em arquivos de componentes
   (`Icon`, `Text`, `Button`, `Dialog`, etc.). Não faz parte da trilha; candidato

@@ -280,3 +280,149 @@ entre entrada e saída continua demonstrada no formulário, onde
   formas diferentes do mesmo recurso.
 - `parse` devolve o dado validado ou lança `ZodError`; assim, dados inválidos não
   entram silenciosamente no cache ou na sessão.
+
+## Fase 1, Item 3 — React Router Data APIs e estado na URL
+
+**Status:** concluído em 2026-07-22.
+
+**Commit da implementação:** `e62a862` (`feat: add data router loaders and URL
+state`), no repositório `Refund-FrontEnd`.
+
+### Por que estudar
+
+A Home guardava busca e página somente em `useState`. A interface conhecia a
+posição atual, mas a URL continuava `/`. Recarregar a aplicação perdia os
+filtros, compartilhar o endereço não reproduzia a mesma tela e o router não
+conseguia preparar a consulta antes de renderizar a página.
+
+Loaders são funções do React Router executadas durante a navegação. Eles não
+renderizam componentes nem substituem o TanStack Query: descrevem quais dados a
+rota precisa antes de ficar pronta. O `QueryClient` continua responsável pelo
+server state e `ensureQueryData` garante a query no cache, buscando na API apenas
+quando aquela chave ainda não existe.
+
+### Estado anterior
+
+Em `Refund-FrontEnd/src/pages/PageHome.tsx`, busca e página eram memória local:
+
+```ts
+const [search, setSearch] = useState("");
+const [page, setPage] = useState(1);
+const debouncedSearch = useDebouncedValue(search);
+
+const { data } = useRefunds({ page, name: debouncedSearch });
+```
+
+Em `Refund-FrontEnd/src/App.tsx`, `<BrowserRouter><Routes>` apenas renderizava os
+componentes. Todas as páginas eram importadas no bundle inicial e não existiam
+loaders ou erro de rota.
+
+### Comparação visual
+
+```mermaid
+flowchart LR
+    subgraph Antes
+        A1[URL /] --> A2[Renderiza Home]
+        A2 --> A3[useState guarda busca/página]
+        A2 --> A4[useQuery chama API]
+    end
+
+    subgraph Depois
+        B1[URL com name/page] --> Z[Zod valida e normaliza]
+        Z --> L[Loader da rota]
+        L --> E[ensureQueryData]
+        E --> C{Query existe no cache?}
+        C -->|não| API[queryFn chama API]
+        C -->|sim| R[reutiliza dados]
+        API --> R
+        R --> B2[Home observa cache com useQuery]
+    end
+```
+
+O `localStorage` e o cache têm funções diferentes:
+
+```text
+localStorage       -> token e usuário; permanece após reload
+QueryClient cache  -> responses da API; vive em memória nesta configuração
+```
+
+Em um reload, a sessão permanece, mas um novo `QueryClient` começa vazio. O
+loader verifica a sessão, `ensureQueryData` não encontra a chave e executa a
+`queryFn`. Em uma navegação interna com a chave já armazenada, a consulta é
+reutilizada.
+
+### Estado ajustado
+
+`Refund-FrontEnd/src/router-loaders.ts` conecta URL, sessão e cache:
+
+```ts
+export async function homeLoader({ request }: LoaderFunctionArgs) {
+  requireSession();
+
+  const url = new URL(request.url);
+  const { page, name } = refundListSearchParamsSchema.parse({
+    page: url.searchParams.get("page") ?? undefined,
+    name: url.searchParams.get("name") ?? undefined,
+  });
+  const queryParams = { page, perPage: 6, name };
+
+  await queryClient.ensureQueryData(refundListQuery(queryParams));
+  return queryParams;
+}
+```
+
+O código real também normaliza a URL: remove `page=1` e busca vazia, converte
+página inválida para 1 e remove espaços externos do nome antes de consultar.
+
+`Refund-FrontEnd/src/router.tsx` usa `createBrowserRouter`, mantém os layouts e
+carrega as páginas com imports lazy. `App.tsx` passou a renderizar somente o
+`AuthProvider` e o `RouterProvider`.
+
+A Home consome os parâmetros validados:
+
+```ts
+const { page, perPage, name } = useLoaderData<typeof homeLoader>();
+const [, setSearchParams] = useSearchParams();
+const { data } = useRefunds({ page, perPage, name });
+```
+
+O campo mantém um rascunho local para responder imediatamente à digitação. Após
+o debounce, ele atualiza a URL; paginação também altera search params. Uma `key`
+baseada no nome recria somente o campo quando back/forward muda a busca, evitando
+copiar estado da URL com `setState` dentro de um efeito.
+
+### Arquivos modificados
+
+- Criados `src/router.tsx`, `src/router-loaders.ts` e
+  `src/pages/PageRouteError.tsx`.
+- Ajustados `src/App.tsx`, `src/pages/PageHome.tsx` e
+  `src/schemas/refund.ts`.
+
+### Verificações e limitações
+
+- `npx tsc -b --noEmit`: passou com código de saída 0.
+- `npm run build`: passou e gerou chunks separados para Home, Login, Registro,
+  Detalhe, Sucesso e Componentes.
+- O bundle principal ainda ultrapassa 500 kB; o aviso de performance permanece
+  fora deste item.
+- `npm run lint`: continua falhando somente nos 18 erros preexistentes de
+  `react-refresh/only-export-components`; o erro novo detectado durante a
+  implementação foi corrigido antes do encerramento.
+- Frontend `/` e `/?name=hotel&page=2` responderam HTTP 200; API `/health`
+  respondeu HTTP 200.
+- Não havia navegador conectado à sessão. Login, busca, paginação, reload,
+  back/forward, detalhe e erros de loader ainda precisam de validação manual.
+- Testes automatizados de schemas e router não foram introduzidos porque o
+  setup de Vitest é o Item 4.
+
+### O que lembrar
+
+- Loader coordena a preparação da rota; `useQuery` mantém o componente reativo.
+- `QueryClient` é a interface programática do mesmo cache acessado pelos hooks.
+- `ensureQueryData` reutiliza a query existente ou executa sua `queryFn` quando
+  a chave não existe.
+- Query keys ficam no cache em memória, não no `localStorage`.
+- URL é o lugar apropriado para estado de navegação compartilhável, como busca
+  e página.
+- `route.lazy` divide código por página; `ErrorBoundary` da rota recebe falhas
+  que podem acontecer antes de o componente renderizar.
