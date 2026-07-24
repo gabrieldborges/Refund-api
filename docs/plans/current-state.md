@@ -11,7 +11,7 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-07-22.
+Atualizado em: 2026-07-24.
 
 ## Visão geral
 
@@ -114,9 +114,23 @@ completo e obrigatório está em
     HTTP local respondeu corretamente, mas o fluxo visual/autenticado ficou
     pendente porque não havia navegador conectado.
 
-- **Próximo — Fase 2, Item 4 — Vitest, Testing Library e user-event:** criar a
-  primeira infraestrutura de testes frontend e cobrir função, schema, rota
-  protegida e fluxo de login de forma incremental.
+- **Fase 2, Item 4 — Vitest, Testing Library e user-event: CONCLUÍDO.**
+  Primeira infraestrutura de testes do frontend (Vitest + jsdom + Testing
+  Library + user-event), no repo `Refund-FrontEnd`. O que mudou:
+  - `vite.config.ts`: `defineConfig` do `vitest/config` + bloco `test`
+    (`environment: "jsdom"`, `setupFiles`).
+  - `src/test/setup.ts` (novo): matchers do jest-dom + `afterEach(cleanup)`
+    (necessário por rodarmos com imports explícitos, sem `globals`).
+  - `package.json`: scripts `test`/`test:watch` e devDeps de teste.
+  - Testes colocados: `src/lib/format.test.ts`, `src/schemas/refund.test.ts`,
+    `src/components/core/ProtectedRoute.test.tsx`, `src/pages/PageLogin.test.tsx`.
+  - Verificação: `npm run test` (15 testes verdes), `npx tsc -b --noEmit`
+    (exit 0) e `npm run lint` (18 erros preexistentes, 0 novos).
+
+- **Próximo — Fase 2, Item 5 — MSW (Mock Service Worker):** interceptar HTTP no
+  nível da rede com handlers reutilizáveis (login, listagem, detalhe, criação,
+  exclusão, 401 e 422), substituindo o mock da fronteira `login` usado no Item 4
+  por mocks de rede que servem desenvolvimento e testes de integração.
 
 ## Pendências e riscos conhecidos
 
@@ -125,8 +139,10 @@ completo e obrigatório está em
   30s não dispara refetch.
 - **Runtime do Item 2 não validado.** Falta confirmar login, listagem, detalhe e
   criação contra a API real e observar o comportamento diante de um response
-  incompatível. Os schemas ainda não possuem testes automatizados porque o
-  setup de Vitest é o Item 4.
+  incompatível. O `refundCreateSchema` já ganhou testes automatizados no Item 4
+  (`src/schemas/refund.test.ts`, campo a campo via `.shape`), mas os schemas de
+  **response** (`refundsListResponseSchema` etc.) ainda não têm testes; isso é
+  candidato natural ao Item 5 com MSW.
 - **`localStorage` ainda usa type assertion.** `JSON.parse(raw) as AuthUser` não
   valida uma sessão persistida; ficou fora do Item 2, restrito a responses HTTP.
 - **Runtime visual do Item 3 não validado.** Falta verificar em navegador login,
@@ -136,7 +152,15 @@ completo e obrigatório está em
 - **Lint do frontend já vermelho antes da trilha.** 18 erros
   `react-refresh/only-export-components` em arquivos de componentes
   (`Icon`, `Text`, `Button`, `Dialog`, etc.). Não faz parte da trilha; candidato
-  a um item futuro de higiene.
+  a um item futuro de higiene. O Item 4 não alterou essa contagem (0 erros novos).
+
+- **Acessibilidade: labels não associadas ao input.** O `InputText` não liga
+  `<label>`/`htmlFor` ao `<input>`, então o teste de login seleciona campos por
+  placeholder. É o Item 7 (acessibilidade prática).
+
+- **Campo `file` do `refundCreateSchema` sem teste.** Exige um `FileList`, que o
+  jsdom não constrói de forma limpa; ficará coberto pelo teste de upload do
+  `RefundFormDialog` (upload real com `user-event`) em item futuro.
 - **Referência quebrada.** `AGENTS.md` (dos dois repos) aponta para
   `../../CODING_PROFILE.md`, que não existe na árvore. O perfil de
   desenvolvedor equivalente está hoje no `CLAUDE.md` global do usuário.

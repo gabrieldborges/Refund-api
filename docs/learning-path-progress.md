@@ -426,3 +426,151 @@ copiar estado da URL com `setState` dentro de um efeito.
   e página.
 - `route.lazy` divide código por página; `ErrorBoundary` da rota recebe falhas
   que podem acontecer antes de o componente renderizar.
+
+## Fase 2, Item 4 — Vitest, Testing Library e user-event
+
+**Status:** concluído em 2026-07-24.
+
+**Commit da implementação:** `55f8455` —
+`test: set up Vitest + Testing Library and cover format, schema, guard and login`,
+no repositório `Refund-FrontEnd`.
+
+### Por que estudar
+
+Os itens 1–3 estavam corretos por tipo (`tsc`), mas nenhum comportamento era
+executado por um teste automatizado — as três pendências de runtime existiam
+justamente porque não havia infraestrutura de teste no frontend. O `tsc` prova
+formato em tempo de compilação; ele não roda `formatCentsToBRL`, não passa uma
+entrada inválida pelo `refundCreateSchema` nem confirma que `ProtectedRoute`
+redireciona quem não está logado.
+
+Este item introduz a primeira base de testes do frontend (Vitest + jsdom +
+Testing Library + user-event) e cobre quatro alvos por nível. É a fundação de que
+o MSW (Item 5) e a pirâmide de testes (Item 6) dependem.
+
+### Estado anterior
+
+`package.json` só tinha `dev`, `build`, `lint`, `preview`; nenhuma dependência de
+teste e nenhum arquivo `*.test.ts(x)`:
+
+```json
+"scripts": { "dev": "vite", "build": "tsc -b && vite build", "lint": "eslint .", "preview": "vite preview" }
+```
+
+### Comparação visual
+
+```mermaid
+flowchart LR
+    subgraph Antes
+        A1[tsc -b] --> A2[Os tipos batem]
+        A3[Comportamento] -. sem prova executável .-> A4[Confiança manual no navegador]
+    end
+
+    subgraph Depois
+        B1[tsc -b] --> B2[Os tipos batem]
+        B3[vitest run] --> B4[O comportamento está correto]
+        B4 --> U[unit: format, schema]
+        B4 --> C[componente: ProtectedRoute]
+        B4 --> I[integração: fluxo de login]
+    end
+```
+
+| Alvo                 | Nível      | O que passou a ser provado                              |
+|----------------------|------------|---------------------------------------------------------|
+| `formatCentsToBRL`   | unitário   | centavos → BRL; zero, milhar e um único centavo         |
+| `refundCreateSchema` | unitário   | recusa nome vazio, categoria inválida, valor ≤ 0 e NaN  |
+| `ProtectedRoute`     | componente | logado vê o `Outlet`; deslogado vai para `/login`       |
+| Fluxo de login       | integração | digitar + submeter chama `login` e navega; erro mostra msg |
+
+### Estado ajustado
+
+`vite.config.ts` passou a usar o `defineConfig` do Vitest e a declarar o ambiente
+de teste:
+
+```ts
+import { defineConfig } from 'vitest/config'
+// ...
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+  },
+```
+
+`src/test/setup.ts` registra os matchers do jest-dom e o `cleanup` entre testes
+(necessário porque rodamos com imports explícitos, sem `globals: true`):
+
+```ts
+import "@testing-library/jest-dom/vitest";
+import { afterEach } from "vitest";
+import { cleanup } from "@testing-library/react";
+
+afterEach(() => {
+  cleanup();
+});
+```
+
+O schema é testado campo a campo via `.shape`, evitando construir um `FileList`
+no jsdom:
+
+```ts
+const result = refundCreateSchema.shape.amount.safeParse("-5");
+expect(result.success).toBe(false);
+if (!result.success) {
+  expect(result.error.issues[0].message).toBe("Valor deve ser maior que zero");
+}
+```
+
+O fluxo de login roda sem rede: um `AuthContext.Provider` de teste expõe um
+`login` espião, e `user-event` dirige a interação.
+
+```ts
+const login = vi.fn().mockResolvedValue(undefined);
+// render PageLogin dentro de MemoryRouter (/login + / marcada) + AuthContext
+await user.type(screen.getByPlaceholderText("voce@exemplo.com"), "ana@exemplo.com");
+await user.click(screen.getByRole("button", { name: "Entrar" }));
+expect(login).toHaveBeenCalledWith("ana@exemplo.com", "secret123");
+expect(await screen.findByText("home page")).toBeInTheDocument();
+```
+
+### Arquivos modificados
+
+- Modificados: `package.json` (devDeps + scripts `test`/`test:watch`) e
+  `vite.config.ts` (bloco `test`).
+- Criados: `src/test/setup.ts`, `src/lib/format.test.ts`,
+  `src/schemas/refund.test.ts`, `src/components/core/ProtectedRoute.test.tsx` e
+  `src/pages/PageLogin.test.tsx`.
+- devDependencies adicionadas: `vitest`, `jsdom`, `@testing-library/react`,
+  `@testing-library/dom`, `@testing-library/user-event`,
+  `@testing-library/jest-dom`.
+
+### Verificações e limitações
+
+- `npm run test`: 15 testes em 4 arquivos, todos verdes.
+- `npx tsc -b --noEmit`: exit 0 (inclui os `*.test.tsx` sob `src`).
+- `npm run lint`: 18 erros preexistentes de `react-refresh/only-export-components`,
+  **zero** novos. Durante a implementação eu havia introduzido um erro
+  (`triple-slash-reference` no `vite.config.ts`); foi detectado pelo lint e
+  corrigido antes do encerramento.
+- **Campo `file` do schema não testado aqui:** exige um `FileList`, que o jsdom
+  não constrói de forma limpa. Fica coberto pelo teste de upload do
+  `RefundFormDialog` (item futuro, com `user-event`).
+- **Labels não associadas ao input:** o teste de login seleciona os campos por
+  placeholder porque o `InputText` não liga `<label>`/`htmlFor` ao `<input>`.
+  Essa dívida de acessibilidade é o Item 7.
+- Os fluxos contra a API real continuam pendentes de validação manual; este item
+  cobre comportamento isolado, não integração ponta a ponta.
+
+### O que lembrar
+
+- `tsc` prova formato; teste prova comportamento. São garantias diferentes.
+- `setupFiles` roda uma vez por arquivo de teste — bom lugar para registrar
+  matchers e `cleanup`.
+- Sem `globals: true`, o Testing Library não limpa o DOM sozinho: registrar
+  `afterEach(cleanup)` evita que o DOM de um teste vaze para o próximo.
+- `schema.shape.<campo>` permite testar uma regra isolada sem montar o objeto
+  inteiro (aqui, sem `FileList`).
+- Mockar a **fronteira** (`login` no contexto) em vez da rede mantém o teste
+  focado no comportamento da página; a rede fica para o MSW (Item 5).
+- Prioridade de queries: prefira `getByRole`/`getByLabelText`; cair para
+  `getByPlaceholderText` é aceitável, mas costuma sinalizar uma dívida de
+  acessibilidade.
