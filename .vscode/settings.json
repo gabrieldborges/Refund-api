@@ -13,5 +13,10 @@
         "**/*.pytest_cache" : true,
 
     },
-    "python-envs.pythonProjects": []
+    "python-envs.pythonProjects": [],
+    "python.testing.pytestArgs": [
+        "src"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }
