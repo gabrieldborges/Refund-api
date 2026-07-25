@@ -32,13 +32,15 @@ def mock_db_raise_integrity_error():
     return db
 
 
-# Connection (context manager) that hands back the database that raises. We need our
-# own fixture here because conftest's mock_connection is wired to the "happy" mock_db.
+# Connection whose connect() yields the session that raises. We need our own fixture
+# here because conftest's mock_connection is wired to the "happy" mock_db.
 @pytest.fixture
 def mock_connection_error(mock_db_raise_integrity_error):
     connection = MagicMock()
-    connection.__aenter__ = AsyncMock(return_value=mock_db_raise_integrity_error)
-    connection.__aexit__ = AsyncMock(return_value=None)
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=mock_db_raise_integrity_error.session)
+    context.__aexit__ = AsyncMock(return_value=None)
+    connection.connect = MagicMock(return_value=context)
     return connection
 
 

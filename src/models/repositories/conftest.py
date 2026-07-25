@@ -10,18 +10,20 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 
-# Simulates the database connection's "async context manager" — the object used
-# in the repository as "async with self.__db_connection as database: ...".
+# Simulates the connection handler used in the repository as
+# "async with self.__db_connection.connect() as session: ...".
 # Note this fixture asks for another fixture as a parameter (mock_db): pytest resolves
 # that chain automatically. Since mock_db is defined in each test file, each one
 # supplies its own, and this mock_connection only handles the "with" protocol.
 @pytest.fixture
 def mock_connection(mock_db):
     connection = MagicMock()
-    # __aenter__ is what "async with" calls on entering the block; we return mock_db,
-    # so inside the "with" the code sees the fake database. AsyncMock is a mock whose
-    # return value can be "await"-ed (used for async functions/methods).
-    connection.__aenter__ = AsyncMock(return_value=mock_db)
+    # connect() returns an async context manager. On entering, it yields the fake
+    # session (mock_db.session) — the same object the tests assert on. AsyncMock is
+    # a mock whose result can be "await"-ed (used for async functions/methods).
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=mock_db.session)
     # __aexit__ is called on exiting the block; returning None means "don't suppress exceptions".
-    connection.__aexit__ = AsyncMock(return_value=None)
+    context.__aexit__ = AsyncMock(return_value=None)
+    connection.connect = MagicMock(return_value=context)
     return connection

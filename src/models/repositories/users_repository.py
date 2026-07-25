@@ -12,26 +12,26 @@ class UsersRepository(UsersRepositoryInterface):
         self.__db_connection = database_connection
 
     async def insert_user(self, user_info: dict) -> int:
-        async with self.__db_connection as db:
+        async with self.__db_connection.connect() as session:
             query = insert(Users).values(**user_info)
             try:
-                result = await db.session.execute(query)
-                await db.session.commit()
+                result = await session.execute(query)
+                await session.commit()
                 return result.inserted_primary_key[0]
             except IntegrityError as exception:
-                await db.session.rollback()
+                await session.rollback()
                 raise HttpBadRequestError("Email already registered") from exception
 
     async def select_user_by_email(self, email: str) -> dict:
-        async with self.__db_connection as db:
+        async with self.__db_connection.connect() as session:
             query = select(Users).where(Users.c.email == email)
-            result = await db.session.execute(query)
+            result = await session.execute(query)
             user = result.fetchone()
             return dict(user._mapping) if user else None
 
     async def select_user_by_id(self, user_id: int) -> dict:
-        async with self.__db_connection as db:
+        async with self.__db_connection.connect() as session:
             query = select(Users).where(Users.c.id == user_id)
-            result = await db.session.execute(query)
+            result = await session.execute(query)
             user = result.fetchone()
             return dict(user._mapping) if user else None
