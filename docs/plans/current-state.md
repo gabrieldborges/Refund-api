@@ -11,7 +11,7 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-07-24.
+Atualizado em: 2026-07-25.
 
 ## Visão geral
 
@@ -127,22 +127,50 @@ completo e obrigatório está em
   - Verificação: `npm run test` (15 testes verdes), `npx tsc -b --noEmit`
     (exit 0) e `npm run lint` (18 erros preexistentes, 0 novos).
 
-- **Próximo — Fase 2, Item 5 — MSW (Mock Service Worker):** interceptar HTTP no
-  nível da rede com handlers reutilizáveis (login, listagem, detalhe, criação,
-  exclusão, 401 e 422), substituindo o mock da fronteira `login` usado no Item 4
-  por mocks de rede que servem desenvolvimento e testes de integração.
+- **Fase 2, Item 5 — MSW (Mock Service Worker): CONCLUÍDO.**
+  Mock de rede para testes (node server), no repo `Refund-FrontEnd`. O que mudou:
+  - `src/test/msw/handlers.ts` + `server.ts`: handlers *happy-path* de login,
+    lista, detalhe, criação e exclusão, com caminhos `*` (independentes do host).
+  - `src/test/setup.ts`: ciclo `listen`/`resetHandlers`/`close` +
+    `localStorage.clear` no `afterEach`.
+  - `src/test/utils.tsx`: `QueryWrapper` para `renderHook`.
+  - Testes de integração: `src/hooks/refundQueries.test.tsx` (fecha a dívida dos
+    schemas de response do Item 2), `src/pages/PageLogin.integration.test.tsx`
+    (login real + token + 401) e `src/hooks/useCreateRefund.test.tsx` (criação +
+    422 via `server.use`).
+  - `@vitest/ui` integrado (script `test:ui` → `vitest --ui`).
+  - Verificação: `npm run test` (23 testes verdes), `npx tsc -b --noEmit`
+    (exit 0), `npm run lint` (18 preexistentes, 0 novos).
+
+- **Correções de runtime (2026-07-25).** A validação do app no navegador (backend
+  + banco reais) revelou dois bugs na exclusão de reembolso, ambos corrigidos com
+  teste (detalhes no [diário](../learning-path-progress.md)):
+  - **Frontend:** `invalidateQueries` não refazia a lista **inativa** (some por
+    até `staleTime`) e ainda rebuscava o detalhe do item deletado. Ajuste: nova
+    `refundKeys.lists()` + `refetchType: "all"` em `useDeleteRefund`/
+    `useCreateRefund`. Teste: `src/hooks/useDeleteRefund.test.tsx`.
+  - **Backend:** `DatabaseConnectionHandler` era um singleton com sessão mutável
+    compartilhada (`self.session`), causando 500 e vazamento de conexão sob
+    concorrência. Ajuste: sessão por-operação via `@asynccontextmanager connect()`.
+    Teste: `src/models/settings/database_connection_handler_test.py`.
+
+- **Próximo — Fase 2, Item 6 — Pirâmide de testes frontend:** organizar os
+  testes por nível (unitário, componente, integração, e2e) e explicar que
+  confiança cada um compra; já existem exemplos de componente e integração do
+  mesmo fluxo de login para servir de base.
 
 ## Pendências e riscos conhecidos
 
-- **Runtime do Item 1 não validado.** Falta subir `npm run dev` + API e conferir
-  lista, busca, paginação, criar/excluir, detalhe, e que voltar à Home dentro de
-  30s não dispara refetch.
-- **Runtime do Item 2 não validado.** Falta confirmar login, listagem, detalhe e
-  criação contra a API real e observar o comportamento diante de um response
-  incompatível. O `refundCreateSchema` já ganhou testes automatizados no Item 4
-  (`src/schemas/refund.test.ts`, campo a campo via `.shape`), mas os schemas de
-  **response** (`refundsListResponseSchema` etc.) ainda não têm testes; isso é
-  candidato natural ao Item 5 com MSW.
+- **Runtime do Item 1 parcialmente validado.** A **exclusão** foi exercitada no
+  navegador (revelou e motivou as correções de runtime acima). Ainda falta
+  conferir lista, busca, paginação, criação, detalhe, e que voltar à Home dentro
+  de 30s não dispara refetch.
+- **Runtime do Item 2 contra a API real ainda pendente.** Os schemas já têm
+  testes automatizados: o `refundCreateSchema` no Item 4
+  (`src/schemas/refund.test.ts`, via `.shape`) e os schemas de **response** no
+  Item 5, exercitados contra o MSW (`src/hooks/refundQueries.test.tsx` prova que
+  um response malformado vira `isError` em vez de entrar no cache). Falta apenas
+  a validação manual contra o backend real de verdade (não mockado).
 - **`localStorage` ainda usa type assertion.** `JSON.parse(raw) as AuthUser` não
   valida uma sessão persistida; ficou fora do Item 2, restrito a responses HTTP.
 - **Runtime visual do Item 3 não validado.** Falta verificar em navegador login,
@@ -168,3 +196,10 @@ completo e obrigatório está em
   é salvo em disco **antes** do insert; se o insert falhar, o arquivo fica órfão
   (o mesmo vale na exclusão). É o Item 21 do `learning_path.md` ("consistência
   entre banco e arquivo"); ainda não tratado.
+- **Pool de conexões pequeno.** O `engine` usa `pool_size=2, max_overflow=0`.
+  Depois do fix de concorrência não há mais vazamento, mas o limite é apertado
+  para carga real; é candidato a ajuste/observabilidade num item de backend
+  futuro (não é um bug, é tuning).
+- **Backend retorna 500 (não 404) via 500 genérico?** Verificado que NÃO: o fluxo
+  de "não encontrado" já levanta `HttpNotFoundError` → 404. Os 500 vistos no log
+  vinham do bug de concorrência (agora corrigido), não do caminho de not-found.

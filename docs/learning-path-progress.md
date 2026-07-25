@@ -574,3 +574,247 @@ expect(await screen.findByText("home page")).toBeInTheDocument();
 - Prioridade de queries: prefira `getByRole`/`getByLabelText`; cair para
   `getByPlaceholderText` é aceitável, mas costuma sinalizar uma dívida de
   acessibilidade.
+
+## Fase 2, Item 5 — MSW (Mock Service Worker)
+
+**Status:** concluído em 2026-07-25.
+
+**Commit da implementação:** `7bf7042` —
+`test: add MSW network mocking and Vitest UI`, no repositório `Refund-FrontEnd`.
+
+**Escopo:** MSW apenas para testes (node server). O worker de browser para
+desenvolvimento (`msw/browser`) foi deliberadamente adiado. Também foi integrado
+o Vitest UI (`@vitest/ui`) por pedido do Gabriel.
+
+### Por que estudar
+
+O teste de login do Item 4 mockou a fronteira do `AuthContext` (`login` como
+`vi.fn()`), então o `axios` e os schemas de *response* nunca rodavam. Os schemas
+do Item 2 (`refundsListResponseSchema`, `refundDetailResponseSchema`,
+`refundCreateResponseSchema`) seguiam sem prova executável.
+
+O MSW intercepta HTTP no nível da rede: o `axios` real roda, o `schema.parse`
+real roda, e só a *resposta* é falsa. Isso fecha a dívida do Item 2 e cria a base
+para os testes de integração da pirâmide (Item 6).
+
+### Estado anterior
+
+`src/test/setup.ts` só registrava jest-dom e `cleanup`; nenhum caminho de rede
+(`refundQueries`, `useCreateRefund`, `AuthContext`) tinha teste. O `axios` usa
+`baseURL: import.meta.env.VITE_API_URL` (`http://localhost:3333`, carregado do
+`.env` também nos testes).
+
+### Comparação visual
+
+```mermaid
+flowchart LR
+    subgraph Item4[Item 4 — boundary mock]
+        A1[PageLogin] --> A2[login = vi.fn]
+        A2 -.->|axios e Zod NÃO rodam| A3[asserção]
+    end
+
+    subgraph Item5[Item 5 — network mock]
+        B1[PageLogin] --> B2[AuthProvider real]
+        B2 --> B3[axios real]
+        B3 --> B4[MSW intercepta]
+        B4 --> B5[loginResponseSchema.parse]
+        B5 --> B6[token no localStorage + navegação]
+    end
+```
+
+| Handler                | Testa                                                    |
+|------------------------|---------------------------------------------------------|
+| `POST */auth/login`    | login real + `loginResponseSchema` + token persistido   |
+| `GET */refunds`        | `useRefunds` + `refundsListResponseSchema`              |
+| `GET */refunds/:id`    | `useRefund` + `refundDetailResponseSchema`              |
+| `POST */refunds`       | `useCreateRefund` + `refundCreateResponseSchema`        |
+| `server.use(401/422)`  | `getApiErrorMessage` nos dois formatos de erro          |
+
+### Estado ajustado
+
+Handlers *happy-path* reutilizáveis, com caminhos `*` para casar qualquer host:
+
+```ts
+export const handlers = [
+  http.post("*/auth/login", () => HttpResponse.json(loginFixture)),
+  http.get("*/refunds", () => HttpResponse.json({ /* lista */ })),
+  http.get("*/refunds/:id", ({ params }) => HttpResponse.json({ /* detalhe */ })),
+  http.post("*/refunds", () => HttpResponse.json({ /* base */ }, { status: 201 })),
+  http.delete("*/refunds/:id", () => new HttpResponse(null, { status: 204 })),
+];
+```
+
+O ciclo de vida do servidor vive no setup, junto do `cleanup` e da limpeza de
+`localStorage` (o `AuthProvider` real persiste token/sessão):
+
+```ts
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => { cleanup(); server.resetHandlers(); localStorage.clear(); });
+afterAll(() => server.close());
+```
+
+Os testes de integração exercitam o caminho real. Response malformado é rejeitado
+na fronteira (fecha a promessa do Item 2):
+
+```ts
+server.use(http.get("*/refunds", () =>
+  HttpResponse.json({ type: "Refund", attributes: "nope" })));
+// useRefunds via renderHook -> result.current.isError === true (ZodError)
+```
+
+E o override por teste cobre o 422 do FastAPI:
+
+```ts
+server.use(http.post("*/refunds", () =>
+  HttpResponse.json({ detail: [{ msg: "Arquivo é obrigatório" }] }, { status: 422 })));
+// getApiErrorMessage(result.current.error) === "Arquivo é obrigatório"
+```
+
+### Arquivos modificados
+
+- Modificados: `package.json` (devDeps `msw`, `@vitest/ui`; script `test:ui`),
+  `src/test/setup.ts` (ciclo do servidor MSW + `localStorage.clear`).
+- Criados: `src/test/msw/handlers.ts`, `src/test/msw/server.ts`,
+  `src/test/utils.tsx` (`QueryWrapper`), `src/hooks/refundQueries.test.tsx`,
+  `src/pages/PageLogin.integration.test.tsx`, `src/hooks/useCreateRefund.test.tsx`.
+
+### Verificações e limitações
+
+- `npm run test`: 23 testes em 7 arquivos, todos verdes.
+- `npx tsc -b --noEmit`: exit 0.
+- `npm run lint`: 18 erros preexistentes, **zero** novos. Durante a implementação
+  o `src/test/utils.tsx` chegou a exportar uma função + um componente (1 erro
+  novo de `react-refresh`); foi resolvido deixando o arquivo com export único de
+  componente, antes do encerramento.
+- **Sanidade técnica confirmada:** MSW intercepta o `axios` dentro do jsdom
+  (era o risco que eu havia sinalizado no plano).
+- **Aviso do jsdom `Not implemented: navigation`:** aparece no teste de 401 do
+  login porque o interceptor de `api.ts` faz `window.location.href = "/login"`
+  em qualquer 401. Não é falha (o `MemoryRouter` ignora `window.location`); expôs
+  um comportamento real do interceptor, candidato a refino futuro.
+- **`FileList` continua sem construção real:** o teste de criação passa um
+  `[File]` com cast, pois o `mutationFn` só lê `file[0]`.
+
+### O que lembrar
+
+- MSW mocka a **rede**, não a fronteira do código: axios e Zod reais rodam, só a
+  resposta é falsa — mais confiança que mockar a função.
+- `setupServer` + `listen`/`resetHandlers`/`close` é o ciclo padrão nos testes;
+  `onUnhandledRequest: "error"` impede bater na API real por engano.
+- `server.use(...)` sobrescreve um handler só para aquele teste; `resetHandlers`
+  no `afterEach` desfaz.
+- Testar via `renderHook` prova hook + `queryFn` + schema + rede juntos; um
+  response malformado precisa virar `isError`, não entrar no cache.
+- Um mesmo comportamento pode (e deve) ter testes em níveis diferentes:
+  componente (rápido, isolado) e integração (mais caro, mais confiança) —
+  antecipa a pirâmide do Item 6.
+
+## Correções de runtime — exclusão de reembolso (2026-07-25)
+
+Ao validar o app no navegador (backend + banco reais), a exclusão de um reembolso
+a partir da página de detalhe **não** atualizava a lista da Home, e o log da API
+mostrava `GET/DELETE /refunds/{id}` retornando **500** com vazamento de conexão.
+A investigação revelou **dois bugs distintos** — um em cada repositório. Não são
+itens novos do Learning Path; são correções, mas o aprendizado ficou registrado
+aqui por ligar direto aos conceitos dos Itens 1, 3 e (no backend) 20/25.
+
+### Bug 1 — `invalidateQueries` não refaz queries inativas (frontend)
+
+**Commit:** `228ec8d` —
+`fix: refresh refund lists after create/delete without refetching detail`, no
+repositório `Refund-FrontEnd`.
+
+**Sintoma:** o item excluído continuava na lista após voltar para a Home.
+
+**Causa raiz:** três decisões se combinaram. A exclusão parte do **detalhe**, com
+a Home desmontada → a query da lista está **inativa**. `invalidateQueries`, por
+padrão (`refetchType: "active"`), **só refaz queries ativas**; a lista inativa era
+só marcada como velha. Ao remontar, o `refetchOnMount` decide o refetch **pelo
+tempo** (`staleTime` de 30s) e não pela flag de invalidação — como o dado tinha
+menos de 30s, era considerado "fresco" e não era refeito. Resultado: item
+fantasma por até 30s.
+
+Havia ainda um **segundo efeito**: invalidar o prefixo `["refunds"]` inteiro
+também refazia a query de **detalhe do item recém-deletado** (`GET /refunds/{id}`),
+que no backend real virava erro — e essa rajada concorrente disparava o Bug 2.
+
+**Comparação visual:**
+
+```text
+Antes  invalidateQueries({ queryKey: ["refunds"] })
+       -> refaz só ATIVAS  -> lista inativa fica velha (some por até 30s)
+       -> atinge o detalhe -> GET /refunds/{id} de item deletado -> erro
+
+Depois invalidateQueries({ queryKey: ["refunds","list"], refetchType: "all" })
+       -> refaz TODAS as listas (mesmo inativas), ignorando staleTime
+       -> NÃO toca no detalhe -> nenhum GET do item deletado
+```
+
+**Estado ajustado:** nova chave `refundKeys.lists()` (prefixo só das listas) e, em
+`useDeleteRefund`/`useCreateRefund`:
+
+```ts
+queryClient.invalidateQueries({ queryKey: refundKeys.lists(), refetchType: "all" });
+```
+
+**Teste:** `src/hooks/useDeleteRefund.test.tsx` — prova que, após excluir com a
+lista inativa, o cache da lista vira `["A"]` **e** que o detalhe do item deletado
+**não** é rebuscado (`detailCalls` permanece 1).
+
+**O que lembrar:**
+- `invalidateQueries` só refaz **queries ativas** por padrão; uma query invalidada
+  enquanto inativa depende do `staleTime` na próxima montagem (`refetchOnMount`
+  olha o tempo, não a flag). Use `refetchType: "all"` para forçar as inativas.
+- Escopo importa: mire só o que precisa (`lists()`), nunca invalide o detalhe de
+  algo que acabou de ser apagado.
+
+### Bug 2 — sessão compartilhada no handler de conexão (backend)
+
+**Commit:** `1fc0db0` —
+`fix: make the database connection handler concurrency-safe`, no repositório
+`Refund-api`.
+
+**Sintoma:** `GET/DELETE /refunds/{id}` retornando 500 e o aviso do garbage
+collector sobre conexão asyncpg não devolvida ao pool.
+
+**Causa raiz:** `DatabaseConnectionHandler` era um **singleton de módulo** que
+guardava a sessão em `self.session`:
+
+```python
+async def __aenter__(self):
+    self.session = async_session()   # estado COMPARTILHADO entre requisições
+    return self
+```
+
+Sob requisições **concorrentes** (que o Bug 1 provocava), a segunda sobrescrevia
+o `self.session` da primeira: as duas usavam a mesma sessão asyncpg ao mesmo
+tempo (erro de operação concorrente → 500) e a sessão órfã nunca fechava
+(vazamento).
+
+**Estado ajustado:** a sessão passou a viver em **variável local** de um
+`@asynccontextmanager`, nunca em `self`:
+
+```python
+@asynccontextmanager
+async def connect(self):
+    session = async_session()
+    try:
+        yield session
+    finally:
+        await session.close()
+```
+
+Os repositórios passaram a usar `async with self.__db_connection.connect() as
+session:`. O singleton continua exportado, mas agora é **seguro** mesmo
+compartilhado, porque não há mais estado por-operação em `self`.
+
+**Teste:** `src/models/settings/database_connection_handler_test.py` — dois
+`connect()` sobrepostos recebem **sessões distintas** e ambas são fechadas.
+
+**O que lembrar:**
+- Estado mutável **compartilhado** entre contextos async concorrentes é uma fonte
+  clássica de bug. `async def` não serializa acesso; duas requisições realmente se
+  intercalam.
+- Escope recursos por operação (variável local no context manager), não em `self`
+  de um objeto compartilhado. Engine/sessionmaker podem ser singletons; a
+  **sessão**, não.
