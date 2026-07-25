@@ -154,10 +154,20 @@ completo e obrigatório está em
     concorrência. Ajuste: sessão por-operação via `@asynccontextmanager connect()`.
     Teste: `src/models/settings/database_connection_handler_test.py`.
 
-- **Próximo — Fase 2, Item 6 — Pirâmide de testes frontend:** organizar os
-  testes por nível (unitário, componente, integração, e2e) e explicar que
-  confiança cada um compra; já existem exemplos de componente e integração do
-  mesmo fluxo de login para servir de base.
+- **Fase 2, Item 6 — Pirâmide de testes frontend: CONCLUÍDO.**
+  Testes de componente isolados para o design system, no repo `Refund-FrontEnd`:
+  - `src/components/molecules/Button.test.tsx`, `Dialog.test.tsx`,
+    `InputText.test.tsx` — comportamento acessível (role, nome, clique, abrir/
+    fechar, digitação, erro), não classes.
+  - Mapa da suíte por nível registrado no [diário](../learning-path-progress.md);
+    **E2E adiado** (só documentado, com fluxo candidato nomeado).
+  - Verificação: `npm run test` (32 testes verdes), `npx tsc -b --noEmit`
+    (exit 0), `npm run lint` (18 preexistentes, 0 novos).
+
+- **Próximo — Fase 2, Item 7 — Acessibilidade prática:** testar por role/nome
+  acessível, associar labels (`htmlFor`/`id`), `aria-invalid`/`aria-describedby`,
+  foco no primeiro erro e auditoria com axe. As lacunas já mapeadas alimentam o
+  item: label do `InputText` não associada e o spinner do `Button` sem `role`/nome.
 
 ## Pendências e riscos conhecidos
 

@@ -818,3 +818,102 @@ compartilhado, porque não há mais estado por-operação em `self`.
 - Escope recursos por operação (variável local no context manager), não em `self`
   de um objeto compartilhado. Engine/sessionmaker podem ser singletons; a
   **sessão**, não.
+
+## Fase 2, Item 6 — Pirâmide de testes frontend
+
+**Status:** concluído em 2026-07-25.
+
+**Commit da implementação:** `3736614` —
+`test: add isolated component tests for Button, Dialog and InputText`, no
+repositório `Refund-FrontEnd`.
+
+**Escopo:** testes de **componente** isolados para as peças do design system
+(`Button`, `Dialog`, `InputText`) e o **mapa** da suíte por nível. O topo da
+pirâmide (**E2E**) foi deliberadamente **adiado** (só documentado).
+
+### Por que estudar
+
+Cada nível de teste compra uma **confiança diferente** por um **custo diferente**.
+A suíte pendia para **integração** (Query + MSW) e quase não tinha teste de
+**componente isolado**. Sem esse modelo mental, a tendência é cair em um de dois
+extremos: muitos testes de implementação frágeis (quebram a cada refator de CSS)
+ou poucos testes integrados (falha difícil de localizar).
+
+### Estado anterior
+
+Não havia teste de componente isolado para `Button`, `Dialog` nem `InputText` —
+eles só eram exercitados **indiretamente**, via páginas/integração. Uma regressão
+neles (ex.: `disabled` deixar de bloquear o clique, o `Dialog` perder o
+`role="dialog"`) só apareceria de forma indireta e difícil de localizar.
+
+### Comparação visual (mapa por nível)
+
+```
+      /\        E2E: 0 (adiado; fluxo candidato nomeado abaixo)
+     /  \       Integração: PageLogin.integration, refundQueries,
+    /----\                   useCreateRefund, useDeleteRefund
+   /      \     Componente: Button, Dialog, InputText (novos),
+  /--------\                ProtectedRoute, PageLogin (boundary)
+ /          \   Unitário: format, refund (schema)
+```
+
+Cada nível responde a uma pergunta diferente:
+
+| Nível | Pergunta que responde | Custo |
+|-------|-----------------------|-------|
+| Unitário | "esta função/schema está correta?" | mínimo |
+| Componente | "este componente se comporta (acessível) como o usuário espera?" | baixo |
+| Integração | "as peças conversam (Router + Query + Auth + rede)?" | médio |
+| E2E | "o sistema real funciona ponta a ponta?" | alto |
+
+### Estado ajustado
+
+Testes de componente que exercitam **comportamento acessível**, não classes:
+
+```tsx
+// Button: nome acessível + clique; disabled bloqueia o clique.
+await user.click(screen.getByRole("button", { name: "Entrar" }));
+expect(onClick).toHaveBeenCalledOnce();
+
+// Dialog: abre pelo trigger com role/nome do título; fecha pelo botão.
+await user.click(screen.getByRole("button", { name: "Abrir" }));
+await screen.findByRole("dialog", { name: "Excluir solicitação" });
+```
+
+### Arquivos modificados
+
+- Criados: `src/components/molecules/Button.test.tsx`, `Dialog.test.tsx` e
+  `InputText.test.tsx`.
+- Nenhuma infra nova: Testing Library + jsdom já bastavam (o Radix Dialog roda
+  no jsdom, com portal e foco).
+
+### Decisão sobre E2E (adiado)
+
+E2E de verdade exige infra pesada (Playwright, subir app + API + banco no teste).
+Não foi adicionado agora para manter o incremento focado. **Fluxo candidato**
+quando for a hora: login → criar reembolso → vê-lo na lista → excluir → sumir da
+lista. É o caminho crítico que atravessa auth, criação, cache e exclusão.
+
+### Verificações e limitações
+
+- `npm run test`: 32 testes em 11 arquivos, todos verdes.
+- `npx tsc -b --noEmit`: exit 0.
+- `npm run lint`: 18 erros preexistentes, **zero** novos.
+- **Lacunas de acessibilidade registradas nos próprios testes** (alimentam o
+  Item 7): o spinner do `Button` não tem `role`/nome (detectado pela classe de
+  animação); a label do `InputText` não é associada ao `<input>` (query por
+  placeholder). O bloqueio de clique do `handling` é via CSS (`pointer-events`),
+  que o jsdom não enxerga — por isso não é asserido.
+
+### O que lembrar
+
+- A pirâmide é uma **lente conceitual**, não uma estrutura de pastas: os testes
+  seguem colocados ao lado do código; reorganizar em pastas por nível seria churn
+  sem ganho.
+- Teste de componente é o nível certo para as peças do design system: rápido,
+  isolado e localiza a falha. Se o `Button` quebra, o teste do `Button` aponta,
+  não "algum lugar do login".
+- Testar por **role/nome/comportamento** (não por `className`) deixa o teste
+  resistente a refatoração de estilo.
+- Escolher o nível é uma decisão de custo/confiança — inclusive **não** escrever
+  um E2E agora é uma escolha consciente, não um esquecimento.
