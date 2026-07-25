@@ -917,3 +917,112 @@ lista. É o caminho crítico que atravessa auth, criação, cache e exclusão.
   resistente a refatoração de estilo.
 - Escolher o nível é uma decisão de custo/confiança — inclusive **não** escrever
   um E2E agora é uma escolha consciente, não um esquecimento.
+
+## Fase 2, Item 7 — Acessibilidade prática
+
+**Status:** concluído em 2026-07-25.
+
+**Commit da implementação:** `177f40c` —
+`feat: improve form accessibility (labels, aria, keyboard, axe)`, no repositório
+`Refund-FrontEnd`.
+
+### Por que estudar
+
+Acessibilidade = usável por **teclado e leitor de tela**, não só pelo mouse. O
+Radix cobre Dialog/Popover, mas os inputs tinham lacunas concretas: label não
+associada (o leitor não anuncia o campo), erro não vinculado (não se sabe qual
+campo falhou) e loading mudo. **axe** automatiza a auditoria dessas regras.
+
+### Estado anterior
+
+`InputText` renderizava a label como texto solto, **sem** `htmlFor`/`id`,
+`aria-invalid` nem `aria-describedby`. `Button` mostrava o spinner sem anunciar o
+estado ocupado. O trigger do `PopOverMenu` era um `<div>` recebendo os atributos
+de botão do Radix (`aria-haspopup`/`aria-expanded`) sem `role` e sem teclado.
+
+### Comparação visual
+
+```
+ANTES  <span>E-mail</span>  <input placeholder="voce@…">   (label solta)
+DEPOIS <label for="id7">E-mail</label>
+       <input id="id7" aria-invalid="true" aria-describedby="id7-error">
+       <span id="id7-error">E-mail inválido</span>
+```
+
+### Estado ajustado
+
+`InputText` gera um id com `useId`, associa a `<label htmlFor>` e vincula o erro:
+
+```tsx
+<InputLabelWrapper label={label} htmlFor={inputId}>
+  <input id={inputId} aria-invalid={error ? true : undefined}
+         aria-describedby={error ? errorId : undefined} {...props} />
+</InputLabelWrapper>
+{error && <Text as="span" id={errorId} className="text-error">{error}</Text>}
+```
+
+`Button` anuncia o processamento e esconde o ícone decorativo:
+
+```tsx
+<button aria-busy={handling ? true : undefined} ...>
+  ...
+  <Icon aria-hidden ... />   {/* spinner/ícone decorativo: fora do nome acessível */}
+</button>
+```
+
+O trigger do `PopOverMenu` virou um botão operável por teclado:
+
+```tsx
+<InputLabelWrapper role="button" tabIndex={0}
+  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.currentTarget.click(); } }}
+  ... />
+```
+
+### A auditoria fez o trabalho dela
+
+O `vitest-axe` no `RefundFormDialog` acusou `aria-allowed-attr` — um bug real que
+os testes de comportamento não pegariam: o `<div>` do trigger com atributos de
+botão sem `role`, e inacessível por teclado. Foi corrigido na origem (acima).
+
+### Foco no primeiro erro (já funcionava)
+
+Ao enviar o formulário vazio, o RHF foca o primeiro campo inválido. Isso já
+funcionava por três peças se encaixando — `shouldFocusError` (default), o `ref`
+do `register` chegando ao `<input>` (React 19 encaminha `ref` em spread) e o
+`aria-invalid`. Foi apenas **verificado** e protegido por teste, sem código novo.
+
+### Arquivos modificados
+
+- Ajustados: `src/components/atoms/Text.tsx` (aceita `htmlFor`/`id`),
+  `src/components/molecules/InputLabelWrapper.tsx` (label vira `<label htmlFor>`),
+  `src/components/molecules/InputText.tsx` (id + aria), `Button.tsx` (aria-busy +
+  ícone `aria-hidden`), `PopOverMenu.tsx` (trigger botão + teclado).
+- Criados: `PopOverMenu.test.tsx`, `RefundFormDialog.test.tsx` (foco no erro),
+  `PageRegister.a11y.test.tsx`, `RefundFormDialog.a11y.test.tsx` (axe).
+- devDep: `vitest-axe`. Testes de `InputText`/`Button` atualizados para asserir
+  `getByLabelText`/`aria-*` em vez de placeholder/classe.
+
+### Verificações e limitações
+
+- `npm run test`: 38 testes em 15 arquivos, todos verdes.
+- `npx tsc -b --noEmit`: exit 0. `npm run lint`: 18 preexistentes, 0 novos.
+- **axe escopado a WCAG A/AA**, rodado no subtree (não no document) e com
+  `color-contrast` desabilitado: o jsdom não carrega CSS (contraste) nem tem
+  `<title>`/`lang` — essas checagens pertencem a um E2E/navegador.
+- **Navegação por ↑/↓ dentro do menu aberto** (padrão listbox completo) ainda não
+  existe: o menu abre por teclado, mas percorrer as opções com as setas é um
+  aprofundamento maior — follow-up, fora do escopo "prático" deste item.
+
+### O que lembrar
+
+- Associar label ao input (`htmlFor`/`id`) é a base: o leitor anuncia o campo,
+  clicar na label o foca, e `getByLabelText` (a query recomendada) passa a funcionar.
+- `aria-invalid` + `aria-describedby` ligam a mensagem ao campo — o usuário ouve
+  *qual* campo falhou e *por quê*.
+- `aria-busy` anuncia processamento; ícone decorativo deve ser `aria-hidden` para
+  não poluir o nome acessível do controle.
+- Um `<div role="button">` não ganha Enter/Espaço de graça como um `<button>`
+  nativo — precisa de `tabIndex` e de um handler de teclado.
+- axe pega o que o teste de comportamento não vê (atributo ARIA inválido); um
+  teste de comportamento pega o que o axe não vê (o teclado não abrir o menu). São
+  complementares.

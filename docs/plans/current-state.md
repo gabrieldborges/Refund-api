@@ -164,10 +164,20 @@ completo e obrigatório está em
   - Verificação: `npm run test` (32 testes verdes), `npx tsc -b --noEmit`
     (exit 0), `npm run lint` (18 preexistentes, 0 novos).
 
-- **Próximo — Fase 2, Item 7 — Acessibilidade prática:** testar por role/nome
-  acessível, associar labels (`htmlFor`/`id`), `aria-invalid`/`aria-describedby`,
-  foco no primeiro erro e auditoria com axe. As lacunas já mapeadas alimentam o
-  item: label do `InputText` não associada e o spinner do `Button` sem `role`/nome.
+- **Fase 2, Item 7 — Acessibilidade prática: CONCLUÍDO.**
+  Melhorias de a11y nos formulários, no repo `Refund-FrontEnd`:
+  - `InputText` com label associada (`htmlFor`/`id`) + `aria-invalid`/
+    `aria-describedby`; `Button` com `aria-busy` e ícone `aria-hidden`.
+  - `PopOverMenu`: trigger virou botão operável por teclado (bug achado pelo axe).
+  - `vitest-axe` + auditorias (`PageRegister`, `RefundFormDialog`); foco no
+    primeiro erro verificado e testado.
+  - Verificação: `npm run test` (38 testes verdes), `npx tsc -b --noEmit`
+    (exit 0), `npm run lint` (18 preexistentes, 0 novos).
+
+- **Próximo — Fase 3, Item 8 — Feature-based architecture:** migrar **apenas**
+  a feature de reembolsos para colocação por feature (`features/refunds` com API,
+  schemas, hooks e componentes próprios), mantendo o design system neutro. Não
+  mover tudo numa refatoração grande.
 
 ## Pendências e riscos conhecidos
 
@@ -192,9 +202,12 @@ completo e obrigatório está em
   (`Icon`, `Text`, `Button`, `Dialog`, etc.). Não faz parte da trilha; candidato
   a um item futuro de higiene. O Item 4 não alterou essa contagem (0 erros novos).
 
-- **Acessibilidade: labels não associadas ao input.** O `InputText` não liga
-  `<label>`/`htmlFor` ao `<input>`, então o teste de login seleciona campos por
-  placeholder. É o Item 7 (acessibilidade prática).
+- ~~**Acessibilidade: labels não associadas ao input.**~~ RESOLVIDO no Item 7:
+  `InputText` agora associa `<label htmlFor>`/`id` e o erro via `aria-describedby`.
+  (Os testes de login ainda usam placeholder, mas `getByLabelText` já funciona.)
+- **A11y do `PopOverMenu`: navegação por setas.** O menu de categoria abre por
+  teclado (Item 7), mas percorrer as opções com ↑/↓ (padrão listbox completo)
+  ainda não existe. Contraste também não é auditável no jsdom (precisa de E2E).
 
 - **Campo `file` do `refundCreateSchema` sem teste.** Exige um `FileList`, que o
   jsdom não constrói de forma limpa; ficará coberto pelo teste de upload do
