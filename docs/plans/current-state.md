@@ -174,10 +174,24 @@ completo e obrigatório está em
   - Verificação: `npm run test` (38 testes verdes), `npx tsc -b --noEmit`
     (exit 0), `npm run lint` (18 preexistentes, 0 novos).
 
-- **Próximo — Fase 3, Item 8 — Feature-based architecture:** migrar **apenas**
-  a feature de reembolsos para colocação por feature (`features/refunds` com API,
-  schemas, hooks e componentes próprios), mantendo o design system neutro. Não
-  mover tudo numa refatoração grande.
+- **Fase 3, Item 8 — Feature-based architecture: CONCLUÍDO.**
+  Commit `1594d0f` (`refactor: colocate refunds into a feature module with a
+  public façade`) no repo `Refund-FrontEnd`. Migrou **apenas** a feature de
+  reembolsos para `src/features/refunds/` (`api`, `hooks`, `schemas`,
+  `components`, `constants`) com uma **fachada pública** `index.ts` — o resto do
+  app importa da fachada, nunca do interior. Páginas ficaram **fora** (shells que
+  consomem a feature), seguindo bulletproof-react / FSD; `router.tsx` intocado.
+  Design system, `lib`, auth e `hooks/useDebouncedValue` seguem neutros. Sem
+  mudança de comportamento (38 testes só relocados). Verificação: `npm run test`
+  (38 verdes), `npx tsc -b --noEmit` (exit 0), `npm run lint` (18 preexistentes,
+  0 novos) + grep de sanidade (ninguém importa o interior; feature não depende de
+  `pages/`).
+
+- **Próximo — Fase 3, Item 9 — Boundaries verificáveis pelo ESLint:** transformar
+  a convenção "importe só a fachada da feature" em regra executável. Configurar
+  path aliases (`@/`) e `eslint-plugin-boundaries` para proibir `ui → features`,
+  `core → ui` e imports entre features. Os aliases também pagam a dívida dos
+  imports internos profundos (`../../../lib/api`) criada no Item 8.
 
 ## Pendências e riscos conhecidos
 

@@ -1026,3 +1026,144 @@ do `register` chegando ao `<input>` (React 19 encaminha `ref` em spread) e o
 - axe pega o que o teste de comportamento não vê (atributo ARIA inválido); um
   teste de comportamento pega o que o axe não vê (o teclado não abrir o menu). São
   complementares.
+
+## Fase 3, Item 8 — Feature-based architecture
+
+**Status:** concluído em 2026-07-25.
+
+**Commit da implementação:** `1594d0f` —
+`refactor: colocate refunds into a feature module with a public façade`, no
+repositório `Refund-FrontEnd`.
+
+**Escopo aprovado:** migrar **apenas** a feature de reembolsos. As **páginas ficam
+fora** da feature (shells que consomem a fachada), seguindo bulletproof-react e
+Feature-Sliced Design. Sem path aliases (`@/`) — são o objeto do Item 9.
+
+### Por que estudar
+
+O frontend era organizado **por tipo técnico**: `hooks/`, `schemas/`,
+`constants/`, `components/organisms/`. Tudo que era "hook" morava junto, mesmo que
+um fosse de reembolso e outro de infraestrutura. Uma mudança de domínio se
+espalhava por muitas pastas.
+
+Colocation **por feature** inverte o critério: agrupa tudo que **muda pelo mesmo
+motivo**. `features/refunds/` passa a dona da API, hooks, schemas e componentes de
+reembolso e expõe uma **fachada pública** (`index.ts`). O resto do app importa de
+`features/refunds`, nunca de um caminho interno. Sem essa fronteira o Item 9
+(boundaries no ESLint) não teria o que proteger.
+
+### Estado anterior
+
+Os módulos de reembolso viviam espalhados por pasta técnica, e os consumidores
+importavam caminhos internos diretos:
+
+```ts
+// src/pages/PageRefundDetails.tsx
+import { CATEGORIES } from "../constants/categories";
+import { useRefund } from "../hooks/useRefund";
+import { useDeleteRefund } from "../hooks/useDeleteRefund";
+```
+
+Não havia fronteira: qualquer arquivo podia alcançar qualquer parte interna do
+domínio.
+
+### Comparação visual
+
+```mermaid
+flowchart LR
+    subgraph Antes["Antes — por tipo técnico"]
+        P1[pages/*] --> H[hooks/useRefund*]
+        P1 --> S1[schemas/refund]
+        P1 --> C1[constants/categories]
+        O1[components/organisms/RefundFormDialog]
+    end
+
+    subgraph Depois["Depois — por feature"]
+        P2[pages/*] --> F[features/refunds/index.ts\nfachada pública]
+        R[router-loaders] --> F
+        ML[core/MainLayout] --> F
+        F --> IN[api · hooks · schemas\ncomponents · constants\n internos]
+    end
+```
+
+| Módulo (antes) | É de reembolso? | Destino |
+|---|---|---|
+| `hooks/refundQueries.ts` | ✅ | `features/refunds/api/` |
+| `hooks/useRefund(s)/useCreate/useDelete` | ✅ | `features/refunds/hooks/` |
+| `schemas/refund.ts` | ✅ | `features/refunds/schemas/` |
+| `components/organisms/RefundFormDialog.tsx` | ✅ | `features/refunds/components/` |
+| `constants/categories.ts` | ✅ (domínio de despesa) | `features/refunds/constants/` |
+| `lib/*`, design system, `context/`, `router*`, `pages/`, `hooks/useDebouncedValue` | ❌ neutro | ficaram no lugar |
+
+### Estado ajustado
+
+A fachada `src/features/refunds/index.ts` define a superfície pública e mantém o
+resto privado:
+
+```ts
+export { refundListQuery, refundDetailQuery } from "./api/refundQueries";
+export { useRefunds } from "./hooks/useRefunds";
+export { useRefund } from "./hooks/useRefund";
+export { useCreateRefund } from "./hooks/useCreateRefund";
+export { useDeleteRefund } from "./hooks/useDeleteRefund";
+export { refundListSearchParamsSchema } from "./schemas/refund";
+export { CATEGORIES, CATEGORY_OPTIONS } from "./constants/categories";
+export { default as RefundFormDialog } from "./components/RefundFormDialog";
+// refundKeys, response schemas e CATEGORY_VALUES são internos — não re-exportados.
+```
+
+Os consumidores passaram a importar só da fachada:
+
+```ts
+// src/pages/PageRefundDetails.tsx
+import { CATEGORIES, useRefund, useDeleteRefund } from "../features/refunds";
+```
+
+Sem aliases, os imports **internos** dos arquivos movidos ficaram mais profundos
+(o custo consciente deste item): `../lib/api` virou `../../../lib/api`. A distância
+**entre subpastas da própria feature** não mudou (`schemas → constants` continua
+`../constants/categories`), então vários arquivos não precisaram de ajuste.
+
+### Arquivos modificados
+
+- Movidos (via `git mv`, histórico preservado) para `src/features/refunds/`:
+  `api/refundQueries.ts`, `hooks/{useRefunds,useRefund,useCreateRefund,useDeleteRefund}.ts`,
+  `schemas/refund.ts`, `components/RefundFormDialog.tsx`, `constants/categories.ts`
+  e seus respectivos `*.test.*`.
+- Criado: `src/features/refunds/index.ts` (fachada).
+- Consumidores ajustados para a fachada: `src/pages/PageHome.tsx`,
+  `PageRefundDetails.tsx`, `PageComponents.tsx`, `src/router-loaders.ts`,
+  `src/components/core/MainLayout.tsx`.
+
+### Verificações e limitações
+
+- `npm run test`: 38 testes em 15 arquivos, todos verdes (a mesma suíte, só
+  relocada — nenhum teste novo, é uma refatoração sem mudança de comportamento).
+- `npx tsc -b --noEmit`: exit 0 (pegaria qualquer import quebrado pela mudança de
+  caminho).
+- `npm run lint`: 18 erros preexistentes, **zero** novos. A fachada mistura
+  re-export de componente com funções, mas re-exports não disparam
+  `react-refresh/only-export-components`.
+- Sanidade por `grep`: nenhum consumidor externo importa o interior da feature; a
+  feature não importa de `pages/`; nenhum import órfão para os caminhos antigos.
+- **Preserva Atomic Design onde ele importa:** os átomos/moléculas neutros
+  continuam no design system; só o organism específico de reembolso
+  (`RefundFormDialog`) foi para a feature — a migração é o objeto de estudo
+  aprovado, não uma quebra silenciosa da arquitetura.
+- **Imports internos mais profundos** (`../../../lib/api`) são a dívida que o
+  **Item 9** paga com aliases + boundaries no ESLint.
+
+### O que lembrar
+
+- Organizar **por feature** agrupa o que muda junto; organizar **por tipo** agrupa
+  o que se parece. Em escala, "muda junto" reduz o espalhamento por mudança de
+  domínio.
+- A **fachada** (`index.ts`) é o conceito central: ela torna explícita a diferença
+  entre API pública e detalhe interno. Importar `features/refunds` (não um caminho
+  interno) é o que o Item 9 vai transformar em regra executável.
+- Nem tudo vira feature: design system, `lib`, auth e router são **neutros/app-level**
+  e ficam fora. Uma constante de domínio (categorias de despesa), sim, é da feature.
+- **Página fica fora da feature** (bulletproof-react / FSD): a rota é ponto de
+  composição e assunto do app; a feature não deve conhecer o esquema de URLs.
+- `git mv` preserva o histórico do arquivo movido; refatoração de layout não
+  precisa apagar a linha do tempo do código.
