@@ -301,6 +301,20 @@ completo e obrigatório está em
   Consequência mais ampla: "vendorizado" não é sinônimo de "isento" — arquivos
   de `components/ui` são código do projeto, editáveis e revisáveis como qualquer
   outro.
+- **A topbar e o cabeçalho da sidebar têm altura fixa igual de propósito.** Os
+  dois carregam `h-17.5` e `border-b` (`src/components/core/Topbar.tsx` e
+  `src/components/core/Sidebar.tsx`) para que as bordas de baixo caiam na mesma
+  linha horizontal e a emenda entre sidebar e conteúdo fique contínua. **A
+  origem é uma tunagem manual do próprio Gabriel**, encontrada não commitada na
+  árvore de trabalho durante o ciclo do restyle, guardada como patch e levada
+  como requisito para a reescrita do shell — hoje ela está expressa de forma
+  diferente da que ele escreveu (o `SidebarHeader` do shadcn precisa também de
+  `flex-row`/`p-4` sobrescrevendo os padrões, e do bloco
+  `group-data-[collapsible=icon]:*` para o modo trilho). Os tokens `--border` e
+  `--sidebar-border` resolvem para o mesmo valor nos dois temas, então a emenda
+  é realmente contínua. **Não é ajuste acidental:** quem reformatar o shell
+  precisa preservar a igualdade de altura, ou desfaz uma decisão visual
+  deliberada sem perceber.
 - **O CLI do shadcn escreve num diretório literal `./@/` na raiz.** Causa: o
   `tsconfig.json` raiz não tem `paths` (eles vivem no `tsconfig.app.json`, via
   project references) e o CLI só lê o da raiz. Aconteceu nas quatro tasks que

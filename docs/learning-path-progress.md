@@ -1821,8 +1821,15 @@ componente é usado. Saldo real: **+16 testes** sobre o início do ciclo.
   - `ui/button.tsx` do registry traz mais tamanhos (`xs`, `icon-xs`, `icon-sm`,
     `icon-lg`) do que os 4 documentados no spec — superfície maior que o
     contrato descrito.
-  - `card.tsx`, `separator.tsx` e `dropdown-menu.tsx` foram gerados e ainda não
-    são consumidos (`badge` idem, reservado para o card de status futuro).
+  - `dropdown-menu.tsx` foi gerado e **não é consumido por ninguém**: veio junto
+    no `npx shadcn@latest add sidebar sheet tooltip dropdown-menu` da Task 7,
+    porque é o padrão de menu de usuário que os dashboards do shadcn costumam
+    usar — mas o shell deste projeto não tem esse menu. É o único arquivo de
+    `components/ui` sem consumidor.
+  - `separator.tsx` **é** consumido (`components/core/Topbar.tsx` e o próprio
+    `ui/sidebar.tsx`); o que falta é aparecer na galeria da `PageComponents`,
+    que hoje mostra 8 componentes (Button, Input, Select, Dialog, Card, Badge,
+    Skeleton, InputFile). Não confundir "não está na vitrine" com "não é usado".
   - No `RefundFormDialog`, o cast do campo `amount` é
     `as string | number | undefined`, mais largo que a realidade (`number` nunca
     ocorre) — `as string | undefined` seria honesto.
@@ -1835,10 +1842,10 @@ componente é usado. Saldo real: **+16 testes** sobre o início do ciclo.
   - `refunds_repository_test.py` ganhou um `# pylint: disable=duplicate-code` no
     módulo, que também silencia duplicação genuína futura naquele arquivo
     (espelha precedente já existente em `src/views/refund_deleter_view.py`).
-  - `PageRegister` (e `PageLogin`, de onde o padrão veio) deixou de usar
-    `required`/`type="email"` nativos: a validação passou a ser só do Zod, no
-    submit, em vez do bloqueio imediato do navegador. Foi uma decisão consciente,
-    não um efeito colateral.
+  - `PageRegister` (e `PageLogin`, de onde o padrão veio) **perdeu o `required`
+    nativo** dos campos; o `type="email"` continua lá. Efeito prático: campo
+    vazio não é mais bloqueado pelo navegador — chega ao Zod e a mensagem
+    aparece no submit. Foi uma decisão consciente, não um efeito colateral.
 - **`src/components/organisms` ainda é citado** no padrão da camada `app` do
   `eslint.config.js`, mas a pasta não existe no disco. É anterior a este ciclo.
 
