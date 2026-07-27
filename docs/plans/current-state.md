@@ -11,7 +11,7 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-07-26.
+Atualizado em: 2026-07-27.
 
 ## Visão geral
 
@@ -205,13 +205,30 @@ completo e obrigatório está em
     `npm run build` (ok), `npm run lint` (18 preexistentes, 0 de boundaries,
     0 warnings) + 2 violações temporárias capturadas pela regra e revertidas.
 
-- **Próximo — Fase 3, Item 10 — Pattern layer:** o projeto tem Atomic Design mas
-  não uma camada formal de *patterns* (composições reutilizáveis de médio nível —
-  formulário, upload, error feedback — sem regra de domínio). **Cuidado explícito
-  no `learning_path.md`:** só extrair após o **segundo** uso real; criar
-  `patterns/` vazio seria abstração prematura. Avaliar primeiro se já existe um
-  segundo uso que justifique o item; se não houver, decidir com o Gabriel entre
-  adiar (documentando o gatilho) ou interpretar o item de outra forma.
+- **Ciclo de feature — Shell do app (sidebar + topbar + tema): CONCLUÍDO.**
+  Primeiro ciclo de feature interligado à trilha (brainstorming → spec → plano →
+  execução; artefatos em `Refund-FrontEnd/docs/superpowers/`). Mesclado na `main`
+  do `Refund-FrontEnd` (branch `feat/app-shell`, fast-forward; HEAD `957c5b1`).
+  Cobriu **Item 12 (Zustand)** — store `src/stores/ui.ts` persistida (tema +
+  sidebar) — e o **Item 10 (Pattern layer) reinterpretado** — integrar/tematizar
+  `react-pro-sidebar` em vez de construir um pattern. O que mudou: `MainLayout`
+  virou Sidebar + Topbar + Outlet; tema por **variáveis CSS** (tokens semânticos
+  claro/escuro em `index.css`, migração dos 16 arquivos que usavam a paleta fixa);
+  `@mui/icons-material`; `Header`/`NavLink` removidos; fix dos ícones svgr
+  (`fill="black"` → `currentColor` via `replaceAttrValues`). Perfil é frontend-only
+  (iniciais + username do e-mail). Verificação: `npx tsc -b --noEmit` (0),
+  `npm run test` (59 verdes), `npm run build` (ok), `npm run lint` (18
+  preexistentes, 0 de boundaries). Detalhes no [diário](../learning-path-progress.md).
+
+- **Próximo — ciclo de feature: Workflow de aprovação** (backend primeiro:
+  `status` pendente/aprovado/rejeitado + aprovar/rejeitar por admin + autorização;
+  depois o frontend). É o passo 2 da decomposição acordada e o veículo natural do
+  **Item 18 (Alembic/migrations)** — não dá para alterar a tabela com dados sem
+  migration — e do **Item 20 (Unit of Work)**. Resolve de brinde o "nome do emissor
+  + data" na listagem. Roadmap completo dos ciclos na
+  [spec do shell](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-26-frontend-shell-sidebar-theme-design.md).
+  (O **Item 11 — Error boundaries** pode interligar quando as páginas novas de dados
+  entrarem.)
 
 ## Pendências e riscos conhecidos
 

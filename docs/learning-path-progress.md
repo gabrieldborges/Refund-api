@@ -1320,3 +1320,103 @@ app furando a fachada (import a api/refundQueries em vez do index):
   na feature pelo `index`; qualquer caminho interno cai no `disallow`.
 - Ao adotar uma lib, conferir se a config bate com a **versão instalada**: warnings
   de deprecação são sinal de estar na API antiga, mesmo que "funcione".
+
+## Ciclo de feature — Shell do app (sidebar + topbar + tema)
+
+**Status:** concluído em 2026-07-27, no repositório `Refund-FrontEnd` (branch
+`feat/app-shell`, mesclada na `main` por fast-forward).
+
+**Natureza:** primeiro **ciclo de feature** interligado à trilha (estratégia de usar
+features como veículo dos próximos itens, a partir do Item 9). Passou por
+brainstorming → spec → plano → execução (skills `brainstorming`, `writing-plans`,
+`executing-plans`). Spec e plano em
+`Refund-FrontEnd/docs/superpowers/{specs,plans}/2026-07-26-frontend-shell-*`.
+
+**Itens da trilha que este ciclo cobriu:**
+- **Item 12 — Zustand e persistência seletiva:** veículo direto. Store
+  `src/stores/ui.ts` com `theme` + `sidebarCollapsed`, persistida no `localStorage`
+  (middleware `persist`), com assinatura seletiva (`useUiStore(s => s.theme)`).
+  Auth **não** foi migrado — segue no Context (decisão registrada anteriormente).
+- **Item 10 — Pattern layer: reinterpretado.** Em vez de construir um pattern do
+  zero, integramos e tematizamos uma lib pronta (`react-pro-sidebar`) — decisão
+  consciente do Gabriel. O aprendizado virou "integrar + tematizar lib de terceiro
+  dentro do design system", não "extrair uma composição própria".
+
+### Por que estudar
+
+O produto era direto ao ponto (Header + Outlet). Para escalar para um formato de
+painel admin, a **moldura** precisa vir antes das páginas de dados (dashboard,
+calendário, time) que virão nos próximos ciclos. E o tema claro/escuro exigia parar
+de espalhar cores fixas e adotar uma **fonte única** de cor.
+
+### Estado anterior
+
+`MainLayout` era `Header` (organism) + `Outlet`. As cores viviam hardcoded na paleta
+Tailwind (`bg-white`, `text-green-100`, `bg-gray-500`…), sem noção de tema. Não havia
+estado global de UI.
+
+### Comparação visual
+
+```text
+ANTES  Header + Outlet · cores fixas (bg-white/gray/green) · sem tema · sem store
+
+DEPOIS  Sidebar (react-pro-sidebar) + Topbar de ações + Outlet
+        cores = tokens semânticos em variáveis CSS (surface/app/line/content/
+        muted/accent/…), que trocam sob [data-theme="dark"]
+        Zustand persiste tema + estado da sidebar; um efeito aplica data-theme no <html>
+        react-pro-sidebar e utilitários Tailwind leem os MESMOS var(--…) → trocam juntos
+```
+
+### Estado ajustado (o que mudou)
+
+- **Tema por variáveis CSS** (`src/index.css`): tokens semânticos em `:root` e
+  `:root[data-theme="dark"]`, mapeados no `@theme` do Tailwind 4. Toda a paleta fixa
+  do app (16 arquivos) migrou para esses tokens. Modo claro ficou idêntico ao
+  anterior (mesmos hex); o dark é novo.
+- **Store Zustand** (`src/stores/ui.ts`) + **efeito** (`ThemeEffect`) que escreve
+  `data-theme` no `<html>` (resolvendo `"system"` via `matchMedia`).
+- **Sidebar** (`react-pro-sidebar`) tematizada via `rootStyles`/`menuItemStyles`
+  com `var(--…)`: perfil derivado (iniciais + `@username` do e-mail, em
+  `src/lib/profile.ts`), nav com "Solicitações" ativo + Dashboard/Time/Calendário
+  "em breve", colapso em icon rail, drawer no mobile, logout no rodapé.
+- **Topbar** (`src/components/core/Topbar.tsx`): título por rota (`handle: { title }`
+  lido com `useMatches`), toggle de tema e "Nova solicitação".
+- **Ícones `@mui/icons-material`** na sidebar/topbar.
+- **`Header`/`NavLink` removidos** (código morto após a migração).
+- **Fix de tema nos ícones svgr:** os assets tinham `fill="black"` fixo no `<path>`,
+  então as classes `fill-*` nunca aplicavam e os ícones ficavam pretos (invisíveis no
+  dark). Corrigido repintando `black → currentColor` na importação
+  (`vite-plugin-svgr` `replaceAttrValues`) e dirigindo a cor por `text-*`.
+
+### Verificações e limitações
+
+- `npx tsc -b --noEmit` exit 0; `npm run test` 59 testes verdes (22 arquivos);
+  `npm run build` OK; `npm run lint` 18 erros preexistentes de `react-refresh`,
+  **0 de boundaries**, 0 novos.
+- A camada nova respeita o Item 9: `Sidebar`/`Topbar`/`MainLayout` em
+  `components/core/` (camada `app`); `src/stores` adicionado à camada `shared` no
+  `eslint.config.js`.
+- **Perfil frontend-only:** avatar por iniciais e username derivado do e-mail; foto
+  e username reais no backend ficam para um ciclo futuro.
+- **Ícones sem `fill`** (`Spinner.svg`, `CaretDown.svg`) não são cobertos pelo
+  `replaceAttrValues` (não têm valor `black` para trocar) e ainda renderizam pretos;
+  o `MagnifyingGlass.svg` foi ajustado manualmente com `fill="currentColor"`.
+  Follow-up: `fill="currentColor"` nesses dois ou um `svgProps` global no svgr.
+- **Validação visual do dark mode** feita pelo Gabriel no navegador (o jsdom não
+  carrega CSS, então essa parte não é coberta por teste automatizado).
+
+### O que lembrar
+
+- **Variáveis CSS são a ponte de tema entre mundos:** Tailwind 4 (`@theme`) e libs
+  de terceiro (`react-pro-sidebar`, MUI) podem ler os mesmos `var(--…)`; trocar o
+  `data-theme` no `<html>` re-tema tudo de uma vez, sem cola recorrente.
+- **Zustand** resolve estado global pequeno de UI com assinatura seletiva e
+  `persist`, sem re-render de árvore inteira (Context) nem estado local isolado.
+- **`fill` de SVG não cascateia para um `<path>` que tem `fill` próprio.** Para um
+  ícone ser temável, o path precisa usar `currentColor` (ou herdar) — aí `text-*`/
+  `color` controla, e o mesmo mecanismo serve para svgr e MUI.
+- Usar lib pronta (react-pro-sidebar) troca o aprendizado do Item 10 de "construir
+  um pattern" para "integrar e tematizar" — decisão de trade-off consciente, não
+  padrão quebrado em silêncio.
+- Tokens **semânticos** (papéis: surface/content/line…) envelhecem melhor que a
+  paleta por nome de cor (gray-100…), porque o mesmo papel troca de valor por tema.
