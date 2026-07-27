@@ -290,6 +290,15 @@ completo e obrigatório está em
 
 ## Pendências e riscos conhecidos
 
+- **Uma asserção vazia no teste do `RefundSearch`.** Em
+  `Refund-FrontEnd/src/pages/PageHome.test.tsx`, o teste da busca com debounce
+  prova de verdade que digitar chega na URL como `?name=…` — essa metade falha
+  se o fluxo quebrar. Já a metade que diz "reseta a página para 1" **não pode
+  falhar**: a fixture nunca começa com `page>=2`, então não há de onde resetar.
+  O ramo correspondente em `PageHome.tsx` (`updateListLocation`) fica sem
+  cobertura real. Conserto de uma linha quando o arquivo for tocado: iniciar o
+  router com `page>=2` antes de digitar e afirmar que o parâmetro `page` some.
+  Achado na revisão final do ciclo, depois que o diário já estava escrito.
 - **O restyle inteiro não foi validado em navegador.** Todas as verificações do
   ciclo do shadcn foram automatizadas (testes, typecheck, build, lint, pytest,
   pylint). Como o jsdom não carrega CSS, um restyle é justamente o tipo de
