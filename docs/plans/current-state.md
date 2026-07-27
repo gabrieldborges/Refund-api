@@ -11,7 +11,7 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-07-25.
+Atualizado em: 2026-07-26.
 
 ## Visão geral
 
@@ -187,11 +187,31 @@ completo e obrigatório está em
   0 novos) + grep de sanidade (ninguém importa o interior; feature não depende de
   `pages/`).
 
-- **Próximo — Fase 3, Item 9 — Boundaries verificáveis pelo ESLint:** transformar
-  a convenção "importe só a fachada da feature" em regra executável. Configurar
-  path aliases (`@/`) e `eslint-plugin-boundaries` para proibir `ui → features`,
-  `core → ui` e imports entre features. Os aliases também pagam a dívida dos
-  imports internos profundos (`../../../lib/api`) criada no Item 8.
+- **Fase 3, Item 9 — Boundaries verificáveis pelo ESLint: CONCLUÍDO.**
+  Commit `4bab16e` (`feat: enforce feature boundaries with @/ aliases and
+  eslint-plugin-boundaries`) no repo `Refund-FrontEnd`. O que mudou:
+  - **Alias `@/`**: `tsconfig.app.json` (`paths`, sem `baseUrl` deprecado) e
+    `vite.config.ts` (`resolve.alias`, herdado pelo Vitest). Os `../../../` da
+    feature viraram `@/...` — paga a dívida do Item 8.
+  - **`eslint-plugin-boundaries` (v7)**: `eslint.config.js` classifica pastas em
+    camadas (`feature`, `ui`, `shared`, `app`) e a regra `boundaries/dependencies`
+    proíbe `ui/shared → feature`, imports entre features (`relationship` diferente
+    de `internal`) e furar a fachada (`app → feature` só via
+    `fileInternalPath: index`). Resolver `@/` no lint via
+    `eslint-import-resolver-typescript`.
+  - Decisão registrada: `components/core` é camada **app** (não se aplicou o
+    `core → ui` literal do `learning_path.md`, que era exemplo genérico).
+  - Verificação: `npx tsc -b --noEmit` (exit 0), `npm run test` (38 verdes),
+    `npm run build` (ok), `npm run lint` (18 preexistentes, 0 de boundaries,
+    0 warnings) + 2 violações temporárias capturadas pela regra e revertidas.
+
+- **Próximo — Fase 3, Item 10 — Pattern layer:** o projeto tem Atomic Design mas
+  não uma camada formal de *patterns* (composições reutilizáveis de médio nível —
+  formulário, upload, error feedback — sem regra de domínio). **Cuidado explícito
+  no `learning_path.md`:** só extrair após o **segundo** uso real; criar
+  `patterns/` vazio seria abstração prematura. Avaliar primeiro se já existe um
+  segundo uso que justifique o item; se não houver, decidir com o Gabriel entre
+  adiar (documentando o gatilho) ou interpretar o item de outra forma.
 
 ## Pendências e riscos conhecidos
 
@@ -237,6 +257,11 @@ completo e obrigatório está em
   Depois do fix de concorrência não há mais vazamento, mas o limite é apertado
   para carga real; é candidato a ajuste/observabilidade num item de backend
   futuro (não é um bug, é tuning).
+- **Boundaries não cobre 4 arquivos-raiz do frontend.** No `eslint-plugin-boundaries`
+  v7 um elemento é uma **pasta**, então `App.tsx`, `main.tsx`, `router.tsx` e
+  `router-loaders.ts` (soltos em `src/`) ficaram **unknown** e não são checados como
+  origem de import. São topo da hierarquia (app); mover para uma pasta `app/`
+  resolveria, mas seria churn fora do escopo do Item 9.
 - **Backend retorna 500 (não 404) via 500 genérico?** Verificado que NÃO: o fluxo
   de "não encontrado" já levanta `HttpNotFoundError` → 404. Os 500 vistos no log
   vinham do bug de concorrência (agora corrigido), não do caminho de not-found.

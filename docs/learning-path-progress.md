@@ -1167,3 +1167,156 @@ Sem aliases, os imports **internos** dos arquivos movidos ficaram mais profundos
   composição e assunto do app; a feature não deve conhecer o esquema de URLs.
 - `git mv` preserva o histórico do arquivo movido; refatoração de layout não
   precisa apagar a linha do tempo do código.
+
+## Fase 3, Item 9 — Boundaries verificáveis pelo ESLint
+
+**Status:** concluído em 2026-07-26.
+
+**Commit da implementação:** `4bab16e` —
+`feat: enforce feature boundaries with @/ aliases and eslint-plugin-boundaries`,
+no repositório `Refund-FrontEnd`.
+
+**Escopo aprovado:** (A) alias `@/` e (B) `eslint-plugin-boundaries`. Decisão de
+arquitetura tomada antes de implementar: `components/core` é camada **app** (pode
+importar `ui`), então a regra literal `core → ui` do `learning_path.md` **não** foi
+aplicada — ela era um exemplo genérico, e no código `MainLayout` legitimamente
+compõe UI + a fachada da feature.
+
+### Por que estudar
+
+No Item 8 a fachada (`features/refunds/index.ts`) criou a fronteira, mas
+*"importe só a fachada"* era só **convenção**: nada impedia
+`import { refundKeys } from ".../features/refunds/api/refundQueries"`. O código
+compilava e os testes passavam.
+
+O conceito é **architecture fitness function**: uma verificação automatizada que
+**falha** quando o código viola uma decisão de arquitetura. A decisão deixa de ser
+um comentário no diário e passa a ser parte do `npm run lint`.
+
+### Estado anterior
+
+Sem alias e sem regra de dependência. `eslint.config.js` só tinha `js`,
+`typescript-eslint`, `react-hooks` e `react-refresh`. E a dívida do Item 8 estava
+concreta — imports internos da feature subindo três níveis:
+
+```ts
+// src/features/refunds/api/refundQueries.ts
+import { api } from "../../../lib/api";
+// src/features/refunds/components/RefundFormDialog.tsx
+import Button from "../../../components/molecules/Button";
+```
+
+### Comparação visual
+
+Direção permitida (cada camada só enxerga as de baixo); o que estiver fora falha o
+lint:
+
+```text
+        app          (pages, components/core, organisms, context, schemas)
+         │  ↓ pode importar
+     feature          (features/refunds — de fora, SÓ pela fachada index.ts)
+         │  ↓
+         ui           (components/atoms, molecules)
+         │  ↓
+       shared         (lib, hooks)
+
+REGRAS QUE FALHAM O LINT:
+  ✗ ui       → feature        (design system não conhece domínio)
+  ✗ shared   → ui / feature    (utilitário neutro)
+  ✗ feature  → outra feature   (relationship "sibling", não "internal")
+  ✗ app      → interior da feature (só fileInternalPath = index.ts é público)
+```
+
+```text
+ANTES   import { api } from "../../../lib/api";   // conta os ../, frágil
+        convenção "só a fachada" vive no diário
+
+DEPOIS  import { api } from "@/lib/api";           // absoluto, estável
+        npm run lint FALHA se alguém furar a fachada ou cruzar camadas
+```
+
+### Estado ajustado
+
+**Etapa A — alias `@/`.** `tsconfig.app.json` ganhou `paths` (sem `baseUrl`, que
+está deprecado; com `moduleResolution: "bundler"` o `paths` resolve relativo ao
+próprio tsconfig). `vite.config.ts` ganhou `resolve.alias` (herdado pelo Vitest).
+Os `../../../` da feature viraram `@/...`.
+
+**Etapa B — boundaries.** `eslint.config.js` classifica pastas em camadas e aplica
+a regra `boundaries/dependencies` (API v7):
+
+```js
+'boundaries/elements': [
+  { type: 'feature', pattern: 'src/features/*', capture: ['featureName'] },
+  { type: 'ui', pattern: ['src/components/atoms', 'src/components/molecules'] },
+  { type: 'shared', pattern: ['src/lib', 'src/hooks'] },
+  { type: 'app', pattern: ['src/pages', 'src/components/core', /* ... */] },
+],
+// política central: app alcança a feature SÓ pela fachada
+{
+  from: { element: { type: 'app' } },
+  allow: { to: { element: { type: 'feature', fileInternalPath: 'index.{ts,tsx}' } } },
+},
+// feature importa só a si mesma (mesma feature = relationship "internal")
+{
+  from: { element: { type: 'feature' } },
+  allow: { to: { element: { type: 'feature' } },
+           dependency: { relationship: { from: 'internal' } } },
+},
+```
+
+### A prova de que a regra morde
+
+Duas violações temporárias foram criadas e o lint as pegou, depois revertidas:
+
+```text
+ui → feature:  "no policy allowing dependencies from type 'ui' to type 'feature'"
+app furando a fachada (import a api/refundQueries em vez do index):
+               "no policy allowing dependencies from 'app' to 'feature'"
+```
+
+### Arquivos modificados
+
+- `tsconfig.app.json` (paths `@/*`), `vite.config.ts` (resolve.alias),
+  `eslint.config.js` (elements + regra `boundaries/dependencies`).
+- `package.json`: `eslint-plugin-boundaries` e `eslint-import-resolver-typescript`.
+- Imports `@/`: os internos da feature (api, hooks, components, constants e seus
+  testes) e a fachada nos consumidores (`pages/*`, `components/core/MainLayout`,
+  `router-loaders`).
+
+### Verificações e limitações
+
+- `npx tsc -b --noEmit`: exit 0.
+- `npm run test`: 38 testes em 15 arquivos, todos verdes (Vitest resolve `@/` pela
+  alias do Vite).
+- `npm run build`: passou (mantém só o aviso preexistente de chunk >500 kB).
+- `npm run lint`: 18 erros preexistentes de `react-refresh`, **0** de boundaries e
+  **0 warnings** do plugin.
+- **API do plugin migrada:** o `eslint-plugin-boundaries` v7.1 mudou bastante. A
+  primeira config usou a API legada (`boundaries/element-types`, `rules`,
+  template `${from.featureName}`) e gerou warnings de deprecação; foi migrada para
+  a atual (`boundaries/dependencies`, `policies`, elementos por **pasta**,
+  `relationship`/`fileInternalPath`) antes do encerramento.
+- **Limitação — 4 arquivos-raiz não classificados.** No v7 um elemento é uma
+  **pasta**; padrões com nome de arquivo disparam warning. Por isso `App.tsx`,
+  `main.tsx`, `router.tsx` e `router-loaders.ts` (soltos em `src/`) ficaram
+  **unknown** e não são checados como origem. São topo da hierarquia (app, que
+  poderia importar tudo), então as fronteiras que importam seguem cobertas.
+  Movê-los para uma pasta `app/` seria churn fora do escopo do item.
+
+### O que lembrar
+
+- **Fitness function**: transforma uma decisão de arquitetura em teste executável.
+  Convenção que não é verificada degrada em silêncio no primeiro PR distraído.
+- Alias `@/` com `moduleResolution: "bundler"` **não** precisa de `baseUrl` (que
+  está deprecado); o `paths` resolve relativo ao tsconfig.
+- No `eslint-plugin-boundaries` v7, **elemento = pasta**. Para classificar um
+  arquivo isolado seria preciso `boundaries/files` (categoria), não um padrão de
+  arquivo no descritor de elemento.
+- `relationship: { from: 'internal' }` distingue "mesma feature" de "entre
+  features" (`sibling`) sem lógica de captura manual; é como se proíbe import
+  entre features.
+- `fileInternalPath: 'index.{ts,tsx}'` é o que amarra a fachada: o `app` só entra
+  na feature pelo `index`; qualquer caminho interno cai no `disallow`.
+- Ao adotar uma lib, conferir se a config bate com a **versão instalada**: warnings
+  de deprecação são sinal de estar na API antiga, mesmo que "funcione".
