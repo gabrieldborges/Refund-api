@@ -54,14 +54,30 @@ notáveis: 404 tanto para "não existe" quanto para "não é seu" (evita enumera
 IDs); mensagem genérica no login; validação de comprovante por extensão, não pelo
 `Content-Type` do cliente. Cada camada tem seu `_test.py` ao lado.
 
-### Frontend — Atomic Design
+### Frontend — design system shadcn/ui + feature module
 
-`src/components/{atoms,molecules,organisms,core}` para UI; `pages/` (prefixo
-`Page`), `hooks/`, `context/` (Auth via Context + `localStorage`), `lib/`
-(Axios com interceptors), `schemas/` (Zod) e `constants/`. Server state via
-TanStack Query; formulário e responses consumidos validados com Zod. O React
-Router usa Data Mode com loaders, páginas lazy e erro de rota; busca e paginação
-da Home vivem em search params validados.
+`src/components/ui` é o design system: componentes **copiados do registry do
+shadcn/ui** (`npx shadcn@latest add <componente>`) e versionados aqui, escritos
+com `cva` + `clsx` sobre o helper `cn()` de `src/lib/utils.ts`. Os tokens de cor
+ficam em `src/index.css`, no vocabulário do shadcn (`--background`,
+`--foreground`, `--primary`, `--border`, `--sidebar-*`…), com dark mode via
+`@custom-variant dark (&:is([data-theme="dark"] *))` — o `data-theme` continua
+sendo escrito pelo `ThemeEffect` a partir da store Zustand (Item 12).
+`src/components/core` guarda a composição do shell (MainLayout, Sidebar,
+Topbar). Ícones são só do `lucide-react`; o único SVG local é o `Receipt.svg`
+da marca.
+
+Ao redor: `pages/` (prefixo `Page`), `features/refunds/` com fachada pública
+(Item 8), `stores/` (Zustand), `hooks/`, `context/` (Auth via Context +
+`localStorage`), `lib/` (Axios com interceptors) e `schemas/` (Zod). Server
+state via TanStack Query; formulário e responses consumidos validados com Zod. O
+React Router usa Data Mode com loaders, páginas lazy e erro de rota; busca e
+paginação da Home vivem em search params validados. As camadas
+(`app`/`feature`/`ui`/`shared`) são verificadas pelo `eslint-plugin-boundaries`
+(Item 9).
+
+`src/components/{atoms,molecules}` **não existem mais** — foram substituídos por
+`src/components/ui` no ciclo do restyle.
 
 ## Trilha de aprendizado — onde estamos
 
@@ -220,18 +236,78 @@ completo e obrigatório está em
   `npm run test` (59 verdes), `npm run build` (ok), `npm run lint` (18
   preexistentes, 0 de boundaries). Detalhes no [diário](../learning-path-progress.md).
 
+- **Ciclo de feature — Restyle com shadcn/ui: CONCLUÍDO.**
+  Segundo ciclo de feature interligado à trilha (brainstorming → spec → plano →
+  execução em 10 tasks com revisão por task; artefatos em
+  `Refund-FrontEnd/docs/superpowers/`). **Ainda não mesclado:**
+  `Refund-FrontEnd` na branch `feat/shadcn-restyle` (`957c5b1..b66aa16`,
+  14 commits) e `Refund-api` na branch `feat/refund-list-sum` (`5fae554` + a
+  documentação). Cobriu o **Item 10 (Pattern layer) em segunda passagem** — o
+  ciclo do shell integrou uma lib pronta (`react-pro-sidebar`); este **possui o
+  código** (o shadcn é um registry, não uma dependência). O que mudou:
+  - `src/components/{atoms,molecules}` deletados; nasce `src/components/ui` com
+    15 componentes do registry (692 → 2033 linhas de código de componente).
+  - `src/index.css` trocou a paleta própria pelos tokens do shadcn; o seletor de
+    dark mode continua `data-theme`, via um `@custom-variant`.
+  - Shell reescrito sobre `ui/sidebar` + `ui/sheet`; `react-pro-sidebar`,
+    `@mui/*`, `@emotion/*`, `tailwind-variants` e `classnames` removidos;
+    entraram `lucide-react`, `class-variance-authority` e `clsx`.
+  - As 7 telas restiladas; `PageHome` virou layout de painel com faixa de resumo
+    (Solicitações + Total), preparando o ciclo do TanStack Table.
+  - **Backend:** `select_refunds` devolve `sum_amount_in_cents` calculado na
+    **mesma query** do `count`, respeitando filtros e autorização;
+    `UC-004` atualizado.
+  - Verificação: `npm run test` (75 verdes em 24 arquivos), `npx tsc -b
+    --noEmit` (exit 0), `npm run build` (ok, sem o aviso de chunk > 500 kB),
+    `npm run lint` (**0 erros, 0 warnings** — primeira vez na trilha),
+    `pytest` (73 verdes), `pylint src` (10.00/10).
+  - **Não validado em navegador** — ver pendências. Detalhes no
+    [diário](../learning-path-progress.md).
+
 - **Próximo — ciclo de feature: Workflow de aprovação** (backend primeiro:
   `status` pendente/aprovado/rejeitado + aprovar/rejeitar por admin + autorização;
-  depois o frontend). É o passo 2 da decomposição acordada e o veículo natural do
+  depois o frontend). É o passo 3 do roadmap de ciclos e o veículo natural do
   **Item 18 (Alembic/migrations)** — não dá para alterar a tabela com dados sem
   migration — e do **Item 20 (Unit of Work)**. Resolve de brinde o "nome do emissor
   + data" na listagem. Roadmap completo dos ciclos na
-  [spec do shell](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-26-frontend-shell-sidebar-theme-design.md).
+  [spec do restyle](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-27-shadcn-restyle-design.md).
   (O **Item 11 — Error boundaries** pode interligar quando as páginas novas de dados
-  entrarem.)
+  entrarem. O **Item 13 — TanStack Table** vem no ciclo seguinte, sobre a Home já
+  preparada para ele.)
 
 ## Pendências e riscos conhecidos
 
+- **O restyle inteiro não foi validado em navegador.** Todas as verificações do
+  ciclo do shadcn foram automatizadas (testes, typecheck, build, lint, pytest,
+  pylint). Como o jsdom não carrega CSS, um restyle é justamente o tipo de
+  mudança que os testes não cobrem: **contraste, alinhamento, dark mode, colapso
+  da sidebar, drawer no mobile e a faixa de resumo da Home continuam sem
+  validação visual**. Pelo `learning-path-workflow.md`, o Item 10 (segunda
+  passagem) **não** pode ser apresentado como totalmente validado até isso
+  acontecer. É a primeira coisa a fazer ao retomar.
+- **`src/test/setup.ts` tem um polyfill de jsdom para o Radix Select.** O jsdom
+  não implementa a Pointer Capture API nem `scrollIntoView`; sem os no-ops
+  (guardados por `if (!…)`, espelhando o polyfill de `matchMedia` que já
+  existia), qualquer teste que abra um `ui/select` estoura com
+  `TypeError: target.hasPointerCapture is not a function`. Não remova ao ver que
+  "nada usa". Nota de processo: o `AGENTS.md` do frontend pede alinhar
+  infraestrutura transversal de teste **antes** de introduzi-la, e esta foi
+  sinalizada depois do fato.
+- **`src/components/ui/sidebar.tsx` foi editado à mão.** O `SidebarProvider` do
+  shadcn escrevia `document.cookie` incondicionalmente, mesmo controlado por
+  fora. A escrita e as duas constantes de cookie foram removidas, com um
+  comentário no lugar: a store Zustand (`src/stores/ui.ts`) é a fonte única do
+  estado de UI (Item 12). **Regerar esse arquivo pelo CLI reintroduz o cookie.**
+  Consequência mais ampla: "vendorizado" não é sinônimo de "isento" — arquivos
+  de `components/ui` são código do projeto, editáveis e revisáveis como qualquer
+  outro.
+- **O CLI do shadcn escreve num diretório literal `./@/` na raiz.** Causa: o
+  `tsconfig.json` raiz não tem `paths` (eles vivem no `tsconfig.app.json`, via
+  project references) e o CLI só lê o da raiz. Aconteceu nas quatro tasks que
+  rodaram o CLI. Depois de cada `npx shadcn@latest add`, mover os arquivos para
+  `src/components/ui`, apagar o `./@` e conferir `git diff src/index.css` — o
+  CLI também já acrescentou um bloco `.dark { … }` (seletor errado para este
+  projeto) sem avisar.
 - **Runtime do Item 1 parcialmente validado.** A **exclusão** foi exercitada no
   navegador (revelou e motivou as correções de runtime acima). Ainda falta
   conferir lista, busca, paginação, criação, detalhe, e que voltar à Home dentro
@@ -239,30 +315,48 @@ completo e obrigatório está em
 - **Runtime do Item 2 contra a API real ainda pendente.** Os schemas já têm
   testes automatizados: o `refundCreateSchema` no Item 4
   (`src/schemas/refund.test.ts`, via `.shape`) e os schemas de **response** no
-  Item 5, exercitados contra o MSW (`src/hooks/refundQueries.test.tsx` prova que
-  um response malformado vira `isError` em vez de entrar no cache). Falta apenas
-  a validação manual contra o backend real de verdade (não mockado).
+  Item 5, exercitados contra o MSW (hoje em
+  `src/features/refunds/api/refundQueries.test.tsx`, movido no Item 8 — prova que
+  um response malformado vira `isError` em vez de entrar no cache; o ciclo do
+  restyle reexerceu isso ao adicionar `sum_amount_in_cents`). Falta apenas a
+  validação manual contra o backend real de verdade (não mockado).
 - **`localStorage` ainda usa type assertion.** `JSON.parse(raw) as AuthUser` não
   valida uma sessão persistida; ficou fora do Item 2, restrito a responses HTTP.
 - **Runtime visual do Item 3 não validado.** Falta verificar em navegador login,
   URL direta, reload, busca, paginação, back/forward, detalhe, normalização de
   parâmetros e a página de erro. Os serviços locais e respostas HTTP foram
   verificados, mas não havia navegador conectado à sessão.
-- **Lint do frontend já vermelho antes da trilha.** 18 erros
-  `react-refresh/only-export-components` em arquivos de componentes
-  (`Icon`, `Text`, `Button`, `Dialog`, etc.). Não faz parte da trilha; candidato
-  a um item futuro de higiene. O Item 4 não alterou essa contagem (0 erros novos).
+- ~~**Lint do frontend já vermelho antes da trilha.**~~ RESOLVIDO no ciclo do
+  restyle: os 18 erros `react-refresh/only-export-components` viviam em
+  `atoms/`+`molecules/`, que deixaram de existir. `npm run lint` está em **0
+  erros e 0 warnings**. Dois overrides passaram a existir no `eslint.config.js`,
+  e a distinção entre eles é deliberada: `react-refresh/only-export-components`
+  desligada no diretório `src/components/ui/**` (regra **estrutural** — o
+  registry exporta o `cva` ao lado do componente, sem efeito em runtime); e
+  `react-hooks/purity` + `react-hooks/set-state-in-effect` desligadas **por
+  arquivo, pelo nome** (`src/components/ui/sidebar.tsx` e
+  `src/hooks/use-mobile.ts`), porque são regras de **correção** e um componente
+  novo que as viole precisa continuar aparecendo no lint.
 
 - ~~**Acessibilidade: labels não associadas ao input.**~~ RESOLVIDO no Item 7:
   `InputText` agora associa `<label htmlFor>`/`id` e o erro via `aria-describedby`.
   (Os testes de login ainda usam placeholder, mas `getByLabelText` já funciona.)
-- **A11y do `PopOverMenu`: navegação por setas.** O menu de categoria abre por
-  teclado (Item 7), mas percorrer as opções com ↑/↓ (padrão listbox completo)
-  ainda não existe. Contraste também não é auditável no jsdom (precisa de E2E).
+- ~~**A11y do `PopOverMenu`: navegação por setas.**~~ RESOLVIDO no ciclo do
+  restyle: o `PopOverMenu` (um `Popover` do Radix com uma lista de `div`s) foi
+  substituído pelo `src/components/ui/select.tsx`, um listbox de verdade —
+  `role="combobox"` no gatilho, `role="option"` nas opções, com o padrão de
+  teclado do WAI-ARIA implementado pelo Radix. **Ressalva:** o teste em
+  `RefundFormDialog.test.tsx` prova os papéis, mas dirige a seleção por clique;
+  nenhum teste automatizado percorre ↑/↓. Contraste segue não auditável no jsdom
+  (precisa de E2E).
 
-- **Campo `file` do `refundCreateSchema` sem teste.** Exige um `FileList`, que o
-  jsdom não constrói de forma limpa; ficará coberto pelo teste de upload do
-  `RefundFormDialog` (upload real com `user-event`) em item futuro.
+- ~~**Campo `file` do `refundCreateSchema` sem teste.**~~ RESOLVIDO no ciclo do
+  restyle: `src/components/ui/input-file.test.tsx` faz upload real com
+  `userEvent.upload`, e `RefundFormDialog.test.tsx` cobre a rejeição por tamanho
+  (`aria-invalid` + descrição acessível). Detalhe aprendido: `userEvent.upload`
+  **respeita o atributo `accept`** como um seletor de arquivos real — um arquivo
+  de extensão errada é descartado antes de chegar ao `FileList`, então testes de
+  rejeição por conteúdo precisam usar extensão válida e tamanho inválido.
 - **Referência quebrada.** `AGENTS.md` (dos dois repos) aponta para
   `../../CODING_PROFILE.md`, que não existe na árvore. O perfil de
   desenvolvedor equivalente está hoje no `CLAUDE.md` global do usuário.

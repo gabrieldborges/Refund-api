@@ -1420,3 +1420,463 @@ DEPOIS  Sidebar (react-pro-sidebar) + Topbar de ações + Outlet
   padrão quebrado em silêncio.
 - Tokens **semânticos** (papéis: surface/content/line…) envelhecem melhor que a
   paleta por nome de cor (gray-100…), porque o mesmo papel troca de valor por tema.
+
+## Ciclo de feature — Restyle com shadcn/ui (Item 10, segunda passagem)
+
+**Status:** concluído em 2026-07-27.
+
+**Repositórios e branches:** `Refund-FrontEnd` (branch `feat/shadcn-restyle`,
+commits `957c5b1..b66aa16`) e `Refund-api` (branch `feat/refund-list-sum`,
+commit `5fae554` para a soma na listagem, mais o commit de documentação deste
+ciclo). **Nenhuma das duas branches foi mesclada** — o merge depende de
+autorização.
+
+**Natureza:** segundo ciclo de feature interligado à trilha, no mesmo formato do
+ciclo do shell (brainstorming → spec → plano → execução), desta vez executado em
+10 tasks com revisão de código a cada task. Spec e plano em
+`Refund-FrontEnd/docs/superpowers/{specs,plans}/2026-07-27-shadcn-restyle*`.
+
+**Item da trilha:** **Item 10 — Pattern layer, segunda passagem.** O ciclo do
+shell tratou essa camada **integrando uma lib pronta** (`react-pro-sidebar`,
+tematizada por variáveis CSS). Este trata a mesma camada pela via oposta:
+**posse do código**.
+
+### Por que estudar
+
+O gatilho foi estético — a estilização anterior não agradava. O conteúdo de
+aprendizado é outro: **shadcn/ui não é uma dependência, é um _registry_.** O CLI
+copia o `.tsx` para dentro do repositório e sai de cena. Não existe
+`import { Button } from "shadcn"`; existe `src/components/ui/button.tsx`, um
+arquivo versionado no projeto como qualquer outro.
+
+Isso põe frente a frente dois modelos de consumir componente de terceiro, e a
+pergunta do item é **quando cada um compensa**: quem versiona o componente, quem
+paga o custo do upgrade e o que você ganha e perde em cada escolha.
+
+### Estado anterior
+
+Design system próprio em Atomic Design, `src/components/{atoms,molecules}`, com
+`Text`, `Icon`, `Skeleton`, `Button`, `ButtonIcon`, `Dialog`, `InputText`,
+`InputFile`, `InputLabelWrapper` e `PopOverMenu` — 10 arquivos, **692 linhas** de
+código de componente (sem contar testes), escritos com `tailwind-variants` e
+`classnames`:
+
+```tsx
+// src/components/molecules/Button.tsx (antes)
+import {tv, type VariantProps} from "tailwind-variants";
+export const buttonVariants = tv({
+  base: "flex items-center justify-center cursor-pointer transition rounded group gap-1",
+  variants: {
+    variant: { primary: "bg-accent hover:bg-accent-strong" },
+    size: { sm: "h-12 w-full py-4 px-5", fit: "h-11 w-fit py-2.5 px-5" },
+  },
+});
+```
+
+E uma paleta própria em `src/index.css`, herdada do ciclo do shell, com uma
+linha decisiva:
+
+```css
+:root { --surface: #ffffff; --accent: #1F8459; --content: #1F2523; /* … */ }
+
+@theme {
+  --color-*: initial;          /* apaga TODAS as cores padrão do Tailwind */
+  --color-surface: var(--surface);
+  --color-accent:  var(--accent);
+}
+```
+
+### A limitação encontrada
+
+Colar qualquer componente do registry naquele projeto produzia um elemento
+**sem estilo nenhum**. O `button.tsx` do shadcn usa `bg-primary`,
+`border-input`, `text-muted-foreground` — nomes que não existiam na paleta do
+projeto. E o fallback também não existia: `--color-*: initial` tinha apagado as
+cores padrão do Tailwind. Ou seja, o design system era uma **ilha fechada**:
+toda tela nova continuaria sendo construída à mão sobre `atoms`/`molecules`.
+
+Havia ainda duas dívidas paradas: `npm run lint` já abria com **18 erros**
+preexistentes de `react-refresh/only-export-components`, e a `PageHome` era um
+card `max-w-2xl` com `min-h-screen` próprio — escrita antes do shell existir, e
+por isso brigando com a sidebar e a topbar que a emolduram hoje.
+
+### Comparação visual
+
+O eixo do item:
+
+| | Dependência (`react-pro-sidebar`) | Copy-in (shadcn) |
+|---|---|---|
+| Quem versiona o componente | o autor da lib | você |
+| Como customizar | props e CSS que ela expôs | edita o arquivo |
+| Upgrade | `npm update`, pode quebrar | não existe; você já é o dono |
+| Bug no componente | issue no repositório dela | é **seu** bug |
+| Custo | superfície pequena, teto de customização baixo | mais código seu para manter |
+
+```text
+ANTES   src/components/atoms + molecules  (692 linhas, 10 arquivos, meus)
+        tailwind-variants + classnames
+        paleta própria: --surface/--app/--accent/--content/--line/…
+        @theme { --color-*: initial }   → cores do Tailwind apagadas
+        colar um bloco do registry = elemento sem estilo
+        lint: 18 erros
+
+DEPOIS  src/components/ui  (2033 linhas, 15 arquivos, copiados do registry —
+                            e meus a partir do momento em que foram copiados)
+        cva + clsx + cn()
+        tokens do shadcn: --background/--foreground/--primary/--border/…
+        cores padrão do Tailwind de volta
+        colar um bloco do registry = sai certo, sem ajuste
+        lint: 0 erros (primeira vez na trilha)
+```
+
+### Estado ajustado
+
+**Fundação.** O `components.json` (`baseColor: neutral`, `cssVariables: true`,
+`iconLibrary: lucide`) foi escrito à mão, com os aliases apontando para o `@/`
+que existe desde o Item 9; o `src/index.css` trocou de vocabulário inteiro; e o
+`cn()` entrou em `src/lib/utils.ts`. O ponto que **não** mudou foi o seletor de
+tema:
+
+```css
+/* src/index.css (depois) — shadcn entrega dark mode como classe `.dark`;
+   o projeto já dirige o tema por <html data-theme="…"> desde o Item 12. */
+@custom-variant dark (&:is([data-theme="dark"] *));
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --border: oklch(0.922 0 0);
+  /* … + --card/--popover/--muted/--accent/--destructive/--ring/--sidebar-* */
+}
+```
+
+Uma linha de `@custom-variant` preservou o `ThemeEffect` e a store Zustand do
+Item 12 intactos — nenhum arquivo de tema precisou ser reescrito.
+
+**Estrutura.** `src/components/ui/` nasceu; `atoms/` e `molecules/` deixaram de
+existir. No `eslint.config.js` a camada `ui` do Item 9 passou de
+`['src/components/atoms', 'src/components/molecules']` para
+`['src/components/ui']`; **as políticas de dependência não mudaram** — a fitness
+function do Item 9 continuou valendo durante todo o ciclo.
+
+**Mapa da troca:** `Button`+`ButtonIcon` → `ui/button` (`size="icon"`);
+`InputText`+`InputLabelWrapper` → `ui/input`+`ui/label`+`ui/form`; `Dialog` →
+`ui/dialog`; `PopOverMenu` → `ui/select`; `InputFile` → `ui/input-file`
+(wrapper próprio sobre o `input type=file`); `Skeleton` → `ui/skeleton`; `Text`
+→ classes Tailwind diretas; `Icon` + 12 SVGs de UI → `lucide-react`;
+`react-pro-sidebar` → `ui/sidebar` + `ui/sheet`. Só o `Receipt.svg` ficou, por
+ser marca e não ícone de sistema.
+
+**`ui/form` fechou trabalho manual do Item 7.** Ele é nativo de react-hook-form
++ `zodResolver` e emite `aria-invalid`/`aria-describedby` sozinho — exatamente o
+que `InputText`/`InputLabelWrapper` faziam à mão. As auditorias `vitest-axe`
+existentes foram reexecutadas contra ele e seguem verdes.
+
+**`ui/select` fechou uma pendência de a11y.** O `PopOverMenu` era um `Popover`
+do Radix com uma lista de `div`s: abria por teclado (Item 7), mas percorrer as
+opções com ↑/↓ exigiria escrever o handler à mão, e isso nunca foi feito. O
+`ui/select` é um listbox de verdade — expõe `role="combobox"` no gatilho e
+`role="option"` nas opções, com o padrão de teclado do WAI-ARIA já implementado
+pelo Radix:
+
+```tsx
+// RefundFormDialog.test.tsx
+it("lets the user pick a category with the keyboard", async () => {
+  await userEvent.click(screen.getByRole("combobox", { name: "Categoria" }));
+  await userEvent.click(await screen.findByRole("option", { name: "Alimentação" }));
+  expect(screen.getByRole("combobox", { name: "Categoria" }))
+    .toHaveTextContent("Alimentação");
+});
+```
+
+O teste prova os **papéis** (é um combobox com options, não uma pilha de divs);
+a navegação por ↑/↓ passa a existir porque o Radix a implementa, mas **nenhum
+teste automatizado dirige as setas** — ver "Verificações e limitações".
+
+**`ui/input-file` fechou a pendência do campo `file`.** O `refundCreateSchema`
+tinha o campo `file` sem teste porque montar um `FileList` no jsdom é
+desagradável. O `userEvent.upload` faz isso:
+
+```tsx
+// src/components/ui/input-file.test.tsx
+const file = new File(["nota"], "nota-fiscal.pdf", { type: "application/pdf" });
+await userEvent.upload(screen.getByLabelText("Comprovante"), file);
+expect(screen.getByText("nota-fiscal.pdf")).toBeInTheDocument();
+```
+
+Detalhe descoberto no caminho: `userEvent.upload` **respeita o atributo
+`accept`** como um seletor de arquivos real. Um `.txt` contra
+`accept=".jpg,.jpeg,.png,.pdf"` é silenciosamente descartado e nunca chega ao
+`FileList` — o erro observado vira "Anexe o comprovante", não "extensão
+inválida". Por isso o teste de rejeição usa um PDF **grande demais** (5 MB), não
+um arquivo de extensão errada.
+
+**`PageHome` virou painel.** Saiu o `max-w-2xl`/`min-h-screen`; entraram
+cabeçalho de página, faixa de resumo com dois cards (**Solicitações** = `total`,
+**Total** = `sum_amount_in_cents`), toolbar de busca (search params e debounce do
+Item 3 preservados), lista em painel com `Link` por linha e paginação por
+botões-ícone. É a estrutura que o ciclo do TanStack Table (Item 13) vai exigir,
+então a Home foi mexida uma vez só.
+
+### Copy-in na prática — os três momentos que ensinaram o conceito
+
+O conceito não ficou abstrato: apareceu três vezes durante a execução, sempre
+como uma decisão que **só existe porque o código é nosso**.
+
+**1. Editar o `sidebar.tsx` à mão.** O `SidebarProvider` do shadcn persiste o
+estado da sidebar em cookie. Pior: ele escrevia o cookie **incondicionalmente**,
+mesmo quando o provider está controlado por fora — que é exatamente o nosso caso
+(`open`/`onOpenChange` ligados à store Zustand do Item 12). A revisão da Task 7
+pegou isso. A correção foi apagar a escrita e as duas constantes, dentro do
+arquivo do registry:
+
+```tsx
+// src/components/ui/sidebar.tsx
+const setOpen = React.useCallback((value) => {
+  const openState = typeof value === "function" ? value(open) : value;
+  if (setOpenProp) { setOpenProp(openState); } else { _setOpen(openState); }
+
+  // This project persists sidebar state through the Zustand store
+  // (src/stores/ui.ts, localStorage["refund-ui"]) instead of a cookie —
+  // the store must stay the single source of truth for UI preferences.
+}, [setOpenProp, open]);
+```
+
+**Isso não se faz numa dependência do npm.** Com `react-pro-sidebar`, a saída
+seria abrir issue, esperar, ou construir uma gambiarra em volta. É o argumento a
+favor do copy-in, em uma tela.
+
+**2. "Vendorizado" não é sinônimo de "isento".** Na Task 9, ao zerar o lint, o
+override do ESLint ganhou um comentário dizendo que os arquivos de
+`components/ui` são "copiados do registry e **não são editados à mão**". A
+revisão apontou a contradição: a Task 7 tinha editado o `sidebar.tsx` à mão
+naquele mesmo ciclo. O comentário foi reescrito para dizer só o que é verdade.
+A lição é que "código de terceiro" deixou de ser uma categoria útil no momento
+em que o arquivo entrou no repositório — ele é código do projeto, com as mesmas
+obrigações.
+
+**3. Bug de upstream vira bug seu.** Duas regras do React Compiler
+(`eslint-plugin-react-hooks` 7) reprovam o código **gerado**, de fábrica:
+
+| Arquivo | Regra | O que há lá |
+|---|---|---|
+| `src/components/ui/sidebar.tsx:608` | `react-hooks/purity` | `Math.random()` dentro de um `useMemo` (largura do skeleton) |
+| `src/hooks/use-mobile.ts:14` | `react-hooks/set-state-in-effect` | `setIsMobile` chamado direto no corpo do `useEffect` |
+
+Nenhum `npm update` conserta isso. A primeira tentativa desligou as duas regras
+para `src/components/ui/**` inteiro; a revisão reprovou, com um critério que vale
+guardar — **distinguir a natureza da regra**:
+
+```js
+// estrutural: cva exportado ao lado do componente. Sem efeito em runtime,
+// vale para toda a superfície do registry → desligada no diretório inteiro.
+{ files: ['src/components/ui/**/*.{ts,tsx}'],
+  rules: { 'react-refresh/only-export-components': 'off' } },
+
+// correção: pegam bug de verdade. Desligadas por arquivo, pelo nome, para que
+// um componente novo que as viole continue aparecendo no lint.
+{ files: ['src/components/ui/sidebar.tsx', 'src/hooks/use-mobile.ts'],
+  rules: { 'react-hooks/purity': 'off',
+           'react-hooks/set-state-in-effect': 'off' } },
+```
+
+**O preço, dito sem enfeite.** O design system saiu de **692 linhas em 10
+arquivos** para **2033 linhas em 15 arquivos** — quase 3× mais código de
+componente sob nossa responsabilidade. O `sidebar.tsx` sozinho tem 723 linhas e
+define 24 componentes, dos quais o shell usa 11; os outros 13 são superfície que
+o projeto carrega sem exercitar, e que ninguém vai notar quebrar. Saíram 7
+dependências e entraram 3, o que é bom para o `package.json` — mas o código não
+desapareceu: mudou de dono.
+
+### Backend — a soma na mesma query
+
+A faixa de resumo precisa do total em dinheiro de **todo o conjunto filtrado**,
+não da página visível — somar `attributes` no frontend daria um número errado
+sempre que houvesse mais de uma página. O `select_refunds` já montava `filters` e
+rodava um `count`; a soma entrou na **mesma query**, sem segundo round trip:
+
+```python
+# src/models/repositories/refunds_repository.py
+totals_query = (
+    select(func.count(), func.sum(Refunds.c.amount_in_cents))
+    .select_from(Refunds)
+    .where(*filters)
+)
+total, total_amount = (await session.execute(totals_query)).one()
+# …
+return refunds, total, total_amount or 0   # SUM sobre conjunto vazio é NULL
+```
+
+A propagação (`tuple[list[dict], int, int]` → interface → controller →
+`sum_amount_in_cents` no response) foi feita por TDD, com o RED real registrado:
+os 7 testes do controller quebraram com
+`ValueError: too many values to unpack (expected 2)` antes da mudança. O teste
+do controller prova **encaminhamento, não recálculo** (os itens mockados não têm
+campo de valor), e o do repository cobre o caso `NULL → 0`.
+
+No frontend, o `refundsListResponseSchema` ganhou `sum_amount_in_cents` — e isso
+produziu a melhor evidência do ciclo de que a fronteira do Item 2 funciona: ao
+adicionar o campo ao schema **antes** de atualizar o handler do MSW, a query foi
+para `isError` em vez de `isSuccess`, porque o `.parse` rejeitou o response
+incompleto. Um response malformado não entra no cache.
+
+### Arquivos modificados
+
+**`Refund-FrontEnd`** (14 commits, `957c5b1..b66aa16`):
+
+- **Fundação:** `components.json` (novo), `src/lib/utils.ts` (novo, `cn()`),
+  `src/index.css` (substituído por inteiro), `eslint.config.js` (camada `ui` +
+  os dois overrides), `package.json` (entram `lucide-react`,
+  `class-variance-authority`, `clsx`; saem `@mui/icons-material`,
+  `@mui/material`, `@emotion/react`, `@emotion/styled`, `react-pro-sidebar`,
+  `tailwind-variants`, `classnames`).
+- **Design system:** `src/components/ui/` com 15 componentes — `button`, `input`,
+  `label`, `form`, `card`, `dialog`, `select`, `input-file`, `skeleton`,
+  `badge`, `separator`, `sidebar`, `sheet`, `tooltip`, `dropdown-menu` — mais
+  `src/hooks/use-mobile.ts`. Testes próprios em `button.test.tsx` e
+  `input-file.test.tsx`.
+- **Shell:** `src/components/core/{MainLayout,Sidebar,Topbar,nav-items}.tsx`
+  reescritos sobre `ui/sidebar`; `src/stores/ui.ts` ganhou
+  `setSidebarCollapsed(boolean)`.
+- **Telas:** `PageLogin`, `PageRegister`, `PageHome`, `PageRefundDetails`,
+  `PageSuccess`, `PageRouteError` e `PageComponents` (reconstruída como galeria
+  dos componentes).
+- **Feature:** `src/features/refunds/components/RefundFormDialog.tsx`,
+  `constants/categories.ts` (ícones SVGR → `LucideIcon`),
+  `schemas/refund.ts` (`sum_amount_in_cents`).
+- **Testes:** novos `PageHome.test.tsx`, `PageRegister.test.tsx`,
+  `PageRefundDetails.test.tsx`, `PageRouteError.test.tsx`;
+  `src/test/setup.ts` ganhou um polyfill de jsdom (ver limitações);
+  `src/test/msw/handlers.ts` passou a devolver `sum_amount_in_cents`.
+- **Removidos:** `src/components/{atoms,molecules}/` inteiros e 12 SVGs de UI.
+- **`AGENTS.md`:** saiu "Preserve a organização em Atomic Design"; entrou a
+  regra de que componente novo vem do registry para `src/components/ui`.
+
+**`Refund-api`:**
+
+- `src/models/repositories/refunds_repository.py` e sua interface,
+  `src/controllers/refund_lister_controller.py`, mais os respectivos `_test.py`.
+- `docs/use-cases/UC-004-list-refunds.md` (campo `sum_amount_in_cents` no
+  contrato de response).
+- Documentação da trilha: este diário e o
+  [`current-state.md`](plans/current-state.md).
+
+**Correção de rota do roadmap:** o
+[spec do shell](../../Refund-FrontEnd/docs/superpowers/specs/2026-07-26-frontend-shell-sidebar-theme-design.md)
+citava `@mui/x-data-grid` para a lista de reembolsos. Trocado por **TanStack
+Table**, que é o que o Item 13 do `learning_path.md` e o
+`arquitetura_ideal_adaptada.md` sempre disseram — só aquele spec tinha
+introduzido o Data Grid.
+
+### Verificações e limitações
+
+Executadas ao fechar o ciclo, com os números observados:
+
+| Comando | Resultado |
+|---|---|
+| `npm run test` | **75 testes em 24 arquivos**, todos verdes |
+| `npx tsc -b --noEmit` | exit 0 |
+| `npm run build` | ok — e **sem o aviso de chunk > 500 kB** que aparecia em todas as verificações anteriores (o bundle principal ficou em 491,44 kB depois da saída do MUI) |
+| `npm run lint` | **0 erros, 0 warnings** — a primeira vez na trilha |
+| `pytest` | **73 testes**, todos verdes |
+| `pylint src` | **10.00/10**, exit 0 |
+
+A contagem de testes merece explicação: o ciclo saiu de 59, chegou a **86** e
+terminou em **75**. A queda de 11 é exatamente a soma dos testes dos 4 arquivos
+de `molecules/` deletados (`Button` 4, `Dialog` 2, `InputText` 3, `PopOverMenu`
+2) — o comportamento que eles verificavam passou a ser coberto onde o
+componente é usado. Saldo real: **+16 testes** sobre o início do ciclo.
+
+**Pendências e limitações registradas:**
+
+- **O app não foi aberto no navegador neste ciclo.** *Todas* as verificações
+  acima são automatizadas. Como o jsdom não carrega CSS, um restyle completo é
+  justamente o tipo de mudança que os testes não conseguem validar: contraste,
+  alinhamento, dark mode, colapso da sidebar e a faixa de resumo da Home
+  continuam **não validados visualmente**. Pelo contrato da trilha, o item
+  **não** pode ser apresentado como totalmente validado até que isso aconteça.
+- **Navegação por seta do `Select` não tem teste.** O `ui/select` é um listbox de
+  verdade e o Radix implementa o padrão de teclado, mas o teste existente usa
+  cliques, não ↑/↓. A pendência de a11y do `PopOverMenu` foi fechada pela
+  **troca de componente**, não por uma prova automatizada da navegação.
+- **Polyfill de jsdom em `src/test/setup.ts`.** O Radix `Select` chama
+  `hasPointerCapture`/`setPointerCapture`/`releasePointerCapture` e
+  `scrollIntoView`, que o jsdom não implementa; sem os no-ops, qualquer teste
+  que abra o Select estoura. Está guardado por `if (!…)` e espelha o polyfill de
+  `matchMedia` que já existia. **Mas o `AGENTS.md` do frontend pede alinhar
+  infraestrutura transversal de teste _antes_ de introduzi-la**, e aqui ela foi
+  sinalizada depois do fato.
+- **Bug do CLI do shadcn, recorrente.** `npx shadcn@latest add <componente>`
+  escreve num diretório literal `./@/` na raiz do repositório em vez de resolver
+  o alias. Causa: o `tsconfig.json` raiz não tem `paths` (eles vivem no
+  `tsconfig.app.json`, via project references) e o CLI só lê o da raiz. Aconteceu
+  em **todas** as quatro tasks que rodaram o CLI; a correção é mecânica (mover os
+  arquivos e apagar o `./@`), mas vai acontecer de novo.
+- **O CLI também mexe no `src/index.css` sem avisar.** Numa das execuções ele
+  acrescentou um bloco `.dark { --sidebar-*: … }` — seletor errado para este
+  projeto, que usa `[data-theme="dark"]`. Revertido com `git checkout`. Conferir
+  `git diff src/index.css` depois de cada `add`.
+- **Menores adiados** (nenhum bloqueia; ficam registrados para não sumirem):
+  - `ui/button.tsx` do registry traz mais tamanhos (`xs`, `icon-xs`, `icon-sm`,
+    `icon-lg`) do que os 4 documentados no spec — superfície maior que o
+    contrato descrito.
+  - `card.tsx`, `separator.tsx` e `dropdown-menu.tsx` foram gerados e ainda não
+    são consumidos (`badge` idem, reservado para o card de status futuro).
+  - No `RefundFormDialog`, o cast do campo `amount` é
+    `as string | number | undefined`, mais largo que a realidade (`number` nunca
+    ocorre) — `as string | undefined` seria honesto.
+  - `PageHome.tsx` manteve alguns imports relativos (`../lib/format`,
+    `../hooks/useDebouncedValue`, `../router-loaders`) em vez de `@/`, apesar da
+    reescrita completa.
+  - Cobertura faltando: ramos de erro/vazio/última página na `PageHome`, e o
+    estado intermediário de exclusão ("Excluindo…", Confirmar desabilitado) na
+    `PageRefundDetails`.
+  - `refunds_repository_test.py` ganhou um `# pylint: disable=duplicate-code` no
+    módulo, que também silencia duplicação genuína futura naquele arquivo
+    (espelha precedente já existente em `src/views/refund_deleter_view.py`).
+  - `PageRegister` (e `PageLogin`, de onde o padrão veio) deixou de usar
+    `required`/`type="email"` nativos: a validação passou a ser só do Zod, no
+    submit, em vez do bloqueio imediato do navegador. Foi uma decisão consciente,
+    não um efeito colateral.
+- **`src/components/organisms` ainda é citado** no padrão da camada `app` do
+  `eslint.config.js`, mas a pasta não existe no disco. É anterior a este ciclo.
+
+### O que lembrar
+
+- **Copy-in vs. dependência é uma troca de _quem paga_, não de _quanto custa_.**
+  Dependência: superfície pequena, upgrade grátis, teto de customização baixo.
+  Copy-in: customização ilimitada, upgrade inexistente — porque o código já é
+  seu, com bug e tudo. Escolha copy-in quando **precisar editar por dentro**;
+  escolha dependência quando quiser o problema resolvido por outra pessoa.
+- **O momento de decidir é antes de colar o primeiro arquivo.** Depois, o código
+  está no repositório e a discussão acabou.
+- **"Vendorizado" não é sinônimo de "isento".** Assim que o arquivo entra no
+  repositório, ele é código do projeto: passa pelo lint, pela revisão e pela
+  responsabilidade de correção como qualquer outro.
+- **Ao silenciar uma regra de lint, classifique a regra antes.** Regra
+  **estrutural** (padrão do gerador, sem efeito em runtime) pode ser desligada no
+  diretório inteiro. Regra de **correção** só se desliga por arquivo, pelo nome —
+  senão o próximo componente que introduzir o bug de verdade entra em silêncio.
+- **Adotar um design system pronto é adotar o vocabulário dele inteiro.** Não
+  existe meio caminho barato: alias sobre os nomes antigos só compensaria se as
+  telas antigas fossem ficar — e não iam.
+- **Uma linha bem colocada evita reescrever um sistema.** O
+  `@custom-variant dark (&:is([data-theme="dark"] *))` preservou o
+  `ThemeEffect` e a store do Item 12 sem tocar em nenhum dos dois.
+- **Trocar componente por um primitivo acessível fecha dívida de a11y de
+  graça** — `ui/form` gerou o `aria-invalid`/`aria-describedby` do Item 7
+  sozinho, e `ui/select` trouxe o padrão de listbox que o `PopOverMenu` nunca
+  teve. Mas "fechou por construção" não é o mesmo que "está testado".
+- **Agregado tem que vir do servidor.** Somar a página no cliente dá um número
+  errado a partir da segunda página; a soma foi para a **mesma query** do
+  `count`, respeitando os mesmos filtros e a mesma regra de autorização.
+- **`SUM` sobre conjunto vazio é `NULL`, não `0`** — precisa de coerção
+  explícita, e de um teste para ela.
+- **`userEvent.upload` respeita o `accept`** do input, como um seletor de
+  arquivos real. Para testar rejeição por conteúdo, use um arquivo de extensão
+  válida e tamanho inválido.
+- **Item 10 foi visto duas vezes, de propósito:** integrar e tematizar uma lib
+  pronta (ciclo do shell) e possuir o código do componente (este ciclo). São as
+  duas respostas legítimas para a mesma camada, e o valor de ter visto as duas é
+  saber reconhecer qual das duas o próximo problema pede.
