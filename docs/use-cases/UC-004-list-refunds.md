@@ -64,6 +64,6 @@ inteiro, não apenas os itens da página atual.
 - `src/models/repositories/refunds_repository.py` aplica o filtro parcial
   `ilike`, o escopo por usuário, a ordenação decrescente, a paginação e calcula
   `total` e `sum_amount_in_cents` numa única consulta sobre o mesmo filtro.
-- `../Refund-FrontEnd/src/hooks/useRefunds.ts` envia página, tamanho e busca;
+- `../Refund-FrontEnd/src/features/refunds/hooks/useRefunds.ts` envia página, tamanho e busca;
   `../Refund-FrontEnd/src/pages/PageHome.tsx` reinicia a página ao buscar e
   apresenta resultados, estado vazio e controles de paginação.

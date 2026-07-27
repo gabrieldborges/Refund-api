@@ -263,6 +263,19 @@ completo e obrigatório está em
     `pytest` (73 verdes), `pylint src` (10.00/10).
   - **Não validado em navegador** — ver pendências. Detalhes no
     [diário](../learning-path-progress.md).
+  - **Ordem de merge/deploy: o backend precisa ir para produção antes do
+    frontend.** `src/features/refunds/schemas/refund.ts` do frontend valida a
+    resposta de `GET /refunds` com Zod e declara `sum_amount_in_cents` como
+    campo **obrigatório**. Se o `feat/shadcn-restyle` for mesclado e implantado
+    antes do `feat/refund-list-sum`, o backend em produção ainda responde sem
+    esse campo, o `.parse` do Zod falha em toda listagem, `useRefunds` cai em
+    `isError` e a Home passa a mostrar "Não foi possível carregar as
+    solicitações" para todo usuário — a tela principal do produto fica
+    inutilizável até o backend ser implantado. O caminho inverso é seguro: um
+    frontend antigo simplesmente ignora o campo novo, pois o Zod descarta
+    chaves desconhecidas por padrão. Logo, ao promover este ciclo: **primeiro**
+    mesclar e implantar `Refund-api` (`feat/refund-list-sum`), **depois**
+    `Refund-FrontEnd` (`feat/shadcn-restyle`).
 
 - **Próximo — ciclo de feature: Workflow de aprovação** (backend primeiro:
   `status` pendente/aprovado/rejeitado + aprovar/rejeitar por admin + autorização;
