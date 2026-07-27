@@ -24,8 +24,14 @@ Consultar uma página de solicitações, opcionalmente filtrada por parte do nom
    diferenciar maiúsculas de minúsculas.
 5. A API ordena os resultados de `created_at` mais recente para o mais antigo e
    aplica limite e deslocamento da página.
-6. A API devolve os itens e os metadados `count`, `total`, `page`, `per_page` e
-   `total_pages`; o frontend apresenta a lista e os controles de paginação.
+6. A API devolve os itens e os metadados `count`, `total`, `sum_amount_in_cents`,
+   `page`, `per_page` e `total_pages`; o frontend apresenta a lista e os
+   controles de paginação.
+
+`sum_amount_in_cents` é a soma, em centavos, de todos os reembolsos que casam
+o filtro — respeitando a mesma regra de autorização da listagem (admin vê
+todos; usuário comum, apenas os seus). O valor cobre o conjunto filtrado
+inteiro, não apenas os itens da página atual.
 
 ## Fluxos alternativos e erros
 
@@ -56,7 +62,8 @@ Consultar uma página de solicitações, opcionalmente filtrada por parte do nom
 - `src/controllers/refund_lister_controller.py` distingue `admin` de
   `standard` e calcula os metadados da paginação.
 - `src/models/repositories/refunds_repository.py` aplica o filtro parcial
-  `ilike`, o escopo por usuário, a ordenação decrescente e a paginação.
+  `ilike`, o escopo por usuário, a ordenação decrescente, a paginação e calcula
+  `total` e `sum_amount_in_cents` numa única consulta sobre o mesmo filtro.
 - `../Refund-FrontEnd/src/hooks/useRefunds.ts` envia página, tamanho e busca;
   `../Refund-FrontEnd/src/pages/PageHome.tsx` reinicia a página ao buscar e
   apresenta resultados, estado vazio e controles de paginação.

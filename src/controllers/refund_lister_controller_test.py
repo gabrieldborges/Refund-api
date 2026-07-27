@@ -8,7 +8,8 @@ from .refund_lister_controller import RefundListerController
 @pytest.fixture
 def mock_repository():
     mock_repo = MagicMock()
-    mock_repo.select_refunds = AsyncMock(return_value=([{"id": 1}, {"id": 2}], 2))
+    # select_refunds now returns (rows, total, total_amount_in_cents).
+    mock_repo.select_refunds = AsyncMock(return_value=([{"id": 1}, {"id": 2}], 2, 19290))
     return mock_repo
 
 
@@ -53,7 +54,7 @@ async def test_list_forwards_the_name_search_term(mock_repository):
 # not just from how many items came back on this page.
 @pytest.mark.asyncio
 async def test_response_includes_pagination_metadata(mock_repository):
-    mock_repository.select_refunds = AsyncMock(return_value=([{"id": 1}], 25))
+    mock_repository.select_refunds = AsyncMock(return_value=([{"id": 1}], 25, 50000))
     controller = RefundListerController(mock_repository)
 
     response = await controller.list(page=2, per_page=10, user_id=7, role="standard")
@@ -69,7 +70,7 @@ async def test_response_includes_pagination_metadata(mock_repository):
 # Edge case: zero results must not raise a division-by-zero when computing total_pages.
 @pytest.mark.asyncio
 async def test_response_with_zero_results_has_zero_total_pages(mock_repository):
-    mock_repository.select_refunds = AsyncMock(return_value=([], 0))
+    mock_repository.select_refunds = AsyncMock(return_value=([], 0, 0))
     controller = RefundListerController(mock_repository)
 
     response = await controller.list(page=1, per_page=10, user_id=7, role="standard")
@@ -85,7 +86,7 @@ async def test_response_with_zero_results_has_zero_total_pages(mock_repository):
 async def test_created_at_is_serialized_to_an_iso_string(mock_repository):
     raw_datetime = datetime(2026, 7, 12, 10, 30, 0)
     mock_repository.select_refunds = AsyncMock(
-        return_value=([{"id": 1, "created_at": raw_datetime}], 1)
+        return_value=([{"id": 1, "created_at": raw_datetime}], 1, 1000)
     )
     controller = RefundListerController(mock_repository)
 
@@ -93,3 +94,15 @@ async def test_created_at_is_serialized_to_an_iso_string(mock_repository):
 
     assert response["attributes"][0]["created_at"] == raw_datetime.isoformat()
     assert isinstance(response["attributes"][0]["created_at"], str)
+
+
+# The summary band on the Home shows a total in cents for the whole filtered
+# set, not just the current page, so the controller must forward the sum the
+# repository computed instead of adding up the page it received.
+@pytest.mark.asyncio
+async def test_response_includes_the_total_amount(mock_repository):
+    controller = RefundListerController(mock_repository)
+
+    response = await controller.list(page=1, per_page=10, user_id=7, role="standard")
+
+    assert response["sum_amount_in_cents"] == 19290

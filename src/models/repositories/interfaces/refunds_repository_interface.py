@@ -15,7 +15,7 @@ class RefundsRepositoryInterface(ABC):
         per_page: int,
         name: Optional[str] = None,
         user_id: Optional[int] = None,
-    ) -> tuple[list[dict], int]:
+    ) -> tuple[list[dict], int, int]:
         pass
 
     @abstractmethod

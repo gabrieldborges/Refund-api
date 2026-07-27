@@ -23,7 +23,7 @@ class RefundsRepository(RefundsRepositoryInterface):
         per_page: int,
         name: Optional[str] = None,
         user_id: Optional[int] = None,
-    ) -> tuple[list[dict], int]:
+    ) -> tuple[list[dict], int, int]:
         async with self.__db_connection.connect() as session:
             filters = []
             if user_id is not None:
@@ -31,8 +31,15 @@ class RefundsRepository(RefundsRepositoryInterface):
             if name:
                 filters.append(Refunds.c.name.ilike(f"%{name}%"))
 
-            count_query = select(func.count()).select_from(Refunds).where(*filters)  # pylint: disable=not-callable
-            total = await session.scalar(count_query)
+            # count and sum share the same filters, so they ride in one query
+            # instead of two round trips. SUM over an empty set returns NULL,
+            # hence the `or 0`.
+            totals_query = (
+                select(func.count(), func.sum(Refunds.c.amount_in_cents))  # pylint: disable=not-callable
+                .select_from(Refunds)
+                .where(*filters)
+            )
+            total, total_amount = (await session.execute(totals_query)).one()
 
             query = (
                 select(Refunds)
@@ -45,7 +52,7 @@ class RefundsRepository(RefundsRepositoryInterface):
             rows = result.fetchall()
 
             refunds = [dict(row._mapping) for row in rows]
-            return refunds, total
+            return refunds, total, total_amount or 0
 
     async def select_refund_by_id(self, refund_id: int) -> Optional[dict]:
         async with self.__db_connection.connect() as session:
