@@ -1,9 +1,12 @@
 """Promotes an existing user to admin.
 
 Registration always creates standard users (BR-003), so there is no way to get
-the first admin through the API. Run it as:
+the first admin through the API. Run it from the project root as a module —
+plain `python init/promote_admin.py` fails because Python puts the script's
+own directory on sys.path, not the working directory, so the `src` package
+cannot be found:
 
-    python init/promote_admin.py someone@example.com
+    python -m init.promote_admin someone@example.com
 """
 import asyncio
 import sys

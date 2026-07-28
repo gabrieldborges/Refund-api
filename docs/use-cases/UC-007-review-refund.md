@@ -39,21 +39,33 @@ transição de status.
 ## Ordem das checagens
 
 A ordem abaixo não é arbitrária — cada checagem só é feita depois que a
-anterior passou, e a ordem existe para não vazar informação a quem não tem
-direito a ela:
+anterior passou:
 
-1. **Papel do revisor.** É a primeira verificação, e acontece antes de
-   qualquer consulta ao banco. Um usuário `standard` recebe `403` para
+1. **Corpo da requisição (validator).** `src/views/refund_reviewer_view.py`
+   chama `refund_reviewer_validator` antes mesmo de invocar o controller.
+   `status` fora de `{approved, rejected}`, ou `rejected` sem `reason`,
+   responde `422` sem que o controller — e, portanto, o banco — seja tocado.
+2. **Papel do revisor.** É a primeira verificação feita pelo controller, antes
+   de qualquer consulta ao banco. Um usuário `standard` recebe `403` para
    qualquer id, exista ele ou não — a checagem que nunca consulta o banco não
    pode revelar se um id é real, o mesmo raciocínio anti-enumeração por trás do
    `404` da BR-013.
-2. **Existência da solicitação.** Só é consultada depois que o papel já foi
+3. **Existência da solicitação.** Só é consultada depois que o papel já foi
    confirmado como `admin`. Id inexistente responde `404`.
-3. **Autoria da solicitação.** Um `admin`, pela BR-012, já pode ver qualquer
+4. **Autoria da solicitação.** Um `admin`, pela BR-012, já pode ver qualquer
    solicitação — não há mais nada a esconder nesse ponto, então recusar a
    revisão da própria solicitação com `403` não vaza informação nova.
-4. **Transição de status.** Repetir a decisão vigente é recusado com `422`,
+5. **Transição de status.** Repetir a decisão vigente é recusado com `422`,
    porque não há mudança de estado a registrar.
+6. **Sucesso.** `200`, com a solicitação refletindo o novo `status`.
+
+Note que a validação do corpo (passo 1) precede a checagem de papel (passo 2)
+— um corpo malformado nunca chega a acessar o banco, mas também nunca chega a
+saber se quem o enviou tinha permissão. A propriedade de segurança que importa
+não é "papel é sempre a primeira checagem de todas", e sim que **nenhum acesso
+ao banco acontece antes da checagem de papel**: por isso um `standard` recebe
+o mesmo `403` para um id real ou inventado, e nunca aprende, pela resposta, se
+o id existe.
 
 ## Tabela de códigos
 
@@ -97,6 +109,9 @@ direito a ela:
 
 - `src/main/routes/refund_routes.py` protege e expõe
   `PATCH /refunds/{refund_id}/status`.
+- `src/views/refund_reviewer_view.py` chama o validator antes do controller;
+  `src/views/refund_reviewer_view_test.py::test_invalid_status_short_circuits_before_the_controller`
+  comprova que um corpo inválido nunca chega a invocar o controller.
 - `src/validators/refund_reviewer_validator.py` restringe `status` a
   `{approved, rejected}` e exige `reason` ao rejeitar.
 - `src/controllers/refund_reviewer_controller.py` aplica a ordem das
