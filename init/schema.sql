@@ -1,6 +1,9 @@
--- Referência: as tabelas são criadas automaticamente pelo SQLAlchemy no startup
--- do servidor (ver src/main/server/server.py). Este arquivo documenta o
--- schema equivalente, caso precise recriar o banco manualmente.
+-- Referência histórica apenas. O schema autoritativo vive nas migrations do
+-- Alembic (alembic/versions/), aplicadas com `alembic upgrade head`; a API não
+-- cria mais tabelas no startup. Este arquivo NÃO foi atualizado para
+-- acompanhar as migrations mais recentes: falta a coluna `status` em
+-- `refunds` e falta a tabela `refund_reviews` inteira. Não use este arquivo
+-- para provisionar ou validar o schema atual.
 
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

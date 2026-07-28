@@ -149,3 +149,12 @@ há mudança de estado a registrar.
 **Evidências:** `src/validators/refund_reviewer_validator.py` restringe o alvo a
 `approved` ou `rejected`, e `src/controllers/refund_reviewer_controller.py`
 recusa quando o status atual já é o alvo.
+
+## BR-018 — Justificativa obrigatória na rejeição
+
+Revisar uma solicitação com `status` alvo igual a `rejected` exige informar
+`reason` não vazio. Aprovar (`approved`) não exige `reason`.
+
+**Evidências:** `src/validators/refund_reviewer_validator.py` recusa a
+requisição quando `status` é `rejected` e `reason` está ausente, vazio ou
+somente espaços.

@@ -30,7 +30,19 @@ class RefundDeleterController(RefundDeleterControllerInterface):
         if refund["status"] != "pending":
             raise HttpUnprocessableEntityError("Only pending refunds can be deleted")
 
-        await self.__refunds_repository.delete_refund(refund_id)
+        # This read said "pending", but a review can commit between this line and
+        # the DELETE below (it takes select_for_update in its own transaction, so
+        # it isn't blocked by this read). The repository re-checks the status as
+        # part of the DELETE itself and reports whether it actually removed a row;
+        # rowcount == 0 means we lost that race, so raise the same 422 the
+        # up-front check above would have raised had it seen the final status.
+        deleted_count = await self.__refunds_repository.delete_refund(refund_id)
+        if deleted_count == 0:
+            raise HttpUnprocessableEntityError("Only pending refunds can be deleted")
+
+        # Only remove the receipt file once we know the row was actually deleted —
+        # deleting it after losing the race would destroy the receipt of a refund
+        # that a reviewer just decided on and that still exists.
         self.__receipt_storage.delete(refund["filename"])
 
         return self.__format_response(refund_id)
