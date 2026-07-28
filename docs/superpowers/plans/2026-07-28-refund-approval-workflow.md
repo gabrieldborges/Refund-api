@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Python 3.9.** Use `Optional[X]`, **nunca** `X | None` (sintaxe de união só existe a partir do 3.10). `list[dict]` e `tuple[...]` são válidos.
-- **Todo arquivo novo ganha um `_test.py` ao lado**, no mesmo diretório — nunca uma pasta `tests/` separada (`AGENTS.md`).
+- **Todo arquivo novo com lógica ganha um `_test.py` ao lado**, no mesmo diretório — nunca uma pasta `tests/` separada (`AGENTS.md`). **Exceção, conforme a convenção vigente:** composers (`src/main/composer/`) são fiação de injeção de dependência sem lógica e não têm teste — nenhum dos 6 existentes tem; scripts operacionais de `init/` também não.
 - **Testes assíncronos exigem `@pytest.mark.asyncio` explícito.** Não há arquivo de configuração do pytest; o modo é estrito.
 - **Comentários em inglês**, curtos e descritivos, explicando o cenário ou a razão — não o óbvio (`AGENTS.md`).
 - **`pylint src` deve terminar em 10.00/10.** É o patamar atual; qualquer queda é regressão.
