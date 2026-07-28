@@ -2,13 +2,16 @@
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 from src.errors.types.http_not_found_error import HttpNotFoundError
+from src.errors.types.http_unprocessable_entity_error import HttpUnprocessableEntityError
 from .refund_deleter_controller import RefundDeleterController
 
 
 @pytest.fixture
 def mock_repository():
     mock_repo = MagicMock()
-    mock_repo.select_refund_by_id = AsyncMock(return_value={"id": 1, "user_id": 7, "filename": "abc.jpg"})
+    mock_repo.select_refund_by_id = AsyncMock(
+        return_value={"id": 1, "user_id": 7, "filename": "abc.jpg", "status": "pending"}
+    )
     mock_repo.delete_refund = AsyncMock()
     return mock_repo
 
@@ -63,3 +66,32 @@ async def test_missing_refund_raises_not_found(mock_storage):
 
     with pytest.raises(HttpNotFoundError):
         await controller.delete(refund_id=999, user_id=7, role="standard")
+
+
+# BR-015 (amended): deleting a decided refund would erase the very audit trail
+# this cycle created — and the owner is exactly who has an interest in erasing a
+# rejection.
+@pytest.mark.asyncio
+async def test_deleting_a_decided_refund_is_rejected(mock_repository, mock_storage):
+    mock_repository.select_refund_by_id = AsyncMock(
+        return_value={"id": 1, "user_id": 7, "status": "approved", "filename": "abc.jpg"}
+    )
+    controller = RefundDeleterController(mock_repository, mock_storage)
+
+    with pytest.raises(HttpUnprocessableEntityError):
+        await controller.delete(refund_id=1, user_id=7, role="standard")
+
+    mock_repository.delete_refund.assert_not_awaited()
+    mock_storage.delete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_pending_refund_still_works(mock_repository, mock_storage):
+    mock_repository.select_refund_by_id = AsyncMock(
+        return_value={"id": 1, "user_id": 7, "status": "pending", "filename": "abc.jpg"}
+    )
+    controller = RefundDeleterController(mock_repository, mock_storage)
+
+    await controller.delete(refund_id=1, user_id=7, role="standard")
+
+    mock_repository.delete_refund.assert_awaited_once_with(1)
