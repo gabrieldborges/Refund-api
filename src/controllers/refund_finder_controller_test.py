@@ -65,3 +65,19 @@ async def test_created_at_is_serialized_to_an_iso_string():
     response = await controller.find(refund_id=1, user_id=7, role="standard")
 
     assert response["attributes"]["created_at"] == raw_datetime.isoformat()
+
+
+# The detail response must carry status: it is what lets the frontend tell a
+# pending refund from a decided one. It flows automatically because
+# select(Refunds) selects every column and __format_response spreads the row —
+# this test is here so a future refactor cannot drop it silently.
+@pytest.mark.asyncio
+async def test_detail_response_includes_the_status(mock_repository):
+    mock_repository.select_refund_by_id = AsyncMock(
+        return_value={"id": 1, "user_id": 7, "status": "approved", "filename": "a.jpg"}
+    )
+    controller = RefundFinderController(mock_repository)
+
+    response = await controller.find(refund_id=1, user_id=7, role="standard")
+
+    assert response["attributes"]["status"] == "approved"
