@@ -1,11 +1,12 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, Form, UploadFile, File, Query
+from fastapi import APIRouter, Depends, Form, UploadFile, File, Query, Body
 from fastapi.responses import JSONResponse
 from src.views.http_types.http_request import HttpRequest
 from src.main.composer.refund_creator_composer import refund_creator_composer
 from src.main.composer.refund_lister_composer import refund_lister_composer
 from src.main.composer.refund_finder_composer import refund_finder_composer
 from src.main.composer.refund_deleter_composer import refund_deleter_composer
+from src.main.composer.refund_reviewer_composer import refund_reviewer_composer
 from src.main.middlewares.auth_jwt import get_current_user
 
 refund_routes = APIRouter(prefix="/refunds", tags=["Refunds"])
@@ -48,6 +49,22 @@ async def list_refunds(
         token_info=token_info,
     )
     view = refund_lister_composer()
+    response = await view.handle(http_request)
+    return JSONResponse(content=response.body, status_code=response.status_code)
+
+
+@refund_routes.patch("/{refund_id}/status")
+async def review_refund(
+    refund_id: int,
+    body: dict = Body(...),
+    token_info: dict = Depends(get_current_user),
+):
+    http_request = HttpRequest(
+        path_params={"refund_id": refund_id},
+        body=body,
+        token_info=token_info,
+    )
+    view = refund_reviewer_composer()
     response = await view.handle(http_request)
     return JSONResponse(content=response.body, status_code=response.status_code)
 
