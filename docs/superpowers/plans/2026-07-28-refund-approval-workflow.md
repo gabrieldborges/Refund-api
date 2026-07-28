@@ -97,11 +97,29 @@ Confirme com `grep -i "postgres\|password" alembic.ini` — a saída deve ser va
 .venv/bin/alembic revision --autogenerate -m "baseline users and refunds"
 ```
 
-- [ ] **Step 6: Ler o arquivo gerado e conferir**
+- [ ] **Step 6: Escrever o corpo do baseline à mão**
 
-Abra `alembic/versions/<hash>_baseline_users_and_refunds.py`. O `upgrade()` deve conter `op.create_table("users", ...)` e `op.create_table("refunds", ...)`, com as colunas exatamente como em `src/models/entities/`. O `downgrade()` deve derrubar as duas.
+**Espere uma migration vazia.** O `autogenerate` compara a metadata com o banco **conectado**, e o banco de desenvolvimento já tem `users` e `refunds` iguais às entidades — não há diferença, então o arquivo sai com `pass` nos dois corpos. Isso é o output honesto, não um erro.
 
-**Se aparecer qualquer `op.drop_table` no `upgrade()`, pare:** significa que as entidades não foram importadas no `env.py` e o autogenerate concluiu que as tabelas do banco são sobra. Volte ao Step 3.
+Mas um baseline vazio é inútil: não cria nada num banco novo (outra máquina, CI, um banco de teste futuro), e a Task 2 encadeia sua `down_revision` nele.
+
+Escreva à mão, em `upgrade()`, os `op.create_table("users", ...)` e `op.create_table("refunds", ...)` espelhando **exatamente** `src/models/entities/users.py` e `refunds.py` — cada coluna, tipo, nulabilidade, chave primária, chave estrangeira e `server_default`. Em `downgrade()`, derrube as duas, `refunds` primeiro (é quem carrega a FK para `users`).
+
+**Se aparecer qualquer `op.drop_table` no `upgrade()` gerado, pare:** significa que as entidades não foram importadas no `env.py` e o autogenerate concluiu que as tabelas do banco são sobra. Volte ao Step 3.
+
+- [ ] **Step 6b: Provar que o baseline escrito à mão está correto**
+
+Sem banco descartável, use o próprio `autogenerate` como conferência. **Depois** do `stamp` do Step 7, rode:
+
+```bash
+.venv/bin/python -m alembic revision --autogenerate -m "baseline verification throwaway"
+```
+
+O arquivo produzido **tem que sair vazio**. É a prova: o autogenerate está comparando a metadata contra o schema real, então qualquer coluna que você tenha errado — ausente, tipo errado, nulabilidade errada — apareceria aqui como `op.add_column` ou `op.alter_column`.
+
+Se **não** sair vazio, ele acabou de dizer exatamente o que está errado: corrija o baseline, apague o descartável e repita até sair vazio.
+
+Quando sair vazio, **apague o arquivo descartável** (ele não pode ser commitado) e confirme que `alembic current` continua apontando só para o baseline.
 
 - [ ] **Step 7: Reconciliar o banco existente com `stamp`**
 
