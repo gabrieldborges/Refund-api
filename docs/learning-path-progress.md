@@ -1977,3 +1977,177 @@ borda do input via `relative` + `absolute right-0`.
   (`input-file.tsx`). Só os primeiros correm o risco de serem sobrescritos por
   um `npx shadcn@latest add`. Editar um arquivo dessa pasta exige saber de qual
   dos dois tipos ele é.
+
+## Ciclo de feature — Workflow de aprovação, backend (Itens 18 e 20)
+
+Terceiro ciclo de feature da trilha, e o primeiro inteiramente de backend.
+Cobriu **dois** itens de uma vez, e essa foi a razão de ser o próximo da fila:
+nenhum dos dois entrou por completude arquitetural, os dois entraram porque a
+feature criou o problema que cada um resolve.
+
+### Por que estudar — e por que só agora
+
+O `learning_path.md` é explícito no Item 20: *"estudar com um caso de uso
+realmente multioperação. Não refatorar os CRUDs atuais antes disso."*
+
+Isso quase matou o ciclo antes de começar. Aprovar um reembolso, na forma mais
+simples, é **um `UPDATE`** — e Unit of Work coordena commit entre várias
+escritas. Com uma só, não há o que coordenar: seria exatamente a abstração
+prematura que o próprio item manda evitar.
+
+O que salvou o item foi uma **decisão de produto**, não de arquitetura: guardar
+o histórico das decisões numa tabela própria. Aí aprovar vira duas escritas —
+`UPDATE refunds` + `INSERT refund_reviews` — que precisam valer juntas. A lição
+aqui é anterior ao padrão: **um padrão só se justifica quando o problema dele
+existe, e às vezes é o escopo da feature que decide se ele existe.**
+
+O Item 18 foi mais direto: a tabela `refunds` tinha 41 linhas, e
+`metadata.create_all` cria tabelas ausentes mas **nunca altera uma existente**.
+Adicionar `status` sem migration não é difícil — é impossível.
+
+### Estado anterior
+
+```python
+# src/models/repositories/refunds_repository.py
+async def insert_refund(self, refund_info: dict) -> int:
+    async with self.__db_connection.connect() as session:
+        result = await session.execute(insert(Refunds).values(**refund_info))
+        await session.commit()          # o repository decide quando confirmar
+        return result.inserted_primary_key[0]
+```
+
+```python
+# src/main/server/server.py
+async with engine.begin() as conn:
+    await conn.run_sync(metadata.create_all)   # o schema nascia no boot
+```
+
+### A limitação encontrada
+
+Com o padrão acima, aprovar seria:
+
+```python
+await refunds_repository.update_status(refund_id, "approved")   # commitou
+await reviews_repository.insert_review(...)                     # falhou
+```
+
+Resultado: **reembolso aprovado sem registro de quem aprovou** — o estado que a
+auditoria existe para impedir, e irreversível, porque a primeira sessão já
+fechou. Compensar na mão (`try/except` revertendo o status) não resolve: se o
+processo morrer entre as duas linhas ninguém compensa, e é reimplementar em
+Python, pior, o rollback que o banco dá de graça.
+
+### Comparação visual
+
+| | Antes | Depois |
+|---|---|---|
+| Dono da transação | o método do repository | o caso de uso, via `UnitOfWork` |
+| Escopo do commit | uma escrita | todas as escritas do bloco |
+| Falha no meio | primeira escrita persiste | nada persiste |
+| Dono do schema | `create_all` no boot | `alembic upgrade head` |
+| Alterar tabela com dados | impossível | migration versionada, com `downgrade` |
+
+### Estado ajustado
+
+```python
+# src/models/settings/unit_of_work.py
+async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+    try:
+        if exc_type is not None:
+            await self.__session.rollback()
+    finally:
+        await self.__session_ctx.__aexit__(exc_type, exc_value, traceback)
+```
+
+```python
+# src/controllers/refund_reviewer_controller.py
+if role != "admin":                       # ANTES de qualquer acesso ao banco
+    raise HttpForbiddenError("Only administrators can review refunds")
+
+async with self.__unit_of_work as unit_of_work:
+    refund = await unit_of_work.refunds.select_for_update(refund_id)
+    ...
+    await unit_of_work.refunds.update_status(refund_id, status)
+    await unit_of_work.reviews.insert_review(...)
+    await unit_of_work.commit()
+```
+
+Os CRUDs existentes **não** foram refatorados. Os dois estilos convivem, e a
+diferença entre eles é a lição: um write simples não precisa de UoW; dois writes
+que precisam cair juntos, sim.
+
+### Verificações
+
+| Comando | Resultado |
+|---|---|
+| `pytest` | **105 testes**, todos verdes (partiu de 73) |
+| `pylint src` | **10.00/10** ao final de cada uma das 11 tasks |
+| Ponta a ponta contra a API real | **10/10 cenários**, status HTTP conferidos um a um |
+| `alembic upgrade` / `downgrade` | ciclo completo executado contra o banco real |
+
+O estado do banco após a execução ponta a ponta foi conferido diretamente: duas
+linhas em `refund_reviews` com `from_status`/`to_status`/revisor/motivo corretos.
+
+### O que o processo de revisão pegou — e por que isso importa mais que o código
+
+Este ciclo foi executado com um subagente implementador por task e revisão entre
+elas. Vale registrar o que a revisão encontrou, porque **três dos achados eram
+defeitos do plano**, não da execução:
+
+1. **O baseline vazio do Alembic.** O plano mandava conferir que o `autogenerate`
+   traria `create_table`. Contra um banco que já bate com as entidades, ele traz
+   **vazio** — e um baseline vazio parece funcionar (o `stamp` reconcilia o banco
+   atual) e quebra em qualquer ambiente novo. A saída: escrever o `create_table`
+   à mão e **provar que está certo gerando uma migration descartável** — se ela
+   sai vazia, o baseline bate com o schema real; qualquer coluna errada
+   apareceria como `add_column`.
+
+2. **Vazamento de conexão no `__aexit__` (Critical).** O código do plano fechava a
+   sessão *depois* do rollback, sem `try/finally`. Se o rollback falhasse — e ele
+   pode, porque a exceção original pode ter quebrado a conexão —, a sessão nunca
+   fechava. Com `pool_size=2, max_overflow=0`, dois vazamentos travam a API
+   inteira.
+
+3. **Sete testes que não podiam falhar.** O padrão se repetiu em duas tasks. O
+   mais instrutivo: um teste chamado `..._the_database_is_never_touched` que só
+   verificava que a leitura não aconteceu. Mover a checagem de papel para dentro
+   da transação continuaria passando — enquanto toda requisição não autorizada
+   consumiria uma conexão. **O nome prometia mais do que a asserção provava.**
+   Confirmado por teste de mutação: aplicada a mutação, o teste corrigido falha.
+
+4. **Uma condição de corrida entre os dois estilos de repository**, achada só na
+   revisão final da branch. A exclusão lia o status numa sessão e apagava em
+   outra; uma aprovação concorrente no meio fazia o `DELETE` bater na FK do
+   histórico e virar **500**. Corrigido tornando o `DELETE` condicional
+   (`where id = ? and status = 'pending'`) e tratando `rowcount == 0` como 422.
+
+### O que lembrar
+
+- **Um padrão só se justifica quando o problema dele existe.** Unit of Work sobre
+  uma escrita só é indireção sem garantia. Antes de adotar, pergunte: *este caso
+  de uso tem duas ou mais escritas que precisam valer juntas?*
+- **`create_all` opera na granularidade de tabela.** Ele cria o que falta e nunca
+  altera o que existe. Não é limitação a contornar: alterar tabela com dados num
+  restart é perigoso, e é de propósito que ele se recusa.
+- **`autogenerate` é rascunho, não resposta.** Ele compara a metadata com o banco
+  **conectado** — então contra um banco já atualizado o diff correto é vazio. E
+  ele omite `server_default` com frequência, o que faria o `ALTER TABLE` falhar
+  nas linhas existentes.
+- **Um `finally` pode ser load-bearing.** Fechar recurso não pode depender do
+  passo anterior ter dado certo. A pergunta que revela esse bug: *"e se esta
+  linha aqui levantar?"*
+- **A ordem das checagens é decisão de segurança.** Verificar o papel antes de
+  qualquer consulta não é estilo: uma checagem que não consulta não revela se o
+  id existe, então o 403 é idêntico para id real e inventado. É o mesmo raciocínio
+  do 404 da BR-013.
+- **Teste que não pode falhar é pior que teste ausente**, porque compra confiança
+  sem entregar proteção. O jeito de descobrir: para cada asserção, pergunte *"que
+  bug faria isto falhar?"* — se não houver resposta, a asserção é decorativa. E
+  quando der, prove com mutação em vez de leitura.
+- **Duas escritas atômicas não bastam se um terceiro caminho não participa da
+  transação.** O `UPDATE`+`INSERT` estava correto desde o início; o furo estava na
+  exclusão, que lia e apagava em sessões diferentes. Atomicidade é propriedade do
+  sistema, não de um caso de uso.
+- **`SELECT ... FOR UPDATE` só é possível porque existe uma transação em volta.**
+  Com o padrão antigo, a leitura já teria encerrado a própria sessão antes de
+  qualquer decisão ser tomada.
