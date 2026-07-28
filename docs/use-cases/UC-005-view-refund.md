@@ -19,7 +19,8 @@ Visualizar os dados de uma solicitação específica e abrir seu comprovante.
 2. O frontend obtém o ID da rota e solicita `GET /refunds/{refund_id}`.
 3. A API autentica o usuário, busca a solicitação pelo ID e verifica o escopo de
    acesso conforme o papel.
-4. A API devolve os campos da solicitação, inclusive o nome do comprovante.
+4. A API devolve os campos da solicitação, inclusive o `status`
+   (`pending`, `approved` ou `rejected`) e o nome do comprovante.
 5. O frontend exibe nome, categoria e valor em modo somente leitura.
 6. Quando o usuário escolhe **Abrir comprovante**, o frontend abre em nova aba
    a URL pública `/receipts/{filename}`.
@@ -45,6 +46,7 @@ Visualizar os dados de uma solicitação específica e abrir seu comprovante.
 - [BR-006](../business-rules.md#br-006--autenticação-das-operações-de-reembolso)
 - [BR-012](../business-rules.md#br-012--escopo-de-acesso-por-papel)
 - [BR-013](../business-rules.md#br-013--recurso-inexistente-ou-alheio)
+- [BR-017](../business-rules.md#br-017--transições-de-status-permitidas)
 
 ## Evidências
 

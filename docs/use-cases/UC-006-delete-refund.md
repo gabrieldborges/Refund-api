@@ -23,9 +23,10 @@ Remover uma solicitação e seu comprovante armazenado.
 4. O frontend envia `DELETE /refunds/{refund_id}`.
 5. A API autentica o usuário, busca a solicitação e valida o acesso conforme o
    papel e a propriedade.
-6. A API remove o registro do banco de dados e tenta remover o arquivo do
+6. A API verifica se a solicitação está com `status = 'pending'`.
+7. A API remove o registro do banco de dados e tenta remover o arquivo do
    comprovante quando ele existe.
-7. A API confirma a exclusão; o frontend invalida o cache da listagem, fecha o
+8. A API confirma a exclusão; o frontend invalida o cache da listagem, fecha o
    diálogo e retorna para `/`.
 
 ## Fluxos alternativos e erros
@@ -36,6 +37,9 @@ Remover uma solicitação e seu comprovante armazenado.
 - Se o ID não existir, a API responde `404` com `Refund not found`.
 - Se o ID existir, mas pertencer a outro usuário `standard`, a API devolve o
   mesmo `404` e a mesma mensagem, sem revelar a existência do recurso.
+- Se a solicitação já tiver sido decidida (`status` diferente de `pending`), a
+  API responde `422` com `Only pending refunds can be deleted` e nada é
+  removido.
 - Se o arquivo do comprovante já não existir no armazenamento, a tentativa de
   remoção do arquivo não falha por esse motivo.
 - Se a exclusão falhar, o frontend exibe o erro e permanece na tela de detalhes.
@@ -44,7 +48,8 @@ Remover uma solicitação e seu comprovante armazenado.
 
 - Em caso de sucesso, o registro não existe mais no banco e o comprovante foi
   removido caso estivesse presente; a listagem será recarregada sem o item.
-- Em caso de cancelamento ou erro anterior à remoção, a solicitação permanece.
+- Em caso de cancelamento ou erro anterior à remoção, a solicitação permanece,
+  inclusive quando o erro é a solicitação já ter sido decidida.
 
 ## Regras relacionadas
 
@@ -62,8 +67,8 @@ Remover uma solicitação e seu comprovante armazenado.
 - `src/main/routes/refund_routes.py` protege e expõe
   `DELETE /refunds/{refund_id}`.
 - `src/controllers/refund_deleter_controller.py` aplica a regra de acesso, usa
-  o mesmo `404` para ID inexistente ou alheio, remove o registro e solicita a
-  remoção do arquivo.
+  o mesmo `404` para ID inexistente ou alheio, recusa com `422` quando
+  `status` não é `pending`, remove o registro e solicita a remoção do arquivo.
 - `src/models/repositories/refunds_repository.py` executa e confirma a remoção
   no banco; `src/drivers/receipt_storage.py` remove o arquivo somente se ele
   existir.
