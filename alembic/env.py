@@ -12,7 +12,7 @@ from alembic import context
 config = context.config
 
 from src.models.settings.metadata import metadata
-from src.models.entities import users, refunds  # pylint: disable=unused-import
+from src.models.entities import users, refunds, refund_reviews  # pylint: disable=unused-import
 from src.configs.global_config import database_info
 
 # The URL comes from the .env at runtime, never from alembic.ini — that file is
