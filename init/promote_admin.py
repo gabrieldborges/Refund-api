@@ -29,6 +29,6 @@ async def promote(email: str) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("usage: python init/promote_admin.py <email>")
+        print("usage: python -m init.promote_admin <email>")
         sys.exit(1)
     asyncio.run(promote(sys.argv[1]))
