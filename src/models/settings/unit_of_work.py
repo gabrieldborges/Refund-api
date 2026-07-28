@@ -29,9 +29,15 @@ class UnitOfWork:
     async def __aexit__(self, exc_type, exc_value, traceback) -> None:
         # Rolling back on the way out is what makes an exception anywhere in the
         # block safe: no caller needs a try/except to undo a partial write.
-        if exc_type is not None:
-            await self.__session.rollback()
-        await self.__session_ctx.__aexit__(exc_type, exc_value, traceback)
+        # The rollback itself can fail (the original exception may already have
+        # broken the DBAPI connection), so it is wrapped in try/finally: closing
+        # the session must not depend on the rollback succeeding, or a failed
+        # rollback would leak the connection and starve the pool.
+        try:
+            if exc_type is not None:
+                await self.__session.rollback()
+        finally:
+            await self.__session_ctx.__aexit__(exc_type, exc_value, traceback)
 
     async def commit(self) -> None:
         await self.__session.commit()

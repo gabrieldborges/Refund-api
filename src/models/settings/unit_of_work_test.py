@@ -1,4 +1,6 @@
-# pylint: disable=w0621
+# pylint: disable=w0621,w0212
+# w0212: needed to reach the repositories' name-mangled private __session
+# attribute directly, which is how the shared-session test proves identity.
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 from .unit_of_work import UnitOfWork
@@ -24,7 +26,12 @@ def mock_connection(mock_session):
 
 
 # Both repositories must share the SAME session — that is the entire mechanism
-# by which their writes end up in one transaction.
+# by which their writes end up in one transaction. Asserting only
+# execute.await_count == 2 cannot fail: a broken UnitOfWork that called
+# connect() twice (giving each repository its OWN session) would still hit
+# execute twice on mocks that return the same objects regardless. So we also
+# pin that connect() was called exactly once and that both repositories hold
+# the identical session object.
 @pytest.mark.asyncio
 async def test_both_repositories_share_the_same_session(mock_connection, mock_session):
     async with UnitOfWork(mock_connection) as unit_of_work:
@@ -34,6 +41,9 @@ async def test_both_repositories_share_the_same_session(mock_connection, mock_se
         )
 
     assert mock_session.execute.await_count == 2
+    assert mock_connection.connect.call_count == 1
+    assert unit_of_work.refunds._RefundStatusRepository__session \
+        is unit_of_work.reviews._RefundReviewsRepository__session
 
 
 @pytest.mark.asyncio
@@ -65,3 +75,19 @@ async def test_leaving_without_commit_does_not_commit(mock_connection, mock_sess
         await unit_of_work.refunds.update_status(1, "approved")
 
     mock_session.commit.assert_not_awaited()
+
+
+# The pool has pool_size=2, max_overflow=0: if a failing rollback ever skipped
+# closing the session, its connection would never return to the pool, and two
+# of these would hang the whole API. The session must be closed regardless.
+@pytest.mark.asyncio
+async def test_the_session_is_closed_even_when_rollback_fails(mock_connection, mock_session):
+    mock_session.rollback = AsyncMock(side_effect=RuntimeError("rollback failed"))
+    context = mock_connection.connect.return_value
+
+    with pytest.raises(RuntimeError):
+        async with UnitOfWork(mock_connection) as unit_of_work:
+            await unit_of_work.refunds.update_status(1, "approved")
+            raise ValueError("boom")
+
+    context.__aexit__.assert_awaited_once()
