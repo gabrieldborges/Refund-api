@@ -34,9 +34,16 @@ python run.py
 A API sobe em `http://localhost:3333`.
 Documentação automática (Swagger) em `http://localhost:3333/docs`.
 
-No startup do servidor, `metadata.create_all` cria no PostgreSQL as tabelas que
-ainda não existem (ver `src/main/server/server.py`). Não é preciso rodar
-`init/schema.sql` manualmente — ele existe só como referência do schema.
+Antes de subir o servidor pela primeira vez, aplique as migrations:
+
+```bash
+alembic upgrade head
+```
+
+O schema do banco é governado pelo Alembic (`alembic/versions/`). Rodar
+`alembic upgrade head` é seguro a qualquer momento: ele aplica apenas as
+migrations que faltam. O `init/schema.sql` continua existindo só como
+referência histórica.
 
 ## Estrutura
 
