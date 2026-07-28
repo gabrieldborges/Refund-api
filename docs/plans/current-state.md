@@ -11,7 +11,7 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-07-27.
+Atualizado em: 2026-07-28.
 
 ## Visão geral
 
@@ -239,10 +239,12 @@ completo e obrigatório está em
 - **Ciclo de feature — Restyle com shadcn/ui: CONCLUÍDO.**
   Segundo ciclo de feature interligado à trilha (brainstorming → spec → plano →
   execução em 10 tasks com revisão por task; artefatos em
-  `Refund-FrontEnd/docs/superpowers/`). **Ainda não mesclado:**
-  `Refund-FrontEnd` na branch `feat/shadcn-restyle` (`957c5b1..b66aa16`,
-  14 commits) e `Refund-api` na branch `feat/refund-list-sum` (`5fae554` + a
-  documentação). Cobriu o **Item 10 (Pattern layer) em segunda passagem** — o
+  `Refund-FrontEnd/docs/superpowers/`). **Mesclado nos dois repos:**
+  `Refund-FrontEnd` na `main` (o `feat/shadcn-restyle`, `957c5b1..b66aa16`,
+  14 commits) e `Refund-api` na `main` (o `feat/refund-list-sum`, `5fae554` + a
+  documentação). Depois do merge vieram ajustes manuais de layout do Gabriel
+  direto na `main` do frontend (`3929a37`, `f336ae1`, `2d07a8d` e `6326606`).
+  Cobriu o **Item 10 (Pattern layer) em segunda passagem** — o
   ciclo do shell integrou uma lib pronta (`react-pro-sidebar`); este **possui o
   código** (o shadcn é um registry, não uma dependência). O que mudou:
   - `src/components/{atoms,molecules}` deletados; nasce `src/components/ui` com
@@ -261,7 +263,11 @@ completo e obrigatório está em
     --noEmit` (exit 0), `npm run build` (ok, sem o aviso de chunk > 500 kB),
     `npm run lint` (**0 erros, 0 warnings** — primeira vez na trilha),
     `pytest` (73 verdes), `pylint src` (10.00/10).
-  - **Não validado em navegador** — ver pendências. Detalhes no
+  - **Validado em navegador em 2026-07-28**, pelo Gabriel, contra um checklist
+    derivado das pendências (mantido no Notion, em `Work → ToBeBetter`). Fechou
+    contraste claro/escuro, emenda sidebar↔topbar, colapso da sidebar, drawer
+    no mobile, faixa de resumo e os runtimes dos Itens 1 e 3. Ficaram **4 itens
+    abertos** — ver pendências. Detalhes no
     [diário](../learning-path-progress.md).
   - **Ordem de merge/deploy: o backend precisa ir para produção antes do
     frontend.** `src/features/refunds/schemas/refund.ts` do frontend valida a
@@ -273,9 +279,9 @@ completo e obrigatório está em
     solicitações" para todo usuário — a tela principal do produto fica
     inutilizável até o backend ser implantado. O caminho inverso é seguro: um
     frontend antigo simplesmente ignora o campo novo, pois o Zod descarta
-    chaves desconhecidas por padrão. Logo, ao promover este ciclo: **primeiro**
-    mesclar e implantar `Refund-api` (`feat/refund-list-sum`), **depois**
-    `Refund-FrontEnd` (`feat/shadcn-restyle`).
+    chaves desconhecidas por padrão. O merge já aconteceu nos dois repos, então
+    a restrição vale agora para o **deploy**: implantar **primeiro** o
+    `Refund-api`, **depois** o `Refund-FrontEnd`.
 
 - **Próximo — ciclo de feature: Workflow de aprovação** (backend primeiro:
   `status` pendente/aprovado/rejeitado + aprovar/rejeitar por admin + autorização;
@@ -299,14 +305,40 @@ completo e obrigatório está em
   cobertura real. Conserto de uma linha quando o arquivo for tocado: iniciar o
   router com `page>=2` antes de digitar e afirmar que o parâmetro `page` some.
   Achado na revisão final do ciclo, depois que o diário já estava escrito.
-- **O restyle inteiro não foi validado em navegador.** Todas as verificações do
-  ciclo do shadcn foram automatizadas (testes, typecheck, build, lint, pytest,
-  pylint). Como o jsdom não carrega CSS, um restyle é justamente o tipo de
-  mudança que os testes não cobrem: **contraste, alinhamento, dark mode, colapso
-  da sidebar, drawer no mobile e a faixa de resumo da Home continuam sem
-  validação visual**. Pelo `learning-path-workflow.md`, o Item 10 (segunda
-  passagem) **não** pode ser apresentado como totalmente validado até isso
-  acontecer. É a primeira coisa a fazer ao retomar.
+  **Atualização (2026-07-28):** o *comportamento* foi confirmado à mão no
+  navegador — ir para a página 2, digitar na busca, e o `page` sai da URL. Isso
+  não fecha a pendência: o que falta é a **prova automatizada**, e ela é
+  justamente a que impede o ramo de regredir sem ninguém perceber.
+- ~~**O restyle inteiro não foi validado em navegador.**~~ RESOLVIDO em
+  2026-07-28: o Gabriel percorreu no navegador o checklist derivado destas
+  pendências (Notion, `Work → ToBeBetter`). Fecharam contraste no claro e no
+  escuro, alinhamento das telas restiladas, a emenda sidebar↔topbar, o colapso
+  da sidebar em modo trilho, estado ativo e hover da navegação, o drawer no
+  mobile (overlay, Esc, scroll), a Home em tela estreita, a persistência de tema
+  e de estado da sidebar, e a faixa de resumo (incluindo o total respeitando o
+  filtro, não mudando entre páginas, e o plural de "1 solicitação").
+  **Restam 4 itens abertos**, listados abaixo.
+- **Aberto 1/4 — schemas contra a API real (Item 2) segue sem marcação.** É o
+  único bloco inteiro do checklist que não foi marcado: "login, listagem,
+  detalhe e criação sem erro de parse do Zod" e "`sum_amount_in_cents` presente".
+  **Nota importante:** os blocos de cache (Item 1) e da faixa de resumo *foram*
+  marcados, e ambos só passam se o backend real tiver respondido e o Zod tiver
+  aceitado o payload — ou seja, a evidência indireta é forte. Mas como o bloco
+  não foi marcado explicitamente, fica registrado como aberto em vez de deduzido.
+  Provavelmente basta uma conferência consciente para fechar.
+- **Aberto 2/4 — contraste nunca foi auditado com ferramenta.** O checklist
+  distingue "contraste parece legível" (marcado, olho humano) de "contraste
+  auditado no DevTools/Lighthouse" (não marcado). Só a segunda forma produz
+  número de razão de contraste; a primeira não substitui a auditoria e não é
+  auditável em teste automatizado (o jsdom não calcula cor).
+- **Aberto 3/4 — rejeição de comprovante por tamanho/extensão em runtime.** O
+  upload real (`.jpg`/`.png`/`.pdf`) foi validado, mas o caminho de rejeição não.
+  Existe teste automatizado para ele (`RefundFormDialog.test.tsx` cobre a
+  rejeição por tamanho), então é conferir a mensagem no navegador, não implementar.
+- **Aberto 4/4 — o "Choose File / No file chosen" do input nativo.** Marcado como
+  *verificado*, não como *resolvido*: o item pedia "decidir se estiliza". O
+  `<input type="file">` continua exibindo o texto nativo do browser, em inglês,
+  dentro de uma UI toda em português. Decisão ainda em aberto.
 - **`src/test/setup.ts` tem um polyfill de jsdom para o Radix Select.** O jsdom
   não implementa a Pointer Capture API nem `scrollIntoView`; sem os no-ops
   (guardados por `if (!…)`, espelhando o polyfill de `matchMedia` que já
@@ -337,6 +369,24 @@ completo e obrigatório está em
   é realmente contínua. **Não é ajuste acidental:** quem reformatar o shell
   precisa preservar a igualdade de altura, ou desfaz uma decisão visual
   deliberada sem perceber.
+- **Ajuste manual do Gabriel no modal de nova solicitação** (commit `6326606`,
+  `fix : category input label width and input icon position on modal`), feito
+  durante a validação visual. Duas mudanças com intenção:
+  - `RefundFormDialog.tsx`: o `SelectTrigger` da Categoria ganhou `w-full`. O
+    `SelectTrigger` do shadcn tem largura por conteúdo, então dentro de um
+    `FormItem className="flex-1"` ele ficava estreito e desalinhado do campo
+    Valor ao lado. Com `w-full` os dois campos da linha passam a ter a mesma
+    largura.
+  - `input-file.tsx`: o wrapper ganhou `relative` e o ícone `CloudUpload` virou
+    `absolute right-0 mr-4`. Antes o ícone era um irmão em `flex`, ocupando
+    espaço *fora* do campo; agora fica sobreposto **dentro** da borda do input,
+    à direita.
+  - **Ao contrário do `sidebar.tsx`, este arquivo não tem risco de regeneração:**
+    `input-file.tsx` é componente **autoral do projeto** (não existe no registry
+    do shadcn), então `npx shadcn@latest add` nunca vai sobrescrevê-lo. Vale
+    saber que `src/components/ui` mistura as duas origens — arquivos copiados do
+    registry e arquivos escritos aqui — e que só os primeiros correm o risco
+    descrito no item anterior. O resto do diff do commit é espaço em branco.
 - **O CLI do shadcn escreve num diretório literal `./@/` na raiz.** Causa: o
   `tsconfig.json` raiz não tem `paths` (eles vivem no `tsconfig.app.json`, via
   project references) e o CLI só lê o da raiz. Aconteceu nas quatro tasks que
@@ -344,10 +394,11 @@ completo e obrigatório está em
   `src/components/ui`, apagar o `./@` e conferir `git diff src/index.css` — o
   CLI também já acrescentou um bloco `.dark { … }` (seletor errado para este
   projeto) sem avisar.
-- **Runtime do Item 1 parcialmente validado.** A **exclusão** foi exercitada no
-  navegador (revelou e motivou as correções de runtime acima). Ainda falta
-  conferir lista, busca, paginação, criação, detalhe, e que voltar à Home dentro
-  de 30s não dispara refetch.
+- ~~**Runtime do Item 1 parcialmente validado.**~~ RESOLVIDO em 2026-07-28:
+  lista, busca, paginação, criação e detalhe conferidos no navegador, e o
+  `staleTime` de 30s verificado na aba Network (voltar à Home dentro da janela
+  **não** dispara refetch). A exclusão já tinha sido validada antes, no episódio
+  que motivou as correções de runtime acima.
 - **Runtime do Item 2 contra a API real ainda pendente.** Os schemas já têm
   testes automatizados: o `refundCreateSchema` no Item 4
   (`src/schemas/refund.test.ts`, via `.shape`) e os schemas de **response** no
@@ -358,10 +409,10 @@ completo e obrigatório está em
   validação manual contra o backend real de verdade (não mockado).
 - **`localStorage` ainda usa type assertion.** `JSON.parse(raw) as AuthUser` não
   valida uma sessão persistida; ficou fora do Item 2, restrito a responses HTTP.
-- **Runtime visual do Item 3 não validado.** Falta verificar em navegador login,
-  URL direta, reload, busca, paginação, back/forward, detalhe, normalização de
-  parâmetros e a página de erro. Os serviços locais e respostas HTTP foram
-  verificados, mas não havia navegador conectado à sessão.
+- ~~**Runtime visual do Item 3 não validado.**~~ RESOLVIDO em 2026-07-28: login,
+  URL direta de detalhe, reload, `?name=`, `?page=`, back/forward, normalização
+  de parâmetros inválidos, página de erro de rota e omissão dos valores padrão
+  da URL — todos conferidos no navegador.
 - ~~**Lint do frontend já vermelho antes da trilha.**~~ RESOLVIDO no ciclo do
   restyle: os 18 erros `react-refresh/only-export-components` viviam em
   `atoms/`+`molecules/`, que deixaram de existir. `npm run lint` está em **0
@@ -383,8 +434,10 @@ completo e obrigatório está em
   `role="combobox"` no gatilho, `role="option"` nas opções, com o padrão de
   teclado do WAI-ARIA implementado pelo Radix. **Ressalva:** o teste em
   `RefundFormDialog.test.tsx` prova os papéis, mas dirige a seleção por clique;
-  nenhum teste automatizado percorre ↑/↓. Contraste segue não auditável no jsdom
-  (precisa de E2E).
+  nenhum teste automatizado percorre ↑/↓ — a navegação por seta foi conferida
+  **à mão** em 2026-07-28 (funciona), o que confirma o comportamento sem fechar
+  a lacuna de teste. Contraste segue não auditável no jsdom (precisa de E2E) e a
+  auditoria com ferramenta continua pendente.
 
 - ~~**Campo `file` do `refundCreateSchema` sem teste.**~~ RESOLVIDO no ciclo do
   restyle: `src/components/ui/input-file.test.tsx` faz upload real com

@@ -1887,3 +1887,93 @@ componente é usado. Saldo real: **+16 testes** sobre o início do ciclo.
   pronta (ciclo do shell) e possuir o código do componente (este ciclo). São as
   duas respostas legítimas para a mesma camada, e o valor de ter visto as duas é
   saber reconhecer qual das duas o próximo problema pede.
+
+## Validação visual do ciclo do restyle (2026-07-28)
+
+Não é um item novo da trilha: é o **fechamento da pendência** que o ciclo do
+restyle deixou aberta de propósito — "o app não foi aberto no navegador neste
+ciclo". Pelo `learning-path-workflow.md`, o Item 10 (segunda passagem) não podia
+ser apresentado como totalmente validado enquanto isso não acontecesse.
+
+### Por que precisou de uma passada manual
+
+Todas as verificações do ciclo foram automatizadas: 75 testes, typecheck, build,
+lint, pytest, pylint. Nenhuma delas enxerga cor, posição ou tamanho — o jsdom
+não carrega CSS nem faz layout. Um restyle é exatamente a classe de mudança que
+uma suíte verde não consegue defender. A pendência não era falta de disciplina;
+era o limite da ferramenta.
+
+### Como foi feito
+
+Em vez de sair clicando, as pendências do `current-state.md` foram traduzidas em
+um **checklist explícito** (mantido no Notion, em `Work → ToBeBetter`), agrupado
+por item da trilha: shell e restyle, responsividade, faixa de resumo, tema
+(Item 12), cache (Item 1), estado na URL (Item 3), schemas contra a API real
+(Item 2), a11y (Item 7), fluxo de criação e tela de detalhe.
+
+O ganho de escrever o checklist antes: a diferença entre "olhei e pareceu ok" e
+"verifiquei o que estava em dúvida" fica registrada por item, e o que **não**
+foi verificado sobra visível em vez de sumir no meio de uma impressão geral.
+
+### O que fechou
+
+- Contraste no claro e no escuro (leitura a olho), alinhamento das telas.
+- A **emenda sidebar↔topbar** — as duas bordas inferiores na mesma linha, que é
+  a razão de existir do `h-17.5` nos dois componentes.
+- Colapso da sidebar em modo trilho, estado ativo e hover da navegação.
+- Drawer no mobile: overlay, Esc, scroll não vazando, Home empilhando.
+- Persistência de tema e de estado da sidebar após reload, sem flash.
+- Faixa de resumo: alinhamento, o total respeitando o filtro da busca, o total
+  **não** mudando ao trocar de página, e o plural de "1 solicitação".
+- **Item 1 completo**: lista, busca, paginação, criação, detalhe e — o item que
+  exigia a aba Network — o `staleTime` de 30s impedindo o refetch ao voltar.
+- **Item 3 completo**: login, URL direta, reload, `?name=`, `?page=`,
+  back/forward, normalização de parâmetro inválido, página de erro e omissão dos
+  valores padrão da URL.
+- Navegação por ↑/↓ no `Select` de categoria, foco visível no Tab, foco no
+  primeiro campo com erro.
+- Botão "Excluir" confirmado usando `variant="destructive"` — o vermelho vem do
+  token, não sobrou cor fixa da paleta antiga.
+
+### O que ficou aberto, e por quê
+
+- **Schemas contra a API real (Item 2)** — único bloco sem marcação nenhuma.
+- **Contraste auditado com ferramenta** — o checklist separou de propósito
+  "parece legível" de "auditado no DevTools"; só o segundo dá um número.
+- **Rejeição de comprovante por tamanho/extensão** — o upload feliz foi
+  validado, o caminho de rejeição não.
+- **O "Choose File / No file chosen"** — marcado como *verificado*, não
+  *resolvido*: o item pedia uma decisão sobre estilizar o input nativo, e a
+  decisão continua em aberto.
+
+### Os ajustes manuais que vieram junto
+
+Quatro commits do Gabriel direto na `main` do frontend durante e depois da
+validação (`3929a37`, `f336ae1`, `2d07a8d`, `6326606`). O último tem duas
+mudanças com intenção clara, documentadas no `current-state.md`: `w-full` no
+`SelectTrigger` da Categoria (que tem largura por conteúdo e ficava estreito
+dentro de um `flex-1`) e o ícone `CloudUpload` reposicionado para dentro da
+borda do input via `relative` + `absolute right-0`.
+
+### O que lembrar
+
+- **Suíte verde não é o mesmo que aplicação certa.** A cobertura de uma suíte
+  termina onde termina a capacidade do ambiente de teste: sem CSS e sem layout,
+  o jsdom não tem como falhar por um contraste ruim ou uma borda desalinhada.
+  Saber *o que a ferramenta não consegue ver* vale tanto quanto saber usá-la.
+- **Transformar pendência em checklist muda o resultado.** Uma pendência em prosa
+  ("não foi validado em navegador") vira uma sessão de cliques sem começo nem
+  fim. Quebrada em itens verificáveis, ela produz uma resposta por item — e o que
+  ficou de fora sobra visível em vez de se dissolver num "está ok".
+- **"Verificado" e "resolvido" não são a mesma marcação.** O item do input de
+  arquivo foi conferido e a conclusão foi "continua em inglês, falta decidir".
+  Marcar isso como fechado perderia a decisão pendente.
+- **Confirmar à mão não fecha lacuna de teste.** O reset de página para 1 e a
+  navegação por ↑/↓ no `Select` funcionam — foram vistos funcionando. Mas o que
+  protege os dois de regredir amanhã é a asserção automatizada, e ela continua
+  faltando nos dois casos.
+- **`src/components/ui` tem duas origens.** Arquivos copiados do registry
+  (`sidebar.tsx`, `select.tsx`…) e arquivos autorais do projeto
+  (`input-file.tsx`). Só os primeiros correm o risco de serem sobrescritos por
+  um `npx shadcn@latest add`. Editar um arquivo dessa pasta exige saber de qual
+  dos dois tipos ele é.
