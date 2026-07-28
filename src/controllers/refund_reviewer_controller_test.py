@@ -72,6 +72,7 @@ async def test_standard_user_is_forbidden_and_the_database_is_never_touched(pend
         )
 
     unit_of_work.refunds.select_for_update.assert_not_awaited()
+    unit_of_work.__aenter__.assert_not_awaited()
 
 
 # BR-016: whoever spends does not approve their own spending.
@@ -86,6 +87,8 @@ async def test_admin_cannot_review_their_own_refund(pending_refund):
         )
 
     unit_of_work.refunds.update_status.assert_not_awaited()
+    unit_of_work.reviews.insert_review.assert_not_awaited()
+    unit_of_work.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -97,6 +100,8 @@ async def test_missing_refund_raises_not_found():
         await controller.review(
             refund_id=999, reviewer_id=9, role="admin", status="approved", reason=None
         )
+
+    unit_of_work.commit.assert_not_awaited()
 
 
 # Repeating the current decision is not a state change, and writing
@@ -113,6 +118,7 @@ async def test_repeating_the_current_decision_raises():
         )
 
     unit_of_work.reviews.insert_review.assert_not_awaited()
+    unit_of_work.refunds.update_status.assert_not_awaited()
 
 
 # THE test of this cycle: if the history insert fails, the status change must not
