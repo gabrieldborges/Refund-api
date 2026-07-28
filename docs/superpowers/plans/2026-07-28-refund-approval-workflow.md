@@ -717,6 +717,13 @@ def mock_connection(mock_session):
 
 # Both repositories must share the SAME session — that is the entire mechanism
 # by which their writes end up in one transaction.
+#
+# Note what this test has to assert to be worth anything: the mock returns the
+# same session on every call, so counting executes would ALSO pass for a broken
+# UnitOfWork that opened one connection per repository — which in production
+# would put the two writes in different transactions. Asserting connect() was
+# called once, and that both repositories hold the same object, is what actually
+# pins the property.
 @pytest.mark.asyncio
 async def test_both_repositories_share_the_same_session(mock_connection, mock_session):
     async with UnitOfWork(mock_connection) as unit_of_work:
@@ -725,7 +732,27 @@ async def test_both_repositories_share_the_same_session(mock_connection, mock_se
             refund_id=1, reviewer_id=9, from_status="pending", to_status="approved", reason=None
         )
 
+    assert mock_connection.connect.call_count == 1
+    assert (
+        unit_of_work.refunds._RefundStatusRepository__session
+        is unit_of_work.reviews._RefundReviewsRepository__session
+    )
     assert mock_session.execute.await_count == 2
+
+
+# Closing the session must not depend on the rollback succeeding: a rollback can
+# raise when the original error already broke the connection, and a session that
+# never closes never returns its connection to a pool of size 2.
+@pytest.mark.asyncio
+async def test_the_session_is_closed_even_when_rollback_fails(mock_connection, mock_session):
+    mock_session.rollback = AsyncMock(side_effect=RuntimeError("rollback failed"))
+
+    with pytest.raises(RuntimeError):
+        async with UnitOfWork(mock_connection) as unit_of_work:
+            await unit_of_work.refunds.update_status(1, "approved")
+            raise ValueError("boom")
+
+    mock_connection.connect.return_value.__aexit__.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -802,9 +829,17 @@ class UnitOfWork:
     async def __aexit__(self, exc_type, exc_value, traceback) -> None:
         # Rolling back on the way out is what makes an exception anywhere in the
         # block safe: no caller needs a try/except to undo a partial write.
-        if exc_type is not None:
-            await self.__session.rollback()
-        await self.__session_ctx.__aexit__(exc_type, exc_value, traceback)
+        #
+        # The finally is load-bearing: closing the session must not depend on the
+        # rollback succeeding. A rollback can itself raise — the original error may
+        # already have left the connection broken — and without the finally the
+        # session would never close, leaking its connection. The pool is
+        # pool_size=2, max_overflow=0, so two leaks hang the whole API.
+        try:
+            if exc_type is not None:
+                await self.__session.rollback()
+        finally:
+            await self.__session_ctx.__aexit__(exc_type, exc_value, traceback)
 
     async def commit(self) -> None:
         await self.__session.commit()
