@@ -682,6 +682,32 @@ async def test_unknown_user_raises_not_found(mock_repository, mock_storage):
         await controller.upload(user_id=999, original_filename="foto.jpg", content=b"x")
 
     mock_storage.save.assert_not_called()
+
+
+# The ordering IS the guarantee of this task, so it needs its own test.
+# Separate per-mock assertions are all true regardless of sequence: reordering
+# the delete before the update — the unsafe order that loses the picture
+# entirely when the update fails — would pass every other test in this file.
+# Attaching the mocks to one parent puts their calls in a single ordered log.
+@pytest.mark.asyncio
+async def test_upload_saves_and_updates_before_deleting_the_previous_file(
+    mock_repository, mock_storage
+):
+    mock_repository.select_user_by_id = AsyncMock(
+        return_value={"id": 7, "name": "Gabriel", "avatar_filename": "antiga.jpg"}
+    )
+    manager = MagicMock()
+    manager.attach_mock(mock_storage.save, "save")
+    manager.attach_mock(mock_repository.update_avatar, "update_avatar")
+    manager.attach_mock(mock_storage.delete, "delete")
+    controller = AvatarUploaderController(mock_repository, mock_storage)
+
+    await controller.upload(user_id=7, original_filename="foto.jpg", content=b"x")
+
+    # Print manager.mock_calls once to see the real entry shape before asserting;
+    # attach_mock on an AsyncMock records the await too.
+    called = [name for name, _, _ in manager.mock_calls]
+    assert called.index("save") < called.index("update_avatar") < called.index("delete")
 ```
 
 `src/controllers/avatar_remover_controller_test.py`:
@@ -744,6 +770,21 @@ async def test_unknown_user_raises_not_found(mock_repository, mock_storage):
 
     with pytest.raises(HttpNotFoundError):
         await controller.remove(user_id=999)
+
+
+# Same reasoning as the uploader's ordering test: clearing the column before
+# deleting the file means the row never points at a file that is gone.
+@pytest.mark.asyncio
+async def test_remove_clears_the_column_before_deleting_the_file(mock_repository, mock_storage):
+    manager = MagicMock()
+    manager.attach_mock(mock_repository.update_avatar, "update_avatar")
+    manager.attach_mock(mock_storage.delete, "delete")
+    controller = AvatarRemoverController(mock_repository, mock_storage)
+
+    await controller.remove(user_id=7)
+
+    called = [name for name, _, _ in manager.mock_calls]
+    assert called.index("update_avatar") < called.index("delete")
 ```
 
 - [ ] **Step 2: Rodar e confirmar que falham**
