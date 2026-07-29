@@ -16,8 +16,10 @@ Atualizado em: 2026-07-29.
 ## Visão geral
 
 O produto é um sistema de **reembolso de despesas com comprovante**. São dois
-repositórios Git irmãos e independentes (cada um com seu remote, ambos na branch
-`main`):
+repositórios Git irmãos e independentes, cada um com seu remote. O `Refund-api`
+está na `main` (`ef7c60f`); o `Refund-FrontEnd` está na branch
+`feat/frontend-contract-and-receipt` (`39e0683`), **ainda sem merge** — ver
+pendências:
 
 - **`Refund-api`** — backend Python + FastAPI, Clean Architecture pragmática.
 - **`Refund-FrontEnd`** — frontend React 19 + TypeScript + Vite.
@@ -263,6 +265,16 @@ completo e obrigatório está em
     --noEmit` (exit 0), `npm run build` (ok, sem o aviso de chunk > 500 kB),
     `npm run lint` (**0 erros, 0 warnings** — primeira vez na trilha),
     `pytest` (73 verdes), `pylint src` (10.00/10).
+  - **Estes dois últimos números do frontend ficaram obsoletos depois do merge**,
+    e a correção só apareceu no ciclo de 2026-07-29:
+    - O commit manual `2d07a8d` deixou um import de `Separator` não usado em
+      `src/components/core/Topbar.tsx`. Isso quebrava `npx tsc -b --noEmit`
+      (exit 2), `npm run lint` (1 erro) **e** `npm run build` na `main` do
+      frontend. Corrigido pelo commit `4e53be4` da branch
+      `feat/frontend-contract-and-receipt`.
+    - O aviso de chunk > 500 kB **voltou** em algum ponto depois do restyle: o
+      bundle principal já estava em **503,57 kB** no ponto de partida do ciclo
+      seguinte. Não foi causado por ele.
   - **Validado em navegador em 2026-07-28**, pelo Gabriel, contra um checklist
     derivado das pendências (mantido no Notion, em `Work → ToBeBetter`). Fechou
     contraste claro/escuro, emenda sidebar↔topbar, colapso da sidebar, drawer
@@ -286,7 +298,9 @@ completo e obrigatório está em
 - **Ciclo de feature — Workflow de aprovação (backend): CONCLUÍDO.**
   Terceiro ciclo de feature e o primeiro inteiramente de backend, na branch
   `feat/refund-approval-workflow` do `Refund-api` (`5b50c0f..f083d0b`, 20
-  commits). **Ainda não mesclado.** Artefatos em `docs/superpowers/`
+  commits). **Mesclado na `main`** pelo merge `177f929` (correção: até
+  2026-07-29 este documento afirmava que não estava). Artefatos em
+  `docs/superpowers/`
   ([spec](../superpowers/specs/2026-07-28-refund-approval-workflow-design.md),
   [plano](../superpowers/plans/2026-07-28-refund-approval-workflow.md)).
   Cobriu **Item 18 (Alembic)** e **Item 20 (Unit of Work)**. O que mudou:
@@ -315,7 +329,8 @@ completo e obrigatório está em
 
 - **Ciclo de feature — Consulta da listagem e foto de perfil (backend):
   CONCLUÍDO.** Quarto ciclo, na branch `feat/refund-query-and-avatar` do
-  `Refund-api` (`3fa42b2..2c2081c`, 19 commits). **Ainda não mesclado.**
+  `Refund-api` (`3fa42b2..2c2081c`, 19 commits). **Mesclado na `main`** em
+  2026-07-29, junto da pilha que estava por cima (ver ciclo seguinte).
   Artefatos em `docs/superpowers/`
   ([spec](../superpowers/specs/2026-07-29-refund-query-and-avatar-design.md),
   [plano](../superpowers/plans/2026-07-29-refund-query-and-avatar.md)).
@@ -337,8 +352,11 @@ completo e obrigatório está em
 
 - **Ciclo de feature — Servir arquivos com autenticação (backend): CONCLUÍDO.**
   Quinto ciclo, na branch `feat/authenticated-file-serving` (`55be4d4..ba51c4b`,
-  8 commits), **empilhada sobre `feat/refund-query-and-avatar`, que também não
-  foi mesclada**. Artefatos em `docs/superpowers/`
+  8 commits de código), **empilhada sobre `feat/refund-query-and-avatar`**. A
+  pilha inteira **foi mesclada na `main`** no início do ciclo do frontend, por
+  **fast-forward** (`3fa42b2..ef7c60f`, 33 commits): a `main` do `Refund-api`
+  está hoje em `ef7c60f`, com `pytest` 178/178 e `pylint src` 10.00/10 depois do
+  merge. Artefatos em `docs/superpowers/`
   ([spec](../superpowers/specs/2026-07-29-authenticated-file-serving-design.md),
   [plano](../superpowers/plans/2026-07-29-authenticated-file-serving.md)).
   Nasceu de uma verificação de rotina que achou `GET /receipts/<uuid>`
@@ -359,99 +377,91 @@ completo e obrigatório está em
     **14/14 cenários ponta a ponta**, incluindo `ls uploads/receipts/` antes e
     depois provando que a exclusão ainda apaga o arquivo.
 
-- **Próximo — spec do frontend.** Agora ela cobre o workflow de aprovação, o
-  TanStack Table com toolbar honesto (**Item 13**), o preview do comprovante
-  (que passa a ser `fetch` com token → `blob URL`, não `<img src>`), e a foto de
-  perfil com upload. Roadmap completo na
-  [spec do restyle](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-27-shadcn-restyle-design.md).
-  (O **Item 11 — Error boundaries** pode interligar quando as páginas novas de
-  dados entrarem.)
+- **Ciclo de feature — Contrato novo e comprovante autenticado (frontend):
+  IMPLEMENTAÇÃO CONCLUÍDA, `main` do frontend AINDA NÃO MESCLADA E NADA VALIDADO
+  EM NAVEGADOR.** Sexto ciclo e o primeiro de frontend desde o restyle, na branch
+  `feat/frontend-contract-and-receipt` do `Refund-FrontEnd`
+  (`6326606..39e0683`, 17 commits), executado em 11 tasks com revisão por task
+  mais uma revisão da branch inteira. Artefatos em
+  `Refund-FrontEnd/docs/superpowers/`
+  ([spec](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-29-frontend-contract-and-receipt-design.md),
+  [plano](../../../Refund-FrontEnd/docs/superpowers/plans/2026-07-29-frontend-contract-and-receipt.md)).
+  Não abre item novo: **fecha a lacuna do Item 2** (a sessão persistida em
+  `localStorage`, que estava fora daquele item). O **Item 11 (error boundaries)**
+  foi considerado e deixado de fora de propósito. O que mudou:
+  - **Contrato absorvido.** `src/features/refunds/schemas/refund.ts` passou a
+    exigir `user` aninhado e `status`; `user_id` e `filename` saíram.
+    `refundBaseSchema` e `refundCreateResponseSchema` foram **removidos** —
+    aquele contrato separado existia só porque a criação não devolvia
+    `created_at`, e o backend passou a reler a linha gravada.
+    `refundDetailResponseSchema` virou `refundResponseSchema`, servindo detalhe
+    **e** criação. `loginResponseSchema` ganhou `id`, e `AuthUser` também.
+  - **Sessão persistida validada.** `storedUserSchema` + `safeParse` no lugar de
+    `JSON.parse(raw) as AuthUser`. **Efeito no deploy: todo usuário logado é
+    deslogado uma vez** (as sessões salvas não têm `id`).
+  - **Comprovante autenticado.** `getReceiptUrl` removido de `src/lib/api.ts`;
+    entram `receiptQuery` (cacheia o **Blob**, sem Zod — a resposta é binária),
+    `useReceipt`, o hook compartilhado `src/hooks/useObjectUrl.ts` (cria e
+    **revoga** a object URL) e `ReceiptPreview` (imagem ou `<object>` de PDF
+    decidido por `blob.type`, com diálogo de tela cheia).
+  - **Badge de status somente leitura** na linha da Home e no card de detalhe,
+    com variantes já existentes do `ui/badge`.
+  - **Ajustes pequenos:** `REFUNDS_PER_PAGE = 10` com fonte única em
+    `features/refunds/constants/pagination.ts`, exportada pela fachada; a
+    asserção vazia do `PageHome.test.tsx` fechada; import de `Separator` não
+    usado removido do `Topbar` (era o que quebrava `tsc`, `eslint` e `build` na
+    `main`).
+  - Verificação: `npm run test` (**103 verdes em 31 arquivos**, suíte rodada 3×),
+    `npx tsc -b --noEmit` (exit 0), `npm run lint` (**0 erros, 0 warnings**),
+    `npm run build` (ok; bundle **503,57 → 506,00 kB**, +2,43 kB — o aviso de
+    > 500 kB é **pré-existente**), `pytest` (178 verdes) e `pylint src`
+    (10.00/10) no `Refund-api` depois do fast-forward.
+  - **Nenhuma validação em navegador aconteceu** — ver pendências. Detalhes no
+    [diário](../learning-path-progress.md).
 
-## Backlog do frontend — o que os três últimos ciclos de backend criaram
+- **Próximo — o workflow de aprovação na UI.** Depende de mesclar e implantar o
+  ciclo acima primeiro (deploy conjunto). O backlog remanescente está na seção
+  abaixo.
 
-O `Refund-FrontEnd` está na `main`, **sem nada implementado destes ciclos**. Os
-três ciclos de backend (`feat/refund-query-and-avatar` e
-`feat/authenticated-file-serving`, ambos **não mesclados**) mudaram o contrato em
-três frentes, e o frontend atual **não consegue consumir a API nova**. Esta
-seção é o ponto de partida da spec do frontend.
+## Backlog do frontend — o que ainda falta
 
-### 1. Quebras de contrato a absorver — de uma vez
+O ciclo de 2026-07-29 (`feat/frontend-contract-and-receipt`) absorveu o contrato
+novo, o comprovante autenticado, o badge de status e os ajustes pequenos. **Essa
+branch ainda não foi mesclada** — enquanto isso, a `main` do `Refund-FrontEnd`
+continua incapaz de consumir a API atual.
 
-O `src/features/refunds/schemas/refund.ts` hoje declara `user_id` e `filename`
-como **obrigatórios**. Os dois sumiram das respostas. Concretamente:
+O que resta, em ciclos próprios (um por vez, na ordem do roadmap):
 
-| Antes | Agora |
-|---|---|
-| `user_id: 13` no topo | `user: { id, name, has_avatar }` |
-| `filename: "abc.jpg"` | não existe — o arquivo vem por rota própria |
-| `user.avatar_filename` | `user.has_avatar` (booleano) |
-| login sem `id` | login devolve `id` |
+### 1. Workflow de aprovação na UI
 
-**Não existe ordem de deploy segura**: backend novo com frontend velho falha o
-`.parse` de toda listagem, e o inverso também. Os dois têm de ir juntos.
+Rota de revisão **só para admin**, com o clique do admin indo para lá em vez do
+detalhe; aprovar/rejeitar com **motivo obrigatório na rejeição**; **terceiro card
+na faixa de resumo** (Pendente/Aprovado), adiado desde o restyle. O badge de
+status já existe e é somente leitura. **Decidido:** a tela **não** consome o
+corpo do `PATCH` — ela invalida a query e refaz o `GET`, porque aquela resposta
+tem forma divergente (ver `UC-007` e as pendências).
 
-### 2. Arquivos deixaram de ser públicos — muda como a tela busca imagem
+### 2. Lista de reembolsos com TanStack Table (Item 13)
 
-`getReceiptUrl(filename)` em `src/lib/api.ts` **deixa de existir**, e
-`PageRefundDetails` não pode mais usar `<img src>` direto. O padrão novo:
+Toolbar com filtro por `status` e ordenação por `sort`/`order` **server-side**.
+Agora é honesto: a API tem os três parâmetros. **Sem isso, um toolbar
+client-side filtraria só as linhas da página** — o erro que originou o ciclo de
+consulta da listagem.
 
-```
-fetch("/refunds/{id}/receipt", { headers: { Authorization: `Bearer ${token}` } })
-  -> blob -> URL.createObjectURL -> <img src={blobUrl}>
-  -> URL.revokeObjectURL no cleanup
-```
+### 3. Foto de perfil (upload e exibição)
 
-O mesmo vale para avatares, em `/users/{id}/avatar`. Isso significa **N
-requisições autenticadas por página** numa lista com avatares, e **sem cache do
-browser** — foi uma escolha consciente, com a alternativa (URL assinada) adiada
-para o Item 22.
+`POST`/`DELETE /users/me/avatar`, gradiente como padrão, `has_avatar` decidindo
+entre foto e gradiente, e exibição no Sidebar e na lista. Os schemas já absorvem
+`user.has_avatar`, mas **nenhuma tela renderiza avatar** — exibir antes de
+existir upload custaria N requisições autenticadas por página, sem cache do
+browser. O `src/hooks/useObjectUrl.ts` foi posto na camada compartilhada
+justamente para este ciclo poder reusá-lo sem esbarrar no
+`eslint-plugin-boundaries`. Aqui também se decide o
+`avatar_filename` cru nas respostas de login/upload/remoção (ver pendências).
 
-**O `AuthUser` precisa passar a guardar o `id`** (`src/context/AuthContext.tsx`
-hoje só guarda name/email/role). Sem ele não há como buscar a própria foto.
-
-### 3. Funcionalidades que a API já suporta e a tela ainda não tem
-
-- **Workflow de aprovação.** Badge de status na lista e no detalhe; rota de
-  revisão só para admin, com o clique do admin indo para lá em vez do detalhe;
-  aprovar/rejeitar com motivo obrigatório na rejeição. **Decidido:** a tela
-  **não** consome o corpo do `PATCH` — ela invalida a query e refaz o `GET`,
-  porque aquela resposta tem forma divergente (ver UC-007).
-- **TanStack Table com toolbar** (Item 13). Agora é honesto: a API tem
-  `status`, `sort` e `order` server-side. **Sem isso, um toolbar client-side
-  filtraria só as linhas da página** — o erro que originou o ciclo anterior.
-- **Terceiro card na faixa de resumo** (Pendente/Aprovado), adiado desde o
-  restyle esperando `status`.
-- **Preview do comprovante** com botão de tela cheia, e rota dedicada.
-- **Upload de foto de perfil**, com gradiente como padrão e `has_avatar`
-  decidindo entre foto e gradiente.
-
-### 4. Ajustes pequenos que cabem no mesmo ciclo
-
-- **`per_page` de 6 para 10.** Está em **dois** lugares:
-  `src/router-loaders.ts` (`REFUNDS_PER_PAGE`) e o default de
-  `src/features/refunds/hooks/useRefunds.ts`. Mudar só um deixa loader e hook
-  discordando.
-- **`localStorage` ainda usa type assertion** — `JSON.parse(raw) as AuthUser`
-  não valida a sessão persistida. Vale resolver agora que o `AuthUser` vai
-  mudar de forma de qualquer jeito.
-- **Asserção vazia no `PageHome.test.tsx`** — a metade que diz "reseta a página
-  para 1" não pode falhar. Conserto de uma linha, e o arquivo vai ser tocado.
-- **Rejeição de comprovante por tamanho/extensão** nunca foi vista em runtime.
-- **Contraste nunca auditado com ferramenta** (DevTools/Lighthouse).
-- **"Choose File / No file chosen"** — o input nativo em inglês numa UI em
-  português; decisão nunca tomada.
-- **`avatar_filename` cru nas respostas de login/upload/remoção de avatar** —
-  inconsistente com `has_avatar` dos reembolsos. Decidir aqui se incomoda.
-
-### 5. Armadilhas do frontend que continuam valendo
-
-- `src/components/ui/sidebar.tsx` **foi editado à mão**; regerar pelo CLI
-  reintroduz a escrita de cookie.
-- A altura `h-17.5` da topbar e do cabeçalho da sidebar é **deliberada** — é o
-  que alinha as duas bordas.
-- O CLI do shadcn escreve num diretório literal `./@/` na raiz a cada `add`.
-- `src/test/setup.ts` tem polyfills de jsdom para o Radix Select que parecem
-  não usados e não são.
+As armadilhas do frontend que continuam valendo (`ui/sidebar.tsx` editado à mão,
+a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom em
+`src/test/setup.ts`) estão descritas na seção de pendências abaixo.
 
 ## Pendências e riscos conhecidos
 
@@ -467,7 +477,10 @@ hoje só guarda name/email/role). Sem ele não há como buscar a própria foto.
   resolve para URL nenhuma — o cliente usa `GET /users/{id}/avatar`. As respostas
   de reembolso já convertem para `has_avatar`; estas três não, porque a spec
   daquele ciclo restringiu a conversão de propósito. Não é quebra (o campo é
-  ignorável), é inconsistência. **Decisão em aberto** para o ciclo do frontend.
+  ignorável), é inconsistência. **Decisão em aberto** — o ciclo de 2026-07-29
+  deixou `avatar_filename` deliberadamente **fora** do `loginResponseSchema` (o
+  Zod descarta chaves desconhecidas e não há consumidor sem avatar na tela), de
+  modo que a decisão continua adiada para o ciclo da foto de perfil.
 - **DECIDIDO em 2026-07-29: a tela de revisão NÃO consome o corpo do PATCH.**
   Em vez de alinhar a forma da resposta de `PATCH /refunds/{id}/status` (que
   exigiria mexer no `select_for_update`, compartilhado com a transação da
@@ -475,15 +488,36 @@ hoje só guarda name/email/role). Sem ele não há como buscar a própria foto.
   backend. Isso mantém viva a pendência da forma divergente logo abaixo, agora
   como algo deliberado e sem consumidor.
 
-- **DEPLOY CONJUNTO OBRIGATÓRIO — esta quebra não tem lado seguro.** O ciclo de
-  2026-07-29 tirou `user_id` do topo das respostas de reembolso e o moveu para
-  `user.id`. O Zod do frontend declara `user_id` como **obrigatório**: um backend
-  novo com frontend velho falha o `.parse` em toda listagem. E o inverso falha
-  igual, porque o frontend novo passará a exigir `user`. Diferente do
+- **DEPLOY CONJUNTO OBRIGATÓRIO — esta quebra não tem lado seguro, e continua
+  valendo.** O ciclo de 2026-07-29 tirou `user_id` do topo das respostas de
+  reembolso e o moveu para `user.id`. O Zod do frontend na `main` declara
+  `user_id` como **obrigatório**: um backend novo com frontend velho falha o
+  `.parse` em toda listagem. E o inverso falha igual, porque o frontend da
+  branch `feat/frontend-contract-and-receipt` exige `user`. Diferente do
   `sum_amount_in_cents` do ciclo anterior — que tinha uma ordem segura — **aqui
   não existe nenhuma**. Os dois têm de ser implantados no mesmo momento. Se isso
   não for viável, a alternativa é uma versão de transição devolvendo `user_id`
   **e** `user`, removendo `user_id` só depois.
+  **Situação em 2026-07-29:** o backend já está na `main` (`ef7c60f`); o frontend
+  **não** — a branch com o contrato novo segue sem merge. Implantar o backend
+  isoladamente hoje quebraria a Home de todo usuário.
+- **Efeito colateral esperado do deploy do frontend: todo usuário logado é
+  deslogado uma vez.** O `AuthContext` passou a validar a sessão do
+  `localStorage` com `storedUserSchema`, que exige `id` — campo que as sessões
+  salvas hoje não têm. Não é bug; é a consequência correta de exigir um campo
+  novo. Vale avisar antes de implantar, para não virar chamado de suporte.
+- **NADA DO CICLO DO CONTRATO NOVO FOI VALIDADO EM NAVEGADOR.** A Task 11
+  daquele plano pedia uma passada manual contra a API real e ela **não
+  aconteceu** — é trabalho do dono do repositório, e é o que falta para o ciclo
+  poder ser apresentado como validado. O mínimo a cobrir:
+  - login, listagem, detalhe e criação sem erro de parse do Zod — é o que fecha
+    a pendência "Aberto 1/4" mais abaixo;
+  - o **logout forçado** da sessão antiga, no primeiro carregamento após o
+    deploy;
+  - preview do comprovante em **imagem** e em **PDF**, incluindo a tela cheia;
+  - o badge de status nos **três** valores;
+  - o **404 do comprovante de outro usuário** — não pode vazar bytes nem
+    quebrar a tela.
 - **O endpoint de revisão devolve uma forma diferente das outras.**
   `PATCH /refunds/{id}/status` monta a resposta a partir de
   `RefundStatusRepository.select_for_update`, que continua devolvendo o formato
@@ -517,19 +551,14 @@ hoje só guarda name/email/role). Sem ele não há como buscar a própria foto.
   e promovido durante a verificação ponta a ponta do ciclo de aprovação, junto de
   `validacao.visual@example.com` e seus reembolsos de teste. São descartáveis.
 
-- **Uma asserção vazia no teste do `RefundSearch`.** Em
-  `Refund-FrontEnd/src/pages/PageHome.test.tsx`, o teste da busca com debounce
-  prova de verdade que digitar chega na URL como `?name=…` — essa metade falha
-  se o fluxo quebrar. Já a metade que diz "reseta a página para 1" **não pode
-  falhar**: a fixture nunca começa com `page>=2`, então não há de onde resetar.
-  O ramo correspondente em `PageHome.tsx` (`updateListLocation`) fica sem
-  cobertura real. Conserto de uma linha quando o arquivo for tocado: iniciar o
-  router com `page>=2` antes de digitar e afirmar que o parâmetro `page` some.
-  Achado na revisão final do ciclo, depois que o diário já estava escrito.
-  **Atualização (2026-07-28):** o *comportamento* foi confirmado à mão no
-  navegador — ir para a página 2, digitar na busca, e o `page` sai da URL. Isso
-  não fecha a pendência: o que falta é a **prova automatizada**, e ela é
-  justamente a que impede o ramo de regredir sem ninguém perceber.
+- ~~**Uma asserção vazia no teste do `RefundSearch`.**~~ RESOLVIDO em 2026-07-29,
+  no ciclo do contrato novo: `src/pages/PageHome.test.tsx` passou a iniciar o
+  router em `?page=2` e a afirmar que o parâmetro `page` some depois da busca —
+  o ramo de `updateListLocation` em `PageHome.tsx` finalmente tem cobertura real.
+  **A prova não foi "o teste passa": foi quebrar o ramo de propósito e ver o
+  teste falhar** (a falha lê `"?page=1&name=Ana"`, porque o debounce sempre chama
+  `updateListLocation` com `nextPage=1` e a atribuição incondicional sobrescreve
+  o `page` no lugar). `PageHome.tsx` ficou byte a byte igual.
 - ~~**O restyle inteiro não foi validado em navegador.**~~ RESOLVIDO em
   2026-07-28: o Gabriel percorreu no navegador o checklist derivado destas
   pendências (Notion, `Work → ToBeBetter`). Fecharam contraste no claro e no
@@ -546,7 +575,10 @@ hoje só guarda name/email/role). Sem ele não há como buscar a própria foto.
   marcados, e ambos só passam se o backend real tiver respondido e o Zod tiver
   aceitado o payload — ou seja, a evidência indireta é forte. Mas como o bloco
   não foi marcado explicitamente, fica registrado como aberto em vez de deduzido.
-  Provavelmente basta uma conferência consciente para fechar.
+  Provavelmente basta uma conferência consciente para fechar. **Atualização
+  (2026-07-29): continua aberto.** A spec do ciclo do contrato previa fechá-lo na
+  validação manual daquele ciclo — e essa validação **não aconteceu**. Enquanto
+  ninguém abrir o navegador contra a API real, este item não pode ser baixado.
 - **Aberto 2/4 — contraste nunca foi auditado com ferramenta.** O checklist
   distingue "contraste parece legível" (marcado, olho humano) de "contraste
   auditado no DevTools/Lighthouse" (não marcado). Só a segunda forma produz
@@ -567,7 +599,15 @@ hoje só guarda name/email/role). Sem ele não há como buscar a própria foto.
   `TypeError: target.hasPointerCapture is not a function`. Não remova ao ver que
   "nada usa". Nota de processo: o `AGENTS.md` do frontend pede alinhar
   infraestrutura transversal de teste **antes** de introduzi-la, e esta foi
-  sinalizada depois do fato.
+  sinalizada depois do fato. **O ciclo de 2026-07-29 acertou o processo** — o
+  stub de `URL.createObjectURL`/`revokeObjectURL` foi sinalizado na spec antes de
+  existir — mas produziu uma curiosidade que vale conhecer: **esse stub é um
+  no-op neste ambiente.** O `window.URL` do jsdom 29.1.1 realmente não tem os
+  dois métodos, só que o `URL` **global** sob o Vitest é o do Node, que os
+  implementa (a saída dos testes traz `blob:nodedata:<uuid>`, não o
+  `blob:mock/N` do stub). A guarda `if (!URL.createObjectURL)` nunca dispara.
+  Fica como rede de segurança para ambientes que não os tenham — e a unicidade
+  de que os testes dependem vem da plataforma, não do stub.
 - **`src/components/ui/sidebar.tsx` foi editado à mão.** O `SidebarProvider` do
   shadcn escrevia `document.cookie` incondicionalmente, mesmo controlado por
   fora. A escrita e as duas constantes de cookie foram removidas, com um
@@ -627,9 +667,17 @@ hoje só guarda name/email/role). Sem ele não há como buscar a própria foto.
   `src/features/refunds/api/refundQueries.test.tsx`, movido no Item 8 — prova que
   um response malformado vira `isError` em vez de entrar no cache; o ciclo do
   restyle reexerceu isso ao adicionar `sum_amount_in_cents`). Falta apenas a
-  validação manual contra o backend real de verdade (não mockado).
-- **`localStorage` ainda usa type assertion.** `JSON.parse(raw) as AuthUser` não
-  valida uma sessão persistida; ficou fora do Item 2, restrito a responses HTTP.
+  validação manual contra o backend real de verdade (não mockado). **Segue
+  pendente em 2026-07-29:** o ciclo do contrato novo reescreveu esses schemas
+  inteiros (e passou a exercitá-los contra handlers MSW com a forma nova), mas a
+  passada no navegador contra a API real continua sem acontecer.
+- ~~**`localStorage` ainda usa type assertion.**~~ RESOLVIDO em 2026-07-29:
+  `src/schemas/auth.ts` ganhou `storedUserSchema` e o `AuthContext` passou a usar
+  `safeParse` (não `parse` — uma sessão inválida deve derrubar a sessão, não a
+  aplicação no primeiro render). Fecha a metade do Item 2 que ficara de fora.
+  **O `src/router-loaders.ts` lia o mesmo dado e ficou para trás**, com uma
+  checagem de presença crua; a divergência foi achada só na revisão da branch
+  inteira e corrigida junto (ver a pendência sobre leitores divergentes abaixo).
 - ~~**Runtime visual do Item 3 não validado.**~~ RESOLVIDO em 2026-07-28: login,
   URL direta de detalhe, reload, `?name=`, `?page=`, back/forward, normalização
   de parâmetros inválidos, página de erro de rota e omissão dos valores padrão
@@ -645,6 +693,23 @@ hoje só guarda name/email/role). Sem ele não há como buscar a própria foto.
   arquivo, pelo nome** (`src/components/ui/sidebar.tsx` e
   `src/hooks/use-mobile.ts`), porque são regras de **correção** e um componente
   novo que as viole precisa continuar aparecendo no lint.
+  **Ressalva (2026-07-29): "0 erros" não é um estado que se conquista uma vez.**
+  Entre o merge do restyle e o ciclo do contrato novo, o commit manual `2d07a8d`
+  deixou um import não usado no `Topbar` e a `main` do frontend passou a falhar
+  em `tsc`, `eslint` **e** `npm run build` — sem ninguém notar, porque nenhum
+  ciclo rodou as verificações naquele intervalo. Corrigido pelo `4e53be4`. A
+  lição de processo: **medir o ponto de partida antes de abrir uma branch**, ou
+  o portão de verificação de todas as tasks seguintes não significa nada.
+- **Uma diretiva de lint em `src/hooks/useObjectUrl.ts`.**
+  `// eslint-disable-next-line react-hooks/set-state-in-effect` sobre o
+  `setUrl(null)`. Vale saber como a regra se comporta: ela reporta **no máximo
+  uma violação por corpo de efeito**, então a diretiva silencia o efeito
+  **inteiro** — um `setState` acrescentado mais abaixo naquele mesmo efeito não
+  seria checado. A alternativa proposta na revisão (comparar identidade do blob)
+  esbarra na mesma regra, então trocaria correção por correção, não por um lint
+  mais limpo. Há também uma **janela de um render** em que o hook devolve a URL
+  antiga logo depois de o blob mudar, antes de o efeito rodar; aceita
+  conscientemente.
 
 - ~~**Acessibilidade: labels não associadas ao input.**~~ RESOLVIDO no Item 7:
   `InputText` agora associa `<label htmlFor>`/`id` e o erro via `aria-describedby`.
@@ -682,7 +747,46 @@ hoje só guarda name/email/role). Sem ele não há como buscar a própria foto.
   v7 um elemento é uma **pasta**, então `App.tsx`, `main.tsx`, `router.tsx` e
   `router-loaders.ts` (soltos em `src/`) ficaram **unknown** e não são checados como
   origem de import. São topo da hierarquia (app); mover para uma pasta `app/`
-  resolveria, mas seria churn fora do escopo do Item 9.
+  resolveria, mas seria churn fora do escopo do Item 9. **Confirmado na prática
+  em 2026-07-29:** o plano daquele ciclo afirmava que a regra pegaria um import
+  ao interior da feature vindo do `router-loaders.ts`. **Não pegaria.** O import
+  escrito está correto de qualquer forma (vai pela fachada), mas a rede de
+  segurança alegada não existia — e isso é exatamente o risco desta lacuna:
+  acreditar numa proteção que não está ligada.
 - **Backend retorna 500 (não 404) via 500 genérico?** Verificado que NÃO: o fluxo
   de "não encontrado" já levanta `HttpNotFoundError` → 404. Os 500 vistos no log
   vinham do bug de concorrência (agora corrigido), não do caminho de not-found.
+
+- **Suspeita não confirmada: `ResizeObserver is not defined` em
+  `Sidebar.test.tsx`.** Relatado durante a onda de correções finais do ciclo de
+  2026-07-29 como um flake **dependente da ordem de execução**, supostamente
+  reproduzível também no baseline intocado (`b86d314`). A suíte completa rodou
+  **3× na ponta da branch e não reproduziu**. Fica registrado como suspeita —
+  nem confirmado nem refutado. Se aparecer, o caminho é um polyfill guardado em
+  `src/test/setup.ts`, no mesmo padrão dos que já existem.
+- **`per_page: 10` é literal escrito à mão em `src/test/msw/handlers.ts`.** Não
+  deriva de `REFUNDS_PER_PAGE`, então pode voltar a divergir num ajuste futuro —
+  a mesma classe de problema que o ciclo acabou de fechar no código de produção.
+  Parente disso: o loader stub em `src/pages/PageHome.a11y.test.tsx` ainda
+  devolve `perPage: 6`; é inerte (nada o assere), mas está obsoleto contra o
+  próprio comentário.
+- **`ReceiptPreview` com `refundId=""` renderiza Skeleton para sempre.** O
+  `useReceipt` desabilita a query, e uma query desabilitada do TanStack reporta
+  `isPending: true` indefinidamente. A prop é `string` obrigatória e hoje só a
+  página de detalhe a preenche, então não há caminho real até lá — mas é uma
+  armadilha para o próximo consumidor.
+- **O nome acessível do botão de tela cheia é sem contexto** ("Ver em tela
+  cheia"). Só passa a incomodar se o componente for renderizado mais de uma vez
+  na mesma página — que é exatamente o que uma lista com comprovantes faria.
+- **`AuthContext.test.tsx`: um dos três testes novos já passava antes.** O que
+  restaura uma sessão válida não é vazio (guarda o caminho feliz do
+  `storedUserSchema`), mas a prova de que o `id` realmente se propaga descansa
+  **só** no segundo teste. Vale saber ao mexer nesse arquivo.
+- **O `.venv` do `Refund-api` tem shebangs de um caminho antigo**
+  (`.../React/Refund-api`). Consequência prática: `pytest` e `pylint` só rodam
+  como `.venv/bin/python3 -m pytest` / `-m pylint`, nunca pelos executáveis
+  diretos. É problema de ambiente, não de código — **vale recriar o venv**.
+- **Sobrou mais um usuário de teste no banco:** `task1-verify@example.com`
+  (id 15), criado na verificação do fast-forward do backend. Não existe endpoint
+  de exclusão de usuário. Junta-se a `admin.validacao@example.com` e
+  `validacao.visual@example.com`; todos descartáveis.

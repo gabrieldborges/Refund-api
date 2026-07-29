@@ -2381,3 +2381,419 @@ unitário não prova: um mount é configuração de servidor, não código de ap
   passou limpa; o buraco do `id` no login só apareceu quando alguém perguntou
   "como o cliente busca a própria foto?" — uma pergunta que nenhuma task isolada
   tinha motivo para fazer.
+
+## Ciclo de feature — Contrato novo e comprovante autenticado (2026-07-29)
+
+**Status:** implementação concluída em 2026-07-29. **Não validado em navegador**
+e **não mesclado** — ver "Verificações e limitações".
+
+**Repositórios e branches:** `Refund-FrontEnd`, branch
+`feat/frontend-contract-and-receipt` (`6326606..39e0683`, 17 commits).
+No `Refund-api` o ciclo não mudou código: a única ação foi o **fast-forward** de
+`feat/authenticated-file-serving` para a `main` (`3fa42b2..ef7c60f`, 33
+commits), feito no início para que existisse um contrato único durante todo o
+desenvolvimento.
+
+**Natureza:** sexto ciclo de feature e o primeiro de frontend desde o restyle.
+Executado em 11 tasks com revisão por task, mais uma **revisão da branch
+inteira** no fim. Spec e plano em
+`Refund-FrontEnd/docs/superpowers/{specs,plans}/2026-07-29-frontend-contract-and-receipt*`.
+
+**Item da trilha:** o ciclo não abre item novo. Ele **fecha uma lacuna do Item 2
+(schemas como fronteira)**: aquele item foi restrito a responses HTTP e deixou
+de fora a sessão persistida em `localStorage`, que até aqui era lida com type
+assertion. O **Item 11 (error boundaries)** foi considerado e deixado de fora de
+propósito — o `ReceiptPreview` trata o próprio erro localmente, e um boundary
+sem uma segunda tela de dados para proteger seria abstração prematura.
+
+### Por que estudar
+
+Três ciclos de backend seguidos mudaram o contrato das respostas de reembolso. O
+conteúdo de aprendizado deste ciclo não é "atualizar schemas": é **o que
+acontece com o frontend quando o backend passa a servir bytes em vez de URLs**.
+Um arquivo público é `<img src>` e acabou. Um arquivo autenticado vira
+`fetch` → `Blob` → `createObjectURL` → **`revokeObjectURL`**, e essa última
+etapa introduz no frontend algo que ele quase nunca tem: um **recurso com dono e
+com ciclo de vida**, que precisa ser liberado exatamente uma vez.
+
+Isso colide de frente com a peça que o Item 1 introduziu — um cache que
+**descarta entradas quando quer** (`gcTime`) e as compartilha entre componentes.
+Cache e recurso descartável, juntos, obrigam a decidir *o que* se cacheia.
+
+### Estado anterior
+
+O contrato que o frontend exigia, em
+`Refund-FrontEnd/src/features/refunds/schemas/refund.ts`:
+
+```ts
+const refundBaseSchema = z.object({
+  id, user_id, name, category, amount_in_cents, filename,
+});
+export const refundSchema = refundBaseSchema.extend({ created_at });
+
+// A criação não devolve `created_at`, por isso possui um contrato próprio […]
+export const refundCreateResponseSchema = z.object({
+  type, count: z.literal(1), attributes: refundBaseSchema,
+});
+```
+
+O comprovante era montado por `getReceiptUrl(filename)` em `src/lib/api.ts` e
+consumido por um `<a href target="_blank">` na `PageRefundDetails`. A sessão
+persistida era lida assim, em `src/context/AuthContext.tsx`:
+
+```ts
+return raw ? (JSON.parse(raw) as AuthUser) : null;
+```
+
+E `per_page` estava escrito em **dois** lugares — `src/router-loaders.ts`
+(`const REFUNDS_PER_PAGE = 6`) e o default de `useRefunds` — que podiam divergir
+em silêncio.
+
+### A limitação encontrada
+
+`user_id` e `filename` eram obrigatórios no Zod e **deixaram de existir** nas
+respostas. O `.parse` falharia em **toda** listagem: `useRefunds` cairia em
+`isError` e a Home mostraria "Não foi possível carregar as solicitações" para
+todo usuário. O mesmo no detalhe e na criação. Não é degradação parcial — é a
+tela principal do produto inutilizável.
+
+E não existe ordem de deploy segura: backend novo com frontend velho quebra, e
+frontend novo com backend velho quebra igual, porque o frontend novo passa a
+exigir `user`. Os dois têm de ir juntos.
+
+### Comparação visual
+
+O contrato:
+
+| Antes | Agora |
+|---|---|
+| `user_id: 13` no topo | `user: { id, name, has_avatar }` |
+| `filename: "abc.jpg"` | não existe — o arquivo vem por rota própria |
+| sem `status` | `pending` \| `approved` \| `rejected` |
+| criação sem `created_at` | criação com `created_at` (a API relê a linha) |
+| login sem `id` | login com `id` |
+
+E o eixo do ciclo — quem guarda o quê:
+
+```text
+ERRADO   cache do Query  ->  "blob:…"  (a URL)
+         gcTime descarta a entrada com a URL na tela  ->  imagem quebrada
+         ou mantém a entrada viva sem revogar         ->  vazamento
+         quem revoga? o cache não tem cleanup de componente
+
+CERTO    cache do Query  ->  Blob      (os bytes)
+         cada componente que monta: createObjectURL   (a SUA URL)
+         cleanup do componente:      revokeObjectURL  (exatamente uma vez)
+         bytes reaproveitados pelo cache; ciclo de vida colado ao componente
+```
+
+### Estado ajustado
+
+#### O cache guarda os bytes; o componente guarda a URL
+
+Três peças, com responsabilidades separadas de propósito:
+
+```
+receiptQuery(id)     features/refunds/api/refundQueries.ts  -> cacheia o Blob
+useObjectUrl(blob)   src/hooks/useObjectUrl.ts   (shared)   -> cria/revoga a URL
+ReceiptPreview       features/refunds/components/           -> decide a renderização
+```
+
+```ts
+// src/hooks/useObjectUrl.ts
+export function useObjectUrl(blob: Blob | undefined): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!blob) {
+      setUrl(null);   // sem isto, o hook devolveria uma URL já revogada
+      return;
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [blob]);
+
+  return url;
+}
+```
+
+A assinatura devolve `null` enquanto não há Blob, para o chamador não precisar
+distinguir "carregando" de "sem arquivo" por um valor mágico.
+
+O hook mora em `src/hooks/` (camada *shared*) e **não** dentro de
+`features/refunds` por uma razão concreta: o ciclo da foto de perfil vai precisar
+do mesmo comportamento, e o `eslint-plugin-boundaries` do Item 9 proíbe uma
+feature de importar de outra. Nascendo na feature, o ciclo seguinte esbarraria no
+lint. O hook é genérico — só converte `Blob` em URL; a parte autenticada é
+responsabilidade da query.
+
+A `receiptQuery` é a **única query do projeto sem Zod**, e isso ficou escrito no
+código para não parecer esquecimento: as outras validam JSON; aqui a resposta é
+binária e a fronteira já é o `Content-Type`, derivado pelo backend da extensão
+armazenada. Não há estrutura a parsear.
+
+O `ReceiptPreview` tira proveito disso: `blob.type` já carrega o `Content-Type`,
+então `startsWith("image/")` decide entre `<img>` e `<object type="…pdf">` **sem
+nenhum campo novo no contrato**. E ele cria **uma** URL, passando a mesma string
+para o diálogo de tela cheia — dois donos de um recurso que precisa ser revogado
+uma vez é exatamente como se produz uma imagem quebrada intermitente.
+
+#### Quando o backend remove uma divergência, o frontend remove a compensação
+
+`refundCreateResponseSchema` existia por um motivo documentado: a criação não
+devolvia `created_at`. O backend passou a reler a linha gravada e essa razão
+evaporou. O schema foi **deletado**, não mantido "por segurança":
+
+```ts
+// Um envelope só para detalhe E criação. Até este ciclo a criação tinha
+// contrato próprio, porque a API não devolvia `created_at`; ela passou a reler
+// a linha gravada e as três respostas ficaram idênticas.
+export const refundResponseSchema = z.object({
+  type: z.literal("Refund"),
+  count: z.literal(1),
+  attributes: refundSchema,
+});
+```
+
+Manter os dois seria carregar para sempre a memória de um problema que não
+existe mais — e, pior, dar a impressão de que criação e detalhe ainda divergem.
+
+#### Uma fronteira de schema dispensa fallback lá na frente
+
+O badge de status mapeia os três estados em
+`features/refunds/constants/status.ts`, sem criar token de cor novo:
+
+```ts
+export const REFUND_STATUS: Record<RefundStatus, { label; variant }> = {
+  pending:  { label: "Pendente",  variant: "secondary" },
+  approved: { label: "Aprovado",  variant: "default" },
+  rejected: { label: "Rejeitado", variant: "destructive" },
+};
+```
+
+Na revisão veio a pergunta certa: e se a API devolver um quarto status?
+`REFUND_STATUS[refund.status]` não tem fallback. A resposta é que **não pode
+chegar lá**: `refundStatusSchema` é um `z.enum` e o `refundQueries.ts` usa
+`.parse()`, que **joga**. Um status desconhecido termina a query em `isError` e
+nunca alcança o render. O fallback defensivo seria código morto — e, pior,
+esconderia a quebra de contrato em vez de expô-la.
+
+#### Sessão persistida validada — a metade que faltava do Item 2
+
+```ts
+// src/schemas/auth.ts
+export const storedUserSchema = z.object({ id, name, email, role });
+
+// src/context/AuthContext.tsx — safeParse, não parse: sessão inválida derruba
+// a sessão, não a aplicação no primeiro render.
+const result = storedUserSchema.safeParse(JSON.parse(raw));
+return result.success ? result.data : null;
+```
+
+> **Efeito observável no deploy: todo usuário logado é deslogado uma vez.** As
+> sessões salvas hoje não têm `id` e falham no parse. Não é bug — é a
+> consequência correta de exigir um campo novo, e é preferível ao comportamento
+> anterior, em que um objeto de forma errada passava direto e só quebrava mais
+> tarde, longe da causa.
+
+### Arquivos modificados
+
+**`Refund-FrontEnd`** (17 commits, `6326606..39e0683`):
+
+- **Contrato:** `src/features/refunds/schemas/refund.ts` (`user` aninhado,
+  `status`, `refundCreateResponseSchema` e `refundBaseSchema` removidos,
+  `refundDetailResponseSchema` → `refundResponseSchema`), `src/schemas/auth.ts`
+  (`id` no login + `storedUserSchema`), `src/context/auth-context.ts`
+  (`AuthUser.id`), `src/features/refunds/hooks/useCreateRefund.ts`.
+- **Sessão:** `src/context/AuthContext.tsx` (validação + `queryClient.clear()`
+  no logout) e `src/router-loaders.ts` (`requireSession` validando o mesmo
+  schema e limpando o `localStorage` ao falhar).
+- **Comprovante:** `src/hooks/useObjectUrl.ts` (novo),
+  `src/features/refunds/api/refundQueries.ts` (`refundKeys.receipt` +
+  `receiptQuery`), `src/features/refunds/hooks/useReceipt.ts` (novo),
+  `src/features/refunds/components/ReceiptPreview.tsx` (novo),
+  `src/pages/PageRefundDetails.tsx`; `getReceiptUrl` **removido** de
+  `src/lib/api.ts`.
+- **Badge:** `src/features/refunds/constants/status.ts` (novo),
+  `src/pages/PageHome.tsx` e `src/pages/PageRefundDetails.tsx`.
+- **Ajustes pequenos:** `src/features/refunds/constants/pagination.ts` (novo,
+  `REFUNDS_PER_PAGE = 10`, exportado pela fachada `index.ts`),
+  `src/features/refunds/hooks/useRefunds.ts`, `src/router-loaders.ts`;
+  `src/components/core/Topbar.tsx` (import `Separator` não usado, removido — ver
+  verificações).
+- **Testes:** novos `src/context/AuthContext.test.tsx`,
+  `src/hooks/useObjectUrl.test.ts`,
+  `src/features/refunds/api/receiptQuery.test.tsx`,
+  `src/features/refunds/components/ReceiptPreview.test.tsx`,
+  `src/features/refunds/constants/status.test.ts`, `src/router-loaders.test.ts`;
+  atualizados `src/test/msw/handlers.ts` (contrato novo + handler binário do
+  comprovante), `src/test/setup.ts`, `src/pages/PageHome.test.tsx`,
+  `src/pages/PageRefundDetails.test.tsx` e os testes do shell.
+
+**`Refund-api`:** nenhuma mudança de código. Este diário e o
+[`current-state.md`](plans/current-state.md).
+
+### Verificações e limitações
+
+Na ponta da branch (`39e0683`):
+
+| Comando | Resultado |
+|---|---|
+| `npm run test` | **103 testes em 31 arquivos**, verdes — a suíte foi rodada **três vezes** |
+| `npx tsc -b --noEmit` | exit 0 |
+| `npm run lint` | **0 erros, 0 warnings** |
+| `npm run build` | ok — bundle principal **503,57 kB → 506,00 kB** (+2,43 kB) |
+| `pytest` (`Refund-api`, pós fast-forward) | **178 testes**, verdes |
+| `pylint src` (`Refund-api`) | **10.00/10** |
+
+Duas correções ao que o `current-state.md` afirmava sobre o restyle, ambas
+descobertas aqui:
+
+- **`npm run build` estava quebrado na `main`.** O commit manual `2d07a8d`
+  deixou um import de `Separator` não usado em `src/components/core/Topbar.tsx`,
+  o que fazia `tsc -b --noEmit` sair 2, o `eslint .` reportar 1 erro e o
+  `npm run build` falhar. Não era regressão deste ciclo — era estado da `main`,
+  e teria tornado o portão de verificação de **toda** task deste ciclo sem
+  sentido. Corrigido no commit `4e53be4`.
+- **O aviso de chunk > 500 kB já existia no ponto de partida.** O bundle estava
+  em 503,57 kB antes de qualquer commit deste ciclo. A afirmação de que o
+  restyle terminou "sem o aviso" era verdadeira quando escrita (491,44 kB) e
+  ficou obsoleta.
+
+**Limitações registradas — o que este ciclo NÃO validou:**
+
+- **Nada foi aberto no navegador.** Todas as verificações acima são
+  automatizadas. Continuam **sem validação manual**: o logout forçado das
+  sessões antigas no primeiro carregamento, o preview do comprovante em imagem
+  **e** em PDF (incluindo tela cheia), o badge nos três valores, e o 404 do
+  comprovante de outro usuário. Pelo contrato da trilha, o ciclo **não** pode ser
+  apresentado como totalmente validado.
+- **Consequência direta: a pendência "Aberto 1/4" continua aberta.** O runtime do
+  Item 2 contra a API real dependia justamente dessa passada no navegador.
+- **O deploy conjunto continua obrigatório** e a branch do frontend **não foi
+  mesclada**.
+- **`ResizeObserver` em `Sidebar.test.tsx` (não confirmado).** Durante a onda de
+  correções foi relatado um `ResizeObserver is not defined` dependente da ordem
+  de execução, supostamente reproduzível também no baseline intocado. A suíte
+  completa rodou 3× na ponta e **não** reproduziu. Fica registrado como suspeita,
+  não como resolvido nem como refutado.
+- **O stub de object URL em `src/test/setup.ts` é um no-op neste ambiente.**
+  Verificado: o `window.URL` do jsdom 29.1.1 realmente não tem os dois métodos,
+  mas o `URL` **global** sob o Vitest é o do Node, que os implementa (daí
+  `blob:nodedata:<uuid>` na saída, e não o `blob:mock/N` do stub). A guarda
+  `if (!URL.createObjectURL)` nunca dispara. É inofensivo e continua sendo rede
+  de segurança para ambientes sem os métodos — o comentário foi corrigido para
+  dizer isso.
+- **`per_page: 10` em `src/test/msw/handlers.ts` é literal escrito à mão**, não
+  derivado de `REFUNDS_PER_PAGE`; pode divergir em silêncio num ajuste futuro. O
+  mesmo vale para o `perPage: 6` do loader stub em `PageHome.a11y.test.tsx`
+  (inerte — nada o assere — mas obsoleto).
+- **O `.venv` do `Refund-api` tem shebangs de um caminho antigo**
+  (`.../React/Refund-api`): `pytest` e `pylint` só rodam via
+  `.venv/bin/python3 -m …`. É problema de ambiente, não de código; vale recriar
+  o venv.
+- **Sobrou um usuário de teste no banco**, `task1-verify@example.com` (id 15),
+  criado na verificação do fast-forward. Junta-se aos outros usuários
+  descartáveis já registrados.
+
+### O que a revisão pegou
+
+Onze tasks passaram por revisão individual; duas precisaram de rodada de
+correção. Mas os dois achados mais graves vieram da **revisão da branch
+inteira**, e os dois são da mesma natureza: **fronteira de sessão**.
+
+1. **Dois leitores do mesmo dado persistido tinham divergido.** A Task 3
+   apertou o `AuthContext` para validar a sessão com `storedUserSchema`, e o
+   `router-loaders.ts` continuou com uma checagem de presença crua
+   (`if (!token || !user)`). Uma sessão antiga, sem `id`, **passava** pelo
+   loader, disparava uma requisição autenticada para dentro do cache
+   compartilhado sem ninguém logado, e deixava token e usuário no
+   `localStorage` para sempre. A origem foi o **plano**: a lista de arquivos da
+   Task 3 não incluía o `router-loaders.ts`. Nenhuma revisão por task podia ver
+   isso — cada uma olhava um arquivo por vez.
+2. **`logout()` não limpava o cache do React Query.** Antes deste ciclo isso já
+   era discutível; agora o cache guarda **os bytes de arquivos**. Cenário: A sai,
+   B entra na mesma aba, e dentro dos 30s de `staleTime` o `useReceipt` entrega
+   a B o Blob do comprovante de A. Agravado pela guarda `isError && !blob` (que
+   está correta em si) mantendo o comprovante de A na tela depois do refetch de
+   B dar 403. Conserto: `queryClient.clear()` no logout.
+
+E três correções menores que valem como método:
+
+- **Um teste que não pode falhar não é cobertura — e a prova é quebrar o
+  código.** A metade do `PageHome.test.tsx` que dizia "reseta a página para 1"
+  nunca podia falhar, porque a fixture começava na página 1. Corrigido iniciando
+  o router em `?page=2` e **provado** quebrando o ramo de propósito para ver o
+  teste ficar vermelho. A mesma técnica pegou algo pior no `useObjectUrl`:
+  apagar o `setUrl(null)` deixava **os quatro** testes do hook verdes, com o
+  hook devolvendo uma URL permanentemente revogada. Faltava o caso
+  `Blob → undefined`.
+- **`max-w-3xl` no `DialogContent` não fazia o que parecia.** A base do
+  componente traz `max-w-[calc(100%-2rem)] sm:max-w-lg`; o tailwind-merge não
+  trata um `max-w-3xl` sem modificador como conflitante com `sm:max-w-lg` (o
+  limite de 32rem continuava vencendo acima de 640px), mas **descarta** o
+  `max-w-[calc(100%-2rem)]`, colando o painel nas bordas no mobile. Ou seja: não
+  alargava e ainda quebrava a margem. O certo é `sm:max-w-3xl`.
+- **O badge quase espremeu o nome da linha para fora da tela.** O lado direito
+  da linha da Home passou de ~90px (só o valor) para ~170px (badge + gap +
+  valor), e o `Badge` carrega `shrink-0` + `whitespace-nowrap` — ele nunca cede.
+  Sem `min-w-0` em **cada** nível da cadeia flex até os spans com `truncate`, o
+  overflow aparece nos 390px de referência do `AGENTS.md`.
+
+Duas afirmações do **plano** foram registradas como erradas, sem mudança de
+código:
+
+- O plano dizia que o `eslint-plugin-boundaries` pegaria um import ao interior
+  de uma feature vindo do `src/router-loaders.ts`. **Não pegaria** — aquele é um
+  dos 4 arquivos soltos em `src/` classificados como `unknown` e deixados sem
+  restrição, lacuna que o `current-state.md` já registra. O import escrito está
+  correto de qualquer forma; só a rede de segurança alegada não existia.
+- O plano justificava pôr o handler do comprovante antes de `*/refunds/:id`
+  dizendo que este engoliria `/refunds/1/receipt`. Instanciado e testado com
+  `.parse()`: **não engole** — o segmento `:id` do path-to-regexp nunca atravessa
+  uma `/`. A ordem é higiene inofensiva; o perigo alegado não existe.
+
+### O que lembrar
+
+- **O cache guarda os bytes; o componente guarda a URL.** Uma object URL precisa
+  ser revogada exatamente uma vez. Cachear a URL põe o ciclo de vida de um
+  recurso descartável nas mãos de um garbage collector que não tem cleanup de
+  componente: ou ele descarta cedo (imagem quebrada) ou nunca revoga
+  (vazamento). Cachear os **bytes** deixa cada componente dono da sua própria
+  URL — e os bytes seguem reaproveitados.
+- **Uma URL, um dono.** Se dois lugares criam a URL do mesmo Blob, dois lugares
+  vão revogá-la. O `ReceiptPreview` cria uma e passa a mesma string ao diálogo.
+- **Quando o backend remove uma divergência, o frontend remove a compensação.**
+  Um schema que existe só para descrever uma diferença que acabou não é
+  "segurança" — é uma mentira mantida por inércia. Apague-o.
+- **Uma fronteira de schema dispensa fallback defensivo lá na frente.** Com
+  `z.enum` e `.parse()` que joga, um valor desconhecido termina em `isError` e
+  nunca chega ao render. Adicionar fallback depois da fronteira é código morto
+  que ainda por cima esconderia a quebra de contrato.
+- **Um teste que não pode falhar não é cobertura, e a única prova é quebrar o
+  código de propósito.** Se a suíte continua verde com o ramo mutilado, o teste
+  estava descrevendo, não verificando. Vale para asserção vazia e para o caso de
+  transição que ninguém escreveu.
+- **Dois leitores do mesmo dado persistido divergem em silêncio.** Apertar a
+  validação de um lado (`AuthContext`) sem o outro (`router-loaders.ts`) produz
+  uma porta que continua aberta. Ao endurecer a leitura de algo persistido, a
+  pergunta é "quem mais lê isto?", e a resposta não está no arquivo que você
+  abriu.
+- **Sair não é só limpar o `localStorage`.** O cache de server state é estado de
+  sessão — e a partir deste ciclo ele guarda **arquivos**. Um logout que não o
+  limpa entrega dados do usuário anterior ao próximo que entrar na mesma aba.
+- **`revoke` é a metade do trabalho que ninguém lembra de testar.** O teste
+  natural prova que a URL é criada; o que quebra na prática é ela sobreviver ao
+  Blob, ou morrer antes dele.
+- **Um utilitário que o próximo ciclo vai reusar nasce na camada compartilhada.**
+  Não por elegância: o `eslint-plugin-boundaries` do Item 9 proíbe uma feature
+  importar de outra, então nascer no lugar errado significa mover depois.
+- **Uma classe utilitária sem modificador não "vence" uma com modificador.** No
+  tailwind-merge, `max-w-3xl` não substitui `sm:max-w-lg`, mas **derruba** o
+  `max-w-[calc(100%-2rem)]` da base. Ao sobrescrever classe de um componente do
+  registry, confira o que a base declara — inclusive as responsivas.
+- **A verificação de uma branch começa medindo o ponto de partida.** Um `tsc` e
+  um `eslint` já vermelhos na `main` tornariam sem sentido o portão de qualidade
+  de todas as tasks seguintes. Descobrir isso na task 3 é barato; descobrir no
+  fim, não.
