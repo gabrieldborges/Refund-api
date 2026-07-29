@@ -1,5 +1,5 @@
 from src.models.repositories.interfaces.refunds_repository_interface import RefundsRepositoryInterface
-from src.drivers.interfaces.receipt_storage_interface import ReceiptStorageInterface
+from src.drivers.interfaces.file_storage_interface import FileStorageInterface
 from src.controllers.interfaces.refund_creator_controller_interface import (
     RefundCreatorControllerInterface,
 )
@@ -9,7 +9,7 @@ class RefundCreatorController(RefundCreatorControllerInterface):
     def __init__(
         self,
         refunds_repository: RefundsRepositoryInterface,
-        receipt_storage: ReceiptStorageInterface,
+        receipt_storage: FileStorageInterface,
     ) -> None:
         self.__refunds_repository = refunds_repository
         self.__receipt_storage = receipt_storage
