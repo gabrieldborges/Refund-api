@@ -22,7 +22,8 @@ def mock_repository(hashed_password):
     mock_repo = MagicMock()
     mock_repo.select_user_by_email = AsyncMock(return_value={
         "id": 1, "name": "Gabriel", "email": "gabriel@example.com",
-        "password": hashed_password, "role": "standard"
+        "password": hashed_password, "role": "standard",
+        "avatar_filename": None
     })
     return mock_repo
 
@@ -64,3 +65,14 @@ async def test_login_with_unknown_email_raises_the_same_generic_error():
         await controller.login({"email": "missing@example.com", "password": "whatever"})
 
     assert str(e.value) == "Invalid credentials"
+
+
+# The sidebar needs the picture right after login. Additive and safe in both
+# directions: the frontend's Zod drops unknown keys, so an old client ignores it.
+@pytest.mark.asyncio
+async def test_login_response_includes_the_avatar_filename(mock_repository):
+    controller = UserLoginController(mock_repository)
+
+    response = await controller.login({"email": "gabriel@example.com", "password": "senha12345"})
+
+    assert "avatar_filename" in response

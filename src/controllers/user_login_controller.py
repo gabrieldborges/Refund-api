@@ -29,5 +29,6 @@ class UserLoginController(UserLoginControllerInterface):
             "name": user["name"],
             "email": user["email"],
             "role": user["role"],
+            "avatar_filename": user["avatar_filename"],
             "token": token,
         }
