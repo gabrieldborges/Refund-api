@@ -8,5 +8,9 @@ class FileStorageInterface(ABC):
         pass
 
     @abstractmethod
+    def read(self, filename: str) -> bytes:
+        pass
+
+    @abstractmethod
     def delete(self, filename: str) -> None:
         pass

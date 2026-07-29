@@ -20,6 +20,16 @@ class FileStorage(FileStorageInterface):
 
         return unique_filename
 
+    def read(self, filename: str) -> bytes:
+        # Returns bytes rather than a path on purpose: a path would assert that
+        # the file lives on a local filesystem, which is exactly the claim the
+        # object-storage item (22) will invalidate. The 4MB upload ceiling keeps
+        # holding a whole file in memory cheap.
+        path = os.path.join(self.__directory, filename)
+
+        with open(path, "rb") as file:
+            return file.read()
+
     def delete(self, filename: str) -> None:
         path = os.path.join(self.__directory, filename)
         if os.path.exists(path):

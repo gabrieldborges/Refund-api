@@ -1,3 +1,4 @@
+import pytest
 from src.drivers.file_storage import FileStorage
 
 
@@ -52,3 +53,20 @@ def test_delete_removes_the_file(tmp_path):
 # succeeded.
 def test_delete_is_silent_when_the_file_does_not_exist(tmp_path):
     FileStorage(str(tmp_path)).delete("nao-existe.jpg")
+
+
+def test_read_returns_the_stored_bytes(tmp_path):
+    storage = FileStorage(str(tmp_path))
+    filename = storage.save("comprovante.jpg", b"conteudo binario")
+
+    assert storage.read(filename) == b"conteudo binario"
+
+
+# The driver lets FileNotFoundError surface instead of inventing a domain error:
+# it does not know what "missing" means to whoever called it. The controller
+# translates it into the 404 that fits its use case.
+def test_read_raises_when_the_file_does_not_exist(tmp_path):
+    storage = FileStorage(str(tmp_path))
+
+    with pytest.raises(FileNotFoundError):
+        storage.read("nao-existe.jpg")
