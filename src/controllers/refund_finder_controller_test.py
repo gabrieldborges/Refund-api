@@ -9,7 +9,9 @@ from .refund_finder_controller import RefundFinderController
 @pytest.fixture
 def mock_repository():
     mock_repo = MagicMock()
-    mock_repo.select_refund_by_id = AsyncMock(return_value={"id": 1, "user_id": 7, "name": "Ana"})
+    mock_repo.select_refund_by_id = AsyncMock(
+        return_value={"id": 1, "name": "Ana", "user": {"id": 7, "name": "Ana", "avatar_filename": None}}
+    )
     return mock_repo
 
 
@@ -58,7 +60,10 @@ async def test_created_at_is_serialized_to_an_iso_string():
     raw_datetime = datetime(2026, 7, 12, 10, 30, 0)
     mock_repo = MagicMock()
     mock_repo.select_refund_by_id = AsyncMock(
-        return_value={"id": 1, "user_id": 7, "created_at": raw_datetime}
+        return_value={
+            "id": 1, "created_at": raw_datetime,
+            "user": {"id": 7, "name": "Ana", "avatar_filename": None},
+        }
     )
     controller = RefundFinderController(mock_repo)
 
@@ -74,7 +79,10 @@ async def test_created_at_is_serialized_to_an_iso_string():
 @pytest.mark.asyncio
 async def test_detail_response_includes_the_status(mock_repository):
     mock_repository.select_refund_by_id = AsyncMock(
-        return_value={"id": 1, "user_id": 7, "status": "approved", "filename": "a.jpg"}
+        return_value={
+            "id": 1, "status": "approved", "filename": "a.jpg",
+            "user": {"id": 7, "name": "Ana", "avatar_filename": None},
+        }
     )
     controller = RefundFinderController(mock_repository)
 

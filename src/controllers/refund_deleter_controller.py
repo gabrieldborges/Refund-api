@@ -21,7 +21,7 @@ class RefundDeleterController(RefundDeleterControllerInterface):
 
         # Same rule as RefundFinderController: 404 for both "doesn't exist" and
         # "not yours", never a 403 that would confirm the id is real.
-        if not refund or (role != "admin" and refund["user_id"] != user_id):
+        if not refund or (role != "admin" and refund["user"]["id"] != user_id):
             raise HttpNotFoundError("Refund not found")
 
         # BR-015: only a pending refund can be deleted. After a decision the

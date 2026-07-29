@@ -61,10 +61,13 @@ async def test_select_refunds_returns_items_total_and_sum(mock_connection, mock_
     # Arrange: simulate a database row. In SQLAlchemy Core, each row has _mapping,
     # which behaves like a column->value dict; the repository converts that into a dict.
     # A real joined row always carries user_name/avatar_filename from the JOIN, on
-    # top of the refund's own columns and its (unlabelled) user_id.
+    # top of the refund's own columns and its (unlabelled) user_id. "name" and
+    # "user_name" are deliberately DIFFERENT values here: if __to_refund ever read
+    # the wrong one (the exact collision the label exists to prevent), this test
+    # must fail instead of passing by coincidence.
     row = MagicMock()
     row._mapping = {
-        "id": 1, "user_id": 1, "name": "Ana", "category": "food",
+        "id": 1, "user_id": 1, "name": "Almoço", "category": "food",
         "amount_in_cents": 1000, "filename": "receipt.jpg", "status": "pending",
         "created_at": "2026-07-29", "user_name": "Ana", "avatar_filename": "ana.png",
     }
@@ -85,7 +88,7 @@ async def test_select_refunds_returns_items_total_and_sum(mock_connection, mock_
     assert total == 1
     assert total_amount == 1000
     assert refunds == [{
-        "id": 1, "name": "Ana", "category": "food", "amount_in_cents": 1000,
+        "id": 1, "name": "Almoço", "category": "food", "amount_in_cents": 1000,
         "filename": "receipt.jpg", "status": "pending", "created_at": "2026-07-29",
         "user": {"id": 1, "name": "Ana", "avatar_filename": "ana.png"},
     }]
@@ -110,12 +113,15 @@ async def test_select_refunds_returns_zero_sum_when_there_are_no_rows(mock_conne
 
 
 # Happy path: looking up an existing id returns the refund as a dict, with the
-# requester nested under "user" instead of a bare user_id.
+# requester nested under "user" instead of a bare user_id. "name" and "user_name"
+# are deliberately different values so a swap between the two in __to_refund
+# (the exact bug the "user_name" label exists to prevent) would fail this test
+# instead of passing unnoticed.
 @pytest.mark.asyncio
 async def test_select_refund_by_id_found(mock_connection, mock_db):
     row = MagicMock()
     row._mapping = {
-        "id": 1, "user_id": 1, "name": "Ana", "category": "food",
+        "id": 1, "user_id": 1, "name": "Almoço", "category": "food",
         "amount_in_cents": 1000, "filename": "receipt.jpg", "status": "pending",
         "created_at": "2026-07-29", "user_name": "Ana", "avatar_filename": "ana.png",
     }
@@ -128,7 +134,7 @@ async def test_select_refund_by_id_found(mock_connection, mock_db):
     refund = await repository.select_refund_by_id(1)
 
     assert refund == {
-        "id": 1, "name": "Ana", "category": "food", "amount_in_cents": 1000,
+        "id": 1, "name": "Almoço", "category": "food", "amount_in_cents": 1000,
         "filename": "receipt.jpg", "status": "pending", "created_at": "2026-07-29",
         "user": {"id": 1, "name": "Ana", "avatar_filename": "ana.png"},
     }
@@ -184,16 +190,37 @@ async def test_delete_refund_filters_on_pending_status(mock_connection, mock_db)
 
 
 # The requester's name and picture come from a JOIN, not from a query per row:
-# an admin listing 10 refunds must cost one round trip, not eleven.
+# an admin listing 10 refunds must cost one round trip, not eleven. This also
+# checks the returned shape actually nests the requester under "user" — asserting
+# only "JOIN users" in the emitted SQL would still pass even if the nesting in
+# __to_refund were deleted entirely.
 @pytest.mark.asyncio
 async def test_select_refunds_joins_users_and_nests_the_requester(mock_connection, mock_db):
-    repository = RefundsRepository(mock_connection)
+    row = MagicMock()
+    # "name" and "user_name" are deliberately different values, same reasoning
+    # as the other fixtures: a swap between them must fail this test.
+    row._mapping = {
+        "id": 1, "user_id": 5, "name": "Almoço", "category": "food",
+        "amount_in_cents": 1000, "filename": "receipt.jpg", "status": "pending",
+        "created_at": "2026-07-29", "user_name": "Ana", "avatar_filename": "ana.png",
+    }
+    totals_result = MagicMock()
+    totals_result.one = MagicMock(return_value=(1, 1000))
+    fetch_result = MagicMock()
+    fetch_result.fetchall = MagicMock(return_value=[row])
+    mock_db.session.execute = AsyncMock(side_effect=[totals_result, fetch_result])
 
-    await repository.select_refunds(page=1, per_page=10)
+    repository = RefundsRepository(mock_connection)
+    refunds, _, _ = await repository.select_refunds(page=1, per_page=10)
 
     statements = [str(call[0][0]) for call in mock_db.session.execute.call_args_list]
     rows_statement = statements[-1]
     assert "JOIN users" in rows_statement
+    assert refunds == [{
+        "id": 1, "name": "Almoço", "category": "food", "amount_in_cents": 1000,
+        "filename": "receipt.jpg", "status": "pending", "created_at": "2026-07-29",
+        "user": {"id": 5, "name": "Ana", "avatar_filename": "ana.png"},
+    }]
 
 
 # The count/sum query needs nothing from users, so joining there would be work
@@ -226,6 +253,18 @@ async def test_sort_and_order_reach_the_order_by(mock_connection, mock_db):
 
     rows_statement = str(mock_db.session.execute.call_args_list[-1][0][0])
     assert "ORDER BY refunds.amount_in_cents ASC" in rows_statement
+
+
+# Only "asc" flips the direction; any other order value (including "desc" itself)
+# must fall back to descending, covered here for the explicit "desc" case.
+@pytest.mark.asyncio
+async def test_sort_and_order_reach_the_order_by_desc(mock_connection, mock_db):
+    repository = RefundsRepository(mock_connection)
+
+    await repository.select_refunds(page=1, per_page=10, sort="amount_in_cents", order="desc")
+
+    rows_statement = str(mock_db.session.execute.call_args_list[-1][0][0])
+    assert "ORDER BY refunds.amount_in_cents DESC" in rows_statement
 
 
 # Omitting them must preserve today's behaviour exactly.

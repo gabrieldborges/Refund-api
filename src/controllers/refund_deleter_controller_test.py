@@ -10,7 +10,10 @@ from .refund_deleter_controller import RefundDeleterController
 def mock_repository():
     mock_repo = MagicMock()
     mock_repo.select_refund_by_id = AsyncMock(
-        return_value={"id": 1, "user_id": 7, "filename": "abc.jpg", "status": "pending"}
+        return_value={
+            "id": 1, "filename": "abc.jpg", "status": "pending",
+            "user": {"id": 7, "name": "Ana", "avatar_filename": None},
+        }
     )
     # Default: the row was actually deleted (the common, race-free case).
     mock_repo.delete_refund = AsyncMock(return_value=1)
@@ -75,7 +78,10 @@ async def test_missing_refund_raises_not_found(mock_storage):
 @pytest.mark.asyncio
 async def test_deleting_a_decided_refund_is_rejected(mock_repository, mock_storage):
     mock_repository.select_refund_by_id = AsyncMock(
-        return_value={"id": 1, "user_id": 7, "status": "approved", "filename": "abc.jpg"}
+        return_value={
+            "id": 1, "status": "approved", "filename": "abc.jpg",
+            "user": {"id": 7, "name": "Ana", "avatar_filename": None},
+        }
     )
     controller = RefundDeleterController(mock_repository, mock_storage)
 
@@ -89,7 +95,10 @@ async def test_deleting_a_decided_refund_is_rejected(mock_repository, mock_stora
 @pytest.mark.asyncio
 async def test_deleting_a_pending_refund_still_works(mock_repository, mock_storage):
     mock_repository.select_refund_by_id = AsyncMock(
-        return_value={"id": 1, "user_id": 7, "status": "pending", "filename": "abc.jpg"}
+        return_value={
+            "id": 1, "status": "pending", "filename": "abc.jpg",
+            "user": {"id": 7, "name": "Ana", "avatar_filename": None},
+        }
     )
     controller = RefundDeleterController(mock_repository, mock_storage)
 

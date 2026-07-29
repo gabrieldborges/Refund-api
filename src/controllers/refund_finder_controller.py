@@ -15,7 +15,7 @@ class RefundFinderController(RefundFinderControllerInterface):
         # 404 both when the refund doesn't exist AND when it belongs to someone else —
         # a 403 here would confirm "this id exists, it's just not yours", letting an
         # attacker enumerate valid refund ids.
-        if not refund or (role != "admin" and refund["user_id"] != user_id):
+        if not refund or (role != "admin" and refund["user"]["id"] != user_id):
             raise HttpNotFoundError("Refund not found")
 
         return self.__format_response(refund)
