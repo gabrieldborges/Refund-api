@@ -67,3 +67,27 @@ async def test_unknown_user_raises_not_found(mock_repository, mock_storage):
         await controller.upload(user_id=999, original_filename="foto.jpg", content=b"x")
 
     mock_storage.save.assert_not_called()
+
+
+# The order of these three calls is the whole point of the task: deleting the
+# old file before the row points at the new one would leave the user with no
+# picture at all if update_avatar failed, instead of merely leaking a file.
+# Individual assert_called_once_with checks can't catch a reordering, so this
+# pins the sequence via a shared call log across the three mocks.
+@pytest.mark.asyncio
+async def test_upload_saves_and_updates_before_deleting_the_previous_file(
+    mock_repository, mock_storage
+):
+    mock_repository.select_user_by_id = AsyncMock(
+        return_value={"id": 7, "name": "Gabriel", "avatar_filename": "antiga.jpg"}
+    )
+    manager = MagicMock()
+    manager.attach_mock(mock_storage.save, "save")
+    manager.attach_mock(mock_repository.update_avatar, "update_avatar")
+    manager.attach_mock(mock_storage.delete, "delete")
+    controller = AvatarUploaderController(mock_repository, mock_storage)
+
+    await controller.upload(user_id=7, original_filename="foto.jpg", content=b"x")
+
+    call_order = [call[0] for call in manager.mock_calls]
+    assert call_order == ["save", "update_avatar", "delete"]

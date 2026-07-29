@@ -55,3 +55,20 @@ async def test_unknown_user_raises_not_found(mock_repository, mock_storage):
 
     with pytest.raises(HttpNotFoundError):
         await controller.remove(user_id=999)
+
+
+# Same ordering guarantee as the uploader: clearing the column before deleting
+# the file means a crash mid-operation leaves a leaked file at worst, never a
+# row pointing at a file that no longer exists. Pin the sequence via a shared
+# call log, since separate assert_called_once_with checks don't see order.
+@pytest.mark.asyncio
+async def test_remove_updates_before_deleting_the_file(mock_repository, mock_storage):
+    manager = MagicMock()
+    manager.attach_mock(mock_repository.update_avatar, "update_avatar")
+    manager.attach_mock(mock_storage.delete, "delete")
+    controller = AvatarRemoverController(mock_repository, mock_storage)
+
+    await controller.remove(user_id=7)
+
+    call_order = [call[0] for call in manager.mock_calls]
+    assert call_order == ["update_avatar", "delete"]
