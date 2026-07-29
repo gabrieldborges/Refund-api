@@ -27,11 +27,19 @@ class RefundCreatorController(RefundCreatorControllerInterface):
 
         refund_id = await self.__refunds_repository.insert_refund(refund_info)
 
-        return self.__format_response(refund_id, refund_info)
+        # Re-reading gives the columns the database filled in (status) and the
+        # joined requester, so this response has the same shape as GET.
+        refund = await self.__refunds_repository.select_refund_by_id(refund_id)
 
-    def __format_response(self, refund_id: int, refund_info: dict) -> dict:
+        return self.__format_response(refund)
+
+    def __format_response(self, refund: dict) -> dict:
+        created_at = refund.get("created_at")
         return {
             "type": "Refund",
             "count": 1,
-            "attributes": {"id": refund_id, **refund_info}
+            "attributes": {
+                **refund,
+                "created_at": created_at.isoformat() if created_at else None,
+            },
         }

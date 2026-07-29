@@ -17,13 +17,17 @@ class RefundListerController(RefundListerControllerInterface):
         user_id: int,
         role: str,
         name: Optional[str] = None,
+        status: Optional[str] = None,
+        sort: Optional[str] = None,
+        order: Optional[str] = None,
     ) -> dict:
         # Authorization rule lives here, not in the repository: an admin can see
         # everyone's refunds (no user_id filter), a standard user only their own.
         filter_user_id = None if role == "admin" else user_id
 
         refunds, total, total_amount = await self.__refunds_repository.select_refunds(
-            page=page, per_page=per_page, name=name, user_id=filter_user_id
+            page=page, per_page=per_page, name=name, user_id=filter_user_id,
+            status=status, sort=sort, order=order,
         )
 
         return self.__format_response(refunds, total, total_amount, page, per_page)

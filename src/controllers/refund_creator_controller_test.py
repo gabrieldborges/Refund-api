@@ -9,6 +9,15 @@ from .refund_creator_controller import RefundCreatorController
 def mock_repository():
     mock_repo = MagicMock()
     mock_repo.insert_refund = AsyncMock(return_value=1)
+    # create() re-reads the written row after insert, so the fixture needs to
+    # provide it too (real shape: status from the DB default, nested requester).
+    mock_repo.select_refund_by_id = AsyncMock(
+        return_value={
+            "id": 1, "name": "Ana Silva", "category": "food", "amount_in_cents": 4590,
+            "filename": "uuid-generated-name.jpg", "status": "pending", "created_at": None,
+            "user": {"id": 7, "name": "Ana Silva", "avatar_filename": None},
+        }
+    )
     return mock_repo
 
 
@@ -61,3 +70,28 @@ async def test_create_always_uses_the_authenticated_user_id(mock_repository, moc
 
     inserted = mock_repository.insert_refund.await_args.args[0]
     assert inserted["user_id"] == 7
+
+
+# The create response must match what GET returns, including status and the
+# nested user. Building it from the input dict instead would give three
+# different shapes for the same resource — and the frontend reuses one schema
+# for all three.
+@pytest.mark.asyncio
+async def test_create_returns_the_row_it_wrote(mock_repository, mock_storage):
+    mock_repository.select_refund_by_id = AsyncMock(
+        return_value={
+            "id": 1, "name": "Almoço", "category": "food", "amount_in_cents": 1000,
+            "filename": "a.jpg", "status": "pending", "created_at": None,
+            "user": {"id": 7, "name": "Gabriel", "avatar_filename": None},
+        }
+    )
+    controller = RefundCreatorController(mock_repository, mock_storage)
+
+    response = await controller.create(
+        {"name": "Almoço", "category": "food", "amount": 10.0, "filename": "a.jpg", "content": b"x"},
+        user_id=7,
+    )
+
+    mock_repository.select_refund_by_id.assert_awaited_once_with(1)
+    assert response["attributes"]["status"] == "pending"
+    assert response["attributes"]["user"]["name"] == "Gabriel"

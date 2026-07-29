@@ -8,8 +8,26 @@ from .refund_lister_controller import RefundListerController
 @pytest.fixture
 def mock_repository():
     mock_repo = MagicMock()
-    # select_refunds now returns (rows, total, total_amount_in_cents).
-    mock_repo.select_refunds = AsyncMock(return_value=([{"id": 1}, {"id": 2}], 2, 19290))
+    # select_refunds now returns (rows, total, total_amount_in_cents), with each
+    # row carrying the nested requester (real shape produced by Task 10's join).
+    mock_repo.select_refunds = AsyncMock(
+        return_value=(
+            [
+                {
+                    "id": 1, "name": "Almoço", "category": "food", "amount_in_cents": 1000,
+                    "filename": "a.jpg", "status": "pending", "created_at": None,
+                    "user": {"id": 7, "name": "Ana", "avatar_filename": None},
+                },
+                {
+                    "id": 2, "name": "Uber", "category": "transport", "amount_in_cents": 2000,
+                    "filename": "b.jpg", "status": "approved", "created_at": None,
+                    "user": {"id": 8, "name": "Bob", "avatar_filename": None},
+                },
+            ],
+            2,
+            19290,
+        )
+    )
     return mock_repo
 
 
@@ -22,7 +40,8 @@ async def test_standard_user_lists_only_their_own_refunds(mock_repository):
     await controller.list(page=1, per_page=10, user_id=7, role="standard")
 
     mock_repository.select_refunds.assert_awaited_once_with(
-        page=1, per_page=10, name=None, user_id=7
+        page=1, per_page=10, name=None, user_id=7,
+        status=None, sort=None, order=None,
     )
 
 
@@ -35,7 +54,8 @@ async def test_admin_lists_every_users_refunds(mock_repository):
     await controller.list(page=1, per_page=10, user_id=7, role="admin")
 
     mock_repository.select_refunds.assert_awaited_once_with(
-        page=1, per_page=10, name=None, user_id=None
+        page=1, per_page=10, name=None, user_id=None,
+        status=None, sort=None, order=None,
     )
 
 
@@ -46,7 +66,8 @@ async def test_list_forwards_the_name_search_term(mock_repository):
     await controller.list(page=1, per_page=10, user_id=7, role="standard", name="Ana")
 
     mock_repository.select_refunds.assert_awaited_once_with(
-        page=1, per_page=10, name="Ana", user_id=7
+        page=1, per_page=10, name="Ana", user_id=7,
+        status=None, sort=None, order=None,
     )
 
 
@@ -119,3 +140,20 @@ async def test_list_items_include_the_status(mock_repository):
     response = await controller.list(page=1, per_page=10, user_id=7, role="admin")
 
     assert [item["status"] for item in response["attributes"]] == ["pending", "approved"]
+
+
+# The Home's filter bar and sortable columns rely on the controller forwarding
+# status/sort/order straight through to the repository, alongside the existing filters.
+@pytest.mark.asyncio
+async def test_list_forwards_status_sort_and_order_to_the_repository(mock_repository):
+    controller = RefundListerController(mock_repository)
+
+    await controller.list(
+        page=1, per_page=10, user_id=7, role="admin",
+        status="pending", sort="amount_in_cents", order="asc",
+    )
+
+    mock_repository.select_refunds.assert_awaited_once_with(
+        page=1, per_page=10, name=None, user_id=None,
+        status="pending", sort="amount_in_cents", order="asc",
+    )
