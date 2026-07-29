@@ -344,6 +344,30 @@ completo e obrigatório está em
 
 ## Pendências e riscos conhecidos
 
+- **DECIDIDO em 2026-07-29, ainda NÃO implementado: nenhum arquivo será servido
+  sem autenticação.** Hoje `/receipts` e `/avatars` são mounts estáticos fora da
+  autenticação — conferido: `GET /receipts/<uuid>` sem token nenhum responde
+  **200**. Os nomes são UUIDv4, então na prática é uma "URL-capacidade": quem vê
+  o link uma vez mantém acesso para sempre, mesmo perdendo acesso ao reembolso.
+  Gabriel decidiu fechar os dois. Isso é um **ciclo de backend que precisa vir
+  antes do ciclo do frontend**, porque o preview do comprovante é implementado de
+  formas completamente diferentes conforme a resposta: com mount público, um
+  `<img src>` simples resolve; sem ele, o frontend precisa de `fetch` com token →
+  `blob URL` → `revokeObjectURL` no cleanup. Escopo previsto: remover os dois
+  mounts, criar `GET /refunds/{id}/receipt` e `GET /users/{id}/avatar`
+  autenticados, atualizar ADR-003, os UCs e o Postman. **Decisão de autorização
+  em aberto:** quem pode ver o avatar de quem — se for só o próprio usuário, a
+  lista do admin não mostra avatar de ninguém e o campo no objeto `user` perde
+  a razão de existir. **Alternativa não escolhida, registrada:** URL assinada de
+  vida curta preservaria a privacidade sem custar N fetches por página (é
+  território do Item 22).
+- **DECIDIDO em 2026-07-29: a tela de revisão NÃO consome o corpo do PATCH.**
+  Em vez de alinhar a forma da resposta de `PATCH /refunds/{id}/status` (que
+  exigiria mexer no `select_for_update`, compartilhado com a transação da
+  aprovação), o frontend invalida a query e refaz o `GET`. Nenhuma mudança de
+  backend. Isso mantém viva a pendência da forma divergente logo abaixo, agora
+  como algo deliberado e sem consumidor.
+
 - **DEPLOY CONJUNTO OBRIGATÓRIO — esta quebra não tem lado seguro.** O ciclo de
   2026-07-29 tirou `user_id` do topo das respostas de reembolso e o moveu para
   `user.id`. O Zod do frontend declara `user_id` como **obrigatório**: um backend
