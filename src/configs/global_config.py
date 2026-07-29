@@ -6,6 +6,7 @@ database_info = {
 
 upload_info = {
     "UPLOAD_DIR": os.getenv("UPLOAD_DIR", "uploads/receipts"),
+    "AVATAR_DIR": os.getenv("AVATAR_DIR", "uploads/avatars"),
     "MAX_FILE_SIZE_BYTES": 4 * 1024 * 1024,
 }
 

@@ -13,6 +13,7 @@ Crie um `.env` na raiz do projeto:
 ```env
 DATABASE_URL=postgresql+asyncpg://usuario:senha@host/database?ssl=require
 UPLOAD_DIR=uploads/receipts
+AVATAR_DIR=uploads/avatars
 JWT_SECRET=uma-chave-secreta-aleatoria
 JWT_ALGORITHM=HS256
 JWT_EXPIRATION_HOURS=8

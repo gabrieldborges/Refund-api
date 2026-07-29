@@ -27,6 +27,7 @@ app.add_middleware(
 )
 
 app.mount("/receipts", StaticFiles(directory=upload_info["UPLOAD_DIR"]), name="receipts")
+app.mount("/avatars", StaticFiles(directory=upload_info["AVATAR_DIR"]), name="avatars")
 
 app.include_router(auth_routes)
 app.include_router(refund_routes)
