@@ -15,6 +15,9 @@ class RefundsRepositoryInterface(ABC):
         per_page: int,
         name: Optional[str] = None,
         user_id: Optional[int] = None,
+        status: Optional[str] = None,
+        sort: Optional[str] = None,
+        order: Optional[str] = None,
     ) -> tuple[list[dict], int, int]:
         pass
 

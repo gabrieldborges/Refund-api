@@ -21,6 +21,12 @@ def mock_db():
     execute_result = MagicMock()
     # Simulates the return of an INSERT: SQLAlchemy exposes the generated PK here.
     execute_result.inserted_primary_key = [1]
+    # select_refunds always makes two round trips (totals, then rows) against the
+    # same execute() mock. Tests that don't care about the actual numbers (e.g. the
+    # JOIN/sort/order assertions, which only inspect the emitted SQL) still need
+    # both calls to resolve without raising, hence these empty-but-valid defaults.
+    execute_result.one = MagicMock(return_value=(0, 0))
+    execute_result.fetchall = MagicMock(return_value=[])
     # AsyncMock because in the real code these methods are called with "await".
     db.session.execute = AsyncMock(return_value=execute_result)
     db.session.commit = AsyncMock()
@@ -54,8 +60,14 @@ async def test_insert_refund_returns_the_new_id(mock_connection, mock_db):
 async def test_select_refunds_returns_items_total_and_sum(mock_connection, mock_db):
     # Arrange: simulate a database row. In SQLAlchemy Core, each row has _mapping,
     # which behaves like a column->value dict; the repository converts that into a dict.
+    # A real joined row always carries user_name/avatar_filename from the JOIN, on
+    # top of the refund's own columns and its (unlabelled) user_id.
     row = MagicMock()
-    row._mapping = {"id": 1, "user_id": 1, "name": "Ana"}
+    row._mapping = {
+        "id": 1, "user_id": 1, "name": "Ana", "category": "food",
+        "amount_in_cents": 1000, "filename": "receipt.jpg", "status": "pending",
+        "created_at": "2026-07-29", "user_name": "Ana", "avatar_filename": "ana.png",
+    }
     fetch_result = MagicMock()
     fetch_result.fetchall = MagicMock(return_value=[row])
     # count() and sum() now share a single query, so its result exposes .one() ->
@@ -72,7 +84,11 @@ async def test_select_refunds_returns_items_total_and_sum(mock_connection, mock_
 
     assert total == 1
     assert total_amount == 1000
-    assert refunds == [{"id": 1, "user_id": 1, "name": "Ana"}]
+    assert refunds == [{
+        "id": 1, "name": "Ana", "category": "food", "amount_in_cents": 1000,
+        "filename": "receipt.jpg", "status": "pending", "created_at": "2026-07-29",
+        "user": {"id": 1, "name": "Ana", "avatar_filename": "ana.png"},
+    }]
 
 
 # The sum must cover every refund matching the filter, not just the page that
@@ -93,11 +109,16 @@ async def test_select_refunds_returns_zero_sum_when_there_are_no_rows(mock_conne
     assert total_amount == 0
 
 
-# Happy path: looking up an existing id returns the refund as a dict.
+# Happy path: looking up an existing id returns the refund as a dict, with the
+# requester nested under "user" instead of a bare user_id.
 @pytest.mark.asyncio
 async def test_select_refund_by_id_found(mock_connection, mock_db):
     row = MagicMock()
-    row._mapping = {"id": 1, "name": "Ana"}
+    row._mapping = {
+        "id": 1, "user_id": 1, "name": "Ana", "category": "food",
+        "amount_in_cents": 1000, "filename": "receipt.jpg", "status": "pending",
+        "created_at": "2026-07-29", "user_name": "Ana", "avatar_filename": "ana.png",
+    }
     result = MagicMock()
     # fetchone returns a row -> refund found.
     result.fetchone = MagicMock(return_value=row)
@@ -106,7 +127,11 @@ async def test_select_refund_by_id_found(mock_connection, mock_db):
     repository = RefundsRepository(mock_connection)
     refund = await repository.select_refund_by_id(1)
 
-    assert refund == {"id": 1, "name": "Ana"}
+    assert refund == {
+        "id": 1, "name": "Ana", "category": "food", "amount_in_cents": 1000,
+        "filename": "receipt.jpg", "status": "pending", "created_at": "2026-07-29",
+        "user": {"id": 1, "name": "Ana", "avatar_filename": "ana.png"},
+    }
 
 
 # "Not found" path: when the database returns no row, the method returns None.
@@ -156,3 +181,73 @@ async def test_delete_refund_filters_on_pending_status(mock_connection, mock_db)
     statement = str(mock_db.session.execute.call_args[0][0])
     assert "status" in statement
     assert deleted_count == 0
+
+
+# The requester's name and picture come from a JOIN, not from a query per row:
+# an admin listing 10 refunds must cost one round trip, not eleven.
+@pytest.mark.asyncio
+async def test_select_refunds_joins_users_and_nests_the_requester(mock_connection, mock_db):
+    repository = RefundsRepository(mock_connection)
+
+    await repository.select_refunds(page=1, per_page=10)
+
+    statements = [str(call[0][0]) for call in mock_db.session.execute.call_args_list]
+    rows_statement = statements[-1]
+    assert "JOIN users" in rows_statement
+
+
+# The count/sum query needs nothing from users, so joining there would be work
+# with no result.
+@pytest.mark.asyncio
+async def test_the_totals_query_does_not_join_users(mock_connection, mock_db):
+    repository = RefundsRepository(mock_connection)
+
+    await repository.select_refunds(page=1, per_page=10)
+
+    totals_statement = str(mock_db.session.execute.call_args_list[0][0][0])
+    assert "JOIN users" not in totals_statement
+
+
+@pytest.mark.asyncio
+async def test_status_filter_reaches_both_queries(mock_connection, mock_db):
+    repository = RefundsRepository(mock_connection)
+
+    await repository.select_refunds(page=1, per_page=10, status="pending")
+
+    statements = [str(call[0][0]) for call in mock_db.session.execute.call_args_list]
+    assert all("refunds.status =" in statement for statement in statements)
+
+
+@pytest.mark.asyncio
+async def test_sort_and_order_reach_the_order_by(mock_connection, mock_db):
+    repository = RefundsRepository(mock_connection)
+
+    await repository.select_refunds(page=1, per_page=10, sort="amount_in_cents", order="asc")
+
+    rows_statement = str(mock_db.session.execute.call_args_list[-1][0][0])
+    assert "ORDER BY refunds.amount_in_cents ASC" in rows_statement
+
+
+# Omitting them must preserve today's behaviour exactly.
+@pytest.mark.asyncio
+async def test_default_ordering_is_newest_first(mock_connection, mock_db):
+    repository = RefundsRepository(mock_connection)
+
+    await repository.select_refunds(page=1, per_page=10)
+
+    rows_statement = str(mock_db.session.execute.call_args_list[-1][0][0])
+    assert "ORDER BY refunds.created_at DESC" in rows_statement
+
+
+# An unknown sort name must never reach the query. The validator refuses it
+# first, but the repository must not trust that: the dictionary lookup falls
+# back to the default instead of interpolating anything.
+@pytest.mark.asyncio
+async def test_unknown_sort_falls_back_to_the_default_column(mock_connection, mock_db):
+    repository = RefundsRepository(mock_connection)
+
+    await repository.select_refunds(page=1, per_page=10, sort="password")
+
+    rows_statement = str(mock_db.session.execute.call_args_list[-1][0][0])
+    assert "ORDER BY refunds.created_at DESC" in rows_statement
+    assert "password" not in rows_statement
