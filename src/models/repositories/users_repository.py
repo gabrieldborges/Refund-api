@@ -1,5 +1,6 @@
 # pylint: disable=w0212
-from sqlalchemy import insert, select
+from typing import Optional
+from sqlalchemy import insert, select, update
 from sqlalchemy.exc import IntegrityError
 from src.models.entities.users import Users
 from src.models.settings.database_connection_handler import DatabaseConnectionHandler
@@ -35,3 +36,13 @@ class UsersRepository(UsersRepositoryInterface):
             result = await session.execute(query)
             user = result.fetchone()
             return dict(user._mapping) if user else None
+
+    async def update_avatar(self, user_id: int, avatar_filename: Optional[str]) -> None:
+        async with self.__db_connection.connect() as session:
+            query = (
+                update(Users)
+                .where(Users.c.id == user_id)
+                .values(avatar_filename=avatar_filename)
+            )
+            await session.execute(query)
+            await session.commit()

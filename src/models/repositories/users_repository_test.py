@@ -118,3 +118,26 @@ async def test_select_user_by_id_found(mock_connection, mock_db):
     user = await repository.select_user_by_id(1)
 
     assert user == {"id": 1, "name": "Gabriel"}
+
+
+# Updating avatar persists the filename to the database.
+@pytest.mark.asyncio
+async def test_update_avatar_persists_the_filename(mock_connection, mock_db):
+    repository = UsersRepository(mock_connection)
+
+    await repository.update_avatar(7, "abc.jpg")
+
+    mock_db.session.execute.assert_awaited_once()
+    mock_db.session.commit.assert_awaited_once()
+
+
+# Removing the picture is an update to NULL, not a delete: the user row stays.
+@pytest.mark.asyncio
+async def test_update_avatar_accepts_none_to_clear_the_picture(mock_connection, mock_db):
+    repository = UsersRepository(mock_connection)
+
+    await repository.update_avatar(7, None)
+
+    statement = str(mock_db.session.execute.call_args[0][0])
+    assert "UPDATE users" in statement
+    mock_db.session.commit.assert_awaited_once()
