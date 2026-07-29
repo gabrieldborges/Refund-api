@@ -166,3 +166,22 @@ no máximo 4MB. Nulo é um estado válido e representa o avatar padrão do produ
 
 **Evidências:** `src/validators/avatar_upload_validator.py` restringe extensão e
 tamanho; `src/models/entities/users.py` declara `avatar_filename` como nulável.
+
+## BR-020 — Acesso ao comprovante
+
+O comprovante de uma solicitação só é acessível ao seu proprietário e a usuários
+`admin`. Solicitação inexistente e solicitação alheia respondem igualmente como
+não encontrada, para não revelar quais identificadores existem.
+
+**Evidências:** `src/controllers/receipt_finder_controller.py` aplica a mesma
+regra de `refund_finder_controller.py` e levanta `HttpNotFoundError` nos dois
+casos.
+
+## BR-021 — Acesso à foto de perfil
+
+A foto de perfil de qualquer usuário é acessível a qualquer usuário autenticado.
+Usuário inexistente e usuário sem foto respondem igualmente como não encontrado.
+
+**Evidências:** `src/controllers/avatar_finder_controller.py` não recebe a
+identidade de quem pede; a autenticação é exigida pela dependência da rota em
+`src/main/routes/user_routes.py`.

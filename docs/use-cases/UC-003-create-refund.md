@@ -29,9 +29,13 @@ Registrar uma despesa e seu comprovante como solicitação de reembolso.
 6. A API converte o valor em reais para um inteiro em centavos, associa o
    `user_id` extraído do token e persiste a solicitação.
 7. A API responde com a solicitação criada no mesmo formato de
-   `GET /refunds/{refund_id}` — sem `user_id` no topo, com `status` e com o
-   objeto `user` (`id`, `name`, `avatar_filename`) do solicitante — e o
-   frontend direciona para a tela de sucesso.
+   `GET /refunds/{refund_id}` — sem `user_id` no topo, sem o nome do arquivo
+   de comprovante, com `status` e com o objeto `user` (`id`, `name`,
+   `has_avatar`) do solicitante — e o frontend direciona para a tela de
+   sucesso. O comprovante recém-criado passa a ser obtido em
+   `GET /refunds/{refund_id}/receipt`; a foto do solicitante, quando
+   `has_avatar` é verdadeiro, em `GET /users/{user_id}/avatar`. Ambas
+   autenticadas.
 
 ## Fluxos alternativos e erros
 
@@ -60,10 +64,12 @@ Registrar uma despesa e seu comprovante como solicitação de reembolso.
 - Em caso de falha de validação ou autenticação, nenhuma solicitação é criada.
 
 > **Mudança de contrato:** a resposta não traz mais `user_id` no topo do
-> objeto; o solicitante agora vem em `user.id`, ao lado de `user.name` e
-> `user.avatar_filename`, no mesmo formato usado por `GET /refunds` e
-> `GET /refunds/{refund_id}`. Isso quebra nos dois sentidos com o frontend
-> anterior, então backend e frontend precisam ser implantados juntos.
+> objeto, nem o nome do arquivo de comprovante; o solicitante agora vem em
+> `user.id`, ao lado de `user.name` e `user.has_avatar`, no mesmo formato
+> usado por `GET /refunds` e `GET /refunds/{refund_id}`. O comprovante passa
+> a ser obtido por `GET /refunds/{refund_id}/receipt`, autenticada, em vez de
+> uma URL pública. Isso quebra nos dois sentidos com o frontend anterior,
+> então backend e frontend precisam ser implantados juntos.
 
 ## Regras relacionadas
 
@@ -73,6 +79,8 @@ Registrar uma despesa e seu comprovante como solicitação de reembolso.
 - [BR-009](../business-rules.md#br-009--formato-e-tamanho-do-comprovante)
 - [BR-010](../business-rules.md#br-010--persistência-do-valor-monetário)
 - [BR-011](../business-rules.md#br-011--propriedade-da-solicitação)
+- [BR-020](../business-rules.md#br-020--acesso-ao-comprovante)
+- [BR-021](../business-rules.md#br-021--acesso-à-foto-de-perfil)
 
 ## Evidências
 
@@ -92,4 +100,7 @@ Registrar uma despesa e seu comprovante como solicitação de reembolso.
 - `src/views/refund_creator_view.py` extrai o `user_id` do token, e
   `src/controllers/refund_creator_controller.py` converte o valor, associa o
   usuário, persiste a solicitação e a relê pelo `id` para responder no mesmo
-  formato do GET, com o `user` já aninhado.
+  formato do GET.
+- `src/controllers/refund_serializer.py` monta esse formato de resposta a
+  partir da linha do repositório: descarta `filename` e reduz
+  `avatar_filename` a `has_avatar`, compartilhado com o `GET` e a listagem.

@@ -29,10 +29,13 @@ nome, por `status`, e ordenada pelo campo escolhido.
    direção de `order` (`desc` por padrão) e aplica limite e deslocamento da
    página.
 6. A API devolve os itens — cada um com seu `status` (`pending`, `approved` ou
-   `rejected`) e o objeto `user` (`id`, `name`, `avatar_filename`) do
-   solicitante, sem `user_id` no topo — e os metadados `count`, `total`,
-   `sum_amount_in_cents`, `page`, `per_page` e `total_pages`; o frontend
-   apresenta a lista e os controles de paginação.
+   `rejected`) e o objeto `user` (`id`, `name`, `has_avatar`) do solicitante,
+   sem `user_id` no topo e sem o nome do arquivo de comprovante — e os
+   metadados `count`, `total`, `sum_amount_in_cents`, `page`, `per_page` e
+   `total_pages`; o frontend apresenta a lista e os controles de paginação.
+   O comprovante de cada item, quando aberto, é obtido em
+   `GET /refunds/{refund_id}/receipt`; a foto do solicitante, quando
+   `has_avatar` é verdadeiro, em `GET /users/{user_id}/avatar`.
 
 `status` aceita `pending`, `approved` ou `rejected`. `sort` aceita
 `created_at`, `amount_in_cents`, `name` ou `status`. `order` aceita `asc` ou
@@ -59,9 +62,10 @@ itens da página atual — ambos mudam conforme `status` restringe o conjunto.
   solicitações.
 
 > **Mudança de contrato:** a resposta não traz mais `user_id` no topo de cada
-> item; o solicitante agora vem em `user.id`, ao lado de `user.name` e
-> `user.avatar_filename`. Isso quebra nos dois sentidos com o frontend
-> anterior, então backend e frontend precisam ser implantados juntos.
+> item, nem o nome do arquivo de comprovante; o solicitante agora vem em
+> `user.id`, ao lado de `user.name` e `user.has_avatar`. Isso quebra nos dois
+> sentidos com o frontend anterior, então backend e frontend precisam ser
+> implantados juntos.
 
 ## Pós-condições
 
@@ -75,6 +79,8 @@ itens da página atual — ambos mudam conforme `status` restringe o conjunto.
 - [BR-012](../business-rules.md#br-012--escopo-de-acesso-por-papel)
 - [BR-014](../business-rules.md#br-014--ordem-e-busca-da-listagem)
 - [BR-017](../business-rules.md#br-017--transições-de-status-permitidas)
+- [BR-020](../business-rules.md#br-020--acesso-ao-comprovante)
+- [BR-021](../business-rules.md#br-021--acesso-à-foto-de-perfil)
 
 ## Evidências
 
@@ -86,7 +92,9 @@ itens da página atual — ambos mudam conforme `status` restringe o conjunto.
   delas — a primeira das duas barreiras contra um nome de coluna vindo do
   cliente.
 - `src/controllers/refund_lister_controller.py` distingue `admin` de
-  `standard` e calcula os metadados da paginação.
+  `standard`, calcula os metadados da paginação e usa
+  `src/controllers/refund_serializer.py` para produzir cada item sem
+  `filename` e com `user.has_avatar`.
 - `src/models/repositories/refunds_repository.py` aplica o filtro parcial
   `ilike`, o filtro por `status`, o escopo por usuário, a ordenação por
   `sort`/`order` (com `created_at` decrescente como padrão) e a paginação, e

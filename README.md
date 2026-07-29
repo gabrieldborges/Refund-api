@@ -68,8 +68,10 @@ src/
 └── main/{composer,routes,server}             # injeção de dependência e bootstrap
 ```
 
-Os arquivos de recibo enviados ficam em `uploads/receipts/` e são servidos
-estaticamente em `/receipts/{filename}`.
+Os arquivos de recibo enviados ficam em `uploads/receipts/`; as fotos de
+perfil ficam em `uploads/avatars/`. Nenhum dos dois diretórios é servido
+estaticamente — ambos exigem um JWT válido e são obtidos, respectivamente,
+por `GET /refunds/{refund_id}/receipt` e `GET /users/{user_id}/avatar`.
 
 ## Autenticação
 

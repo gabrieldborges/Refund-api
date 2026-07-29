@@ -70,19 +70,32 @@ o id existe.
 ## Formato da resposta (divergente das demais)
 
 **Atenção:** ao contrário de UC-003, UC-004 e UC-005 — cujas respostas trazem
-o solicitante aninhado em `user` (`{"user": {"id", "name", "avatar_filename"}}`)
-— a resposta deste endpoint traz o formato **plano** herdado de
-`RefundStatusRepository.select_for_update`: `user_id` no nível superior, sem
-objeto `user` aninhado. Essa é uma inconsistência conhecida entre os
-endpoints que devolvem reembolso, e permanece assim deliberadamente nesta
-branch: `select_for_update` também alimenta o fluxo de aprovação (com
-`FOR UPDATE`), e mudar seu formato de retorno teria efeito cascata sobre esse
-fluxo. Um cliente que consome a resposta desta revisão precisa de um contrato
-próprio para o formato plano (ou deve simplesmente buscar novamente o
-reembolso via `GET /refunds/{refund_id}`, que já devolve o formato aninhado)
-em vez de reaproveitar o contrato usado para as demais respostas de
-reembolso. Resolver essa divergência é um passo pendente para quando a tela
-de revisão for construída no frontend.
+o solicitante aninhado em `user` (`{"user": {"id", "name", "has_avatar"}}`) e
+nunca incluem o nome do arquivo de comprovante — a resposta deste endpoint
+diverge em **três** pontos, porque lê `RefundStatusRepository.select_for_update`
+em vez do serializador compartilhado (`src/controllers/refund_serializer.py`):
+
+1. **`user_id` no nível superior**, sem objeto `user` aninhado — o formato
+   **plano** da tabela `refunds`, não o formato com `user.id` das demais
+   respostas.
+2. **`filename` presente** — o nome do arquivo de comprovante, removido de
+   toda outra resposta de reembolso, aparece aqui sem tratamento.
+3. **Nenhum `has_avatar`** — e, por não haver `JOIN` com `Users`, também não
+   há `user.avatar_filename` bruto: o campo simplesmente não existe nesta
+   resposta.
+
+Essa é uma inconsistência conhecida entre os endpoints que devolvem
+reembolso, e permanece assim deliberadamente nesta branch: `select_for_update`
+também alimenta o fluxo de aprovação (com `FOR UPDATE`), e mudar seu formato
+de retorno teria efeito cascata sobre esse fluxo. É inofensiva porque a tela
+de revisão planejada para o frontend refaz o `GET /refunds/{refund_id}` (que
+já devolve o formato aninhado, sem `filename`, com `has_avatar`) em vez de
+consumir o corpo desta resposta diretamente. Um cliente que precisasse
+consumir esta resposta sem refazer o `GET` exigiria um contrato próprio para
+o formato plano, com `filename` exposto e sem `has_avatar`, em vez de
+reaproveitar o contrato usado para as demais respostas de reembolso.
+Resolver essa divergência é um passo pendente para quando a tela de revisão
+for construída no frontend.
 
 ## Tabela de códigos
 
