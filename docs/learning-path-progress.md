@@ -2266,3 +2266,118 @@ eram defeitos do plano**, não do implementador:
 - **Duas repositories sobre a mesma tabela podem devolver formas diferentes de
   propósito** — e isso é uma armadilha real. Um call site tem de seguir a forma do
   método específico que consome, não a "forma da tabela".
+
+## Ciclo de feature — Servir arquivos com autenticação (2026-07-29)
+
+Quinto ciclo, e o único que nasceu de uma **pergunta**, não de uma funcionalidade
+planejada. Ao levantar o que faltava antes do frontend, uma verificação de rotina
+devolveu isto:
+
+```
+GET /receipts/<uuid-real>   sem token nenhum   ->   200
+```
+
+### O conceito: nome imprevisível é controle de acesso, e fraco
+
+Os comprovantes eram servidos por um mount estático do Starlette, fora da
+autenticação. A defesa era o nome do arquivo ser um UUIDv4 — imprevisível.
+
+Isso tem nome: **URL-capacidade**. Quem tem o link, tem o acesso. É um padrão
+legítimo em alguns contextos (links de compartilhamento), mas tem duas
+propriedades que o tornam inadequado para documento financeiro:
+
+- **O acesso não expira e não é revogável.** Quem viu o link uma vez o mantém
+  para sempre, inclusive depois de perder acesso ao reembolso.
+- **O link vaza por caminhos que ninguém controla** — histórico do navegador,
+  `Referer`, logs de proxy, um print compartilhado.
+
+A troca foi por autorização de verdade: o comprovante só é acessível ao dono e a
+admins, verificado a cada requisição contra o banco.
+
+### A ordem importou mais que o conteúdo
+
+O ciclo inteiro existiu **antes** do frontend por um motivo específico: o preview
+do comprovante é implementado de duas formas incompatíveis conforme a resposta.
+
+| | Mount público | Rota autenticada |
+|---|---|---|
+| Como a imagem chega | `<img src="/receipts/x.jpg">` | `fetch` com token → `blob URL` |
+| Cache do browser | de graça | não existe |
+| Limpeza | nenhuma | `revokeObjectURL` no cleanup |
+
+Decidir isso depois significaria reescrever a tela. **Uma decisão de backend que
+muda o desenho do frontend precisa vir antes dele** — não porque bloqueia
+tecnicamente, mas porque bloqueia o *desenho*.
+
+### A distinção que a mudança forçou
+
+Ao tirar `filename` da resposta, apareceu uma pergunta que o código nunca tinha
+precisado responder: **`filename` é dado interno ou é contrato?**
+
+São as duas coisas, para consumidores diferentes:
+
+- O **cliente** o usava para montar `/receipts/{filename}`. Esse uso morreu.
+- O **`refund_deleter_controller`** o lê para apagar o arquivo do disco. Esse uso
+  está vivo.
+- E o **`receipt_finder_controller`**, criado neste mesmo ciclo, também o lê.
+
+Os três liam do mesmo dicionário, porque os serializadores faziam `**refund` —
+espalhando a linha do repositório direto na resposta HTTP. Essa cola é o que
+fazia dado interno e contrato serem a mesma coisa.
+
+A separação: **o repositório continua devolvendo `filename`; só o serializador
+para de emiti-lo.** Um serializador único (`refund_serializer.py`) passou a
+produzir a forma de resposta dos três casos de uso de leitura.
+
+### Verificações
+
+| Comando | Resultado |
+|---|---|
+| `pytest` | **178 testes**, todos verdes |
+| `pylint src` | **10.00/10** ao fim de cada uma das 6 tasks |
+| Ponta a ponta contra a API real | **14/14 cenários** |
+| `GET /receipts/<uuid>` sem token | **200 → 404** |
+
+Esse último número é o ciclo inteiro condensado. E é o tipo de coisa que teste
+unitário não prova: um mount é configuração de servidor, não código de aplicação.
+
+### O que a revisão pegou
+
+- **A documentação canônica ainda garantia a vulnerabilidade.** O `UC-008` dizia
+  que a foto era servida "publicamente" e citava o mount que este ciclo apagou.
+  Todos os outros UCs foram alinhados; esse escapou. Um leitor seguindo a doc
+  construiria contra uma URL que agora dá 404 — e a doc insistiria que o mount
+  existe.
+- **O login não devolvia o `id` do usuário.** Achado só na revisão final, e
+  funcional: com `GET /users/{id}/avatar` exigindo um id que só existe dentro do
+  JWT, o cliente ficava sem caminho para exibir **a própria** foto. Avatares de
+  terceiros funcionavam, porque vêm em `user.id` nas respostas de reembolso. É
+  exatamente o tipo de buraco que revisão por task não enxerga: cada peça estava
+  correta, e a composição delas não fechava.
+- **Testes que não distinguiam mensagem.** Os três caminhos de 404 do comprovante
+  precisam ser indistinguíveis — mesma resposta para "não existe", "não é seu" e
+  "arquivo sumiu". O código fazia certo, mas os testes verificavam só o *tipo* da
+  exceção. A igualdade das mensagens estava garantida apenas por terem sido
+  digitadas iguais.
+
+### O que lembrar
+
+- **Um nome imprevisível não é autorização.** É ofuscação com prazo indeterminado:
+  não expira, não se revoga, e vaza por caminhos que você não controla.
+- **Decisão de backend que muda o desenho do frontend vem antes dele.** O critério
+  não é "bloqueia tecnicamente", é "muda como a tela é construída".
+- **`**dict` no serializador cola dado interno com contrato.** Enquanto a resposta
+  é a linha do banco espalhada, toda coluna nova vira campo público e todo campo
+  removido vira quebra em consumidores internos. Um serializador explícito é o que
+  separa as duas coisas.
+- **Ao remover um campo, o trabalho é achar todos os leitores** — e a suíte não
+  vai apontá-los, porque mocks desatualizados continuam afirmando o contrato
+  antigo.
+- **Indistinguibilidade precisa ser testada como igualdade, não como tipo.** Se
+  três caminhos têm de responder a mesma coisa, três asserções independentes com
+  o literal repetido provam isso; uma constante compartilhada faria os três
+  concordarem por construção e não provaria nada.
+- **A composição das peças é onde a revisão final ganha.** Cada task deste ciclo
+  passou limpa; o buraco do `id` no login só apareceu quando alguém perguntou
+  "como o cliente busca a própria foto?" — uma pergunta que nenhuma task isolada
+  tinha motivo para fazer.

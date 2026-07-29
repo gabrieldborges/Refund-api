@@ -335,32 +335,53 @@ completo e obrigatório está em
     ponta** contra a API real. Detalhes no [diário](../learning-path-progress.md).
   - **Backend e frontend TÊM de ir para produção juntos** — ver pendências.
 
-- **Próximo — spec do frontend.** Agora ela cobre o workflow de aprovação **e** o
-  que este ciclo desbloqueou: TanStack Table com toolbar honesto (**Item 13**),
-  preview do comprovante, e a foto de perfil com upload. Roadmap completo na
+- **Ciclo de feature — Servir arquivos com autenticação (backend): CONCLUÍDO.**
+  Quinto ciclo, na branch `feat/authenticated-file-serving` (`55be4d4..ba51c4b`,
+  8 commits), **empilhada sobre `feat/refund-query-and-avatar`, que também não
+  foi mesclada**. Artefatos em `docs/superpowers/`
+  ([spec](../superpowers/specs/2026-07-29-authenticated-file-serving-design.md),
+  [plano](../superpowers/plans/2026-07-29-authenticated-file-serving.md)).
+  Nasceu de uma verificação de rotina que achou `GET /receipts/<uuid>`
+  respondendo 200 sem token. O que mudou:
+  - **Os dois mounts estáticos saíram.** `FileStorage` ganhou `read() -> bytes`
+    (não um caminho — a interface sobrevive ao Item 22).
+  - **`GET /refunds/{id}/receipt`** — dono ou admin; "não existe", "não é seu" e
+    "arquivo sumiu" respondem 404 **idênticos**, inclusive na mensagem.
+  - **`GET /users/{id}/avatar`** — qualquer autenticado; não há decisão de
+    autorização a tomar.
+  - **`filename` saiu das respostas** e `user.avatar_filename` virou
+    `user.has_avatar`, através de um `refund_serializer.py` compartilhado pelos
+    três casos de uso de leitura. O repositório continua devolvendo `filename`,
+    porque a exclusão o lê para apagar o arquivo.
+  - **O login passou a devolver `id`** — sem ele o cliente não tinha como buscar
+    a própria foto.
+  - Verificação: `pytest` (**178 verdes**), `pylint src` (**10.00/10**), e
+    **14/14 cenários ponta a ponta**, incluindo `ls uploads/receipts/` antes e
+    depois provando que a exclusão ainda apaga o arquivo.
+
+- **Próximo — spec do frontend.** Agora ela cobre o workflow de aprovação, o
+  TanStack Table com toolbar honesto (**Item 13**), o preview do comprovante
+  (que passa a ser `fetch` com token → `blob URL`, não `<img src>`), e a foto de
+  perfil com upload. Roadmap completo na
   [spec do restyle](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-27-shadcn-restyle-design.md).
   (O **Item 11 — Error boundaries** pode interligar quando as páginas novas de
   dados entrarem.)
 
 ## Pendências e riscos conhecidos
 
-- **DECIDIDO em 2026-07-29, ainda NÃO implementado: nenhum arquivo será servido
-  sem autenticação.** Hoje `/receipts` e `/avatars` são mounts estáticos fora da
-  autenticação — conferido: `GET /receipts/<uuid>` sem token nenhum responde
-  **200**. Os nomes são UUIDv4, então na prática é uma "URL-capacidade": quem vê
-  o link uma vez mantém acesso para sempre, mesmo perdendo acesso ao reembolso.
-  Gabriel decidiu fechar os dois. Isso é um **ciclo de backend que precisa vir
-  antes do ciclo do frontend**, porque o preview do comprovante é implementado de
-  formas completamente diferentes conforme a resposta: com mount público, um
-  `<img src>` simples resolve; sem ele, o frontend precisa de `fetch` com token →
-  `blob URL` → `revokeObjectURL` no cleanup. Escopo previsto: remover os dois
-  mounts, criar `GET /refunds/{id}/receipt` e `GET /users/{id}/avatar`
-  autenticados, atualizar ADR-003, os UCs e o Postman. **Decisão de autorização
-  em aberto:** quem pode ver o avatar de quem — se for só o próprio usuário, a
-  lista do admin não mostra avatar de ninguém e o campo no objeto `user` perde
-  a razão de existir. **Alternativa não escolhida, registrada:** URL assinada de
-  vida curta preservaria a privacidade sem custar N fetches por página (é
-  território do Item 22).
+- ~~**Nenhum arquivo será servido sem autenticação.**~~ RESOLVIDO em 2026-07-29,
+  no ciclo próprio: os dois mounts foram removidos e substituídos por
+  `GET /refunds/{id}/receipt` (dono ou admin) e `GET /users/{id}/avatar`
+  (qualquer autenticado). `GET /receipts/<uuid>` sem token passou de **200** para
+  **404**. **Alternativa não escolhida, registrada:** URL assinada de vida curta
+  preservaria a privacidade sem custar N fetches por página — é território do
+  Item 22.
+- **A resposta do login ainda devolve `avatar_filename` cru.** O mesmo vale para
+  `POST` e `DELETE /users/me/avatar`. Depois da remoção do mount esse nome não
+  resolve para URL nenhuma — o cliente usa `GET /users/{id}/avatar`. As respostas
+  de reembolso já convertem para `has_avatar`; estas três não, porque a spec
+  daquele ciclo restringiu a conversão de propósito. Não é quebra (o campo é
+  ignorável), é inconsistência. **Decisão em aberto** para o ciclo do frontend.
 - **DECIDIDO em 2026-07-29: a tela de revisão NÃO consome o corpo do PATCH.**
   Em vez de alinhar a forma da resposta de `PATCH /refunds/{id}/status` (que
   exigiria mexer no `select_for_update`, compartilhado com a transação da
