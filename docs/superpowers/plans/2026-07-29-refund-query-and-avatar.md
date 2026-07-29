@@ -419,6 +419,15 @@ git commit -m "feat: add the user avatar column and static route"
 
 Acrescente em `src/models/repositories/users_repository_test.py` (leia o arquivo antes e reuse as fixtures `mock_db`/`mock_connection` que já existem ali):
 
+> **Assert the BOUND PARAMETERS, never `str(statement)`.** SQLAlchemy renders
+> `values(avatar_filename=None)` and `values(avatar_filename="abc.jpg")` to the
+> *identical* string — bound values are not in it. A test that greps the
+> rendered SQL cannot tell the two apart, so it would pass even against
+> `values(avatar_filename=avatar_filename or "")`, which silently turns "remove
+> my picture" into an empty string instead of NULL. Print
+> `statement.compile().params` once to learn the real key names before writing
+> the assertions; the WHERE bind is auto-named.
+
 ```python
 @pytest.mark.asyncio
 async def test_update_avatar_persists_the_filename(mock_connection, mock_db):
@@ -426,19 +435,22 @@ async def test_update_avatar_persists_the_filename(mock_connection, mock_db):
 
     await repository.update_avatar(7, "abc.jpg")
 
-    mock_db.session.execute.assert_awaited_once()
+    params = mock_db.session.execute.call_args[0][0].compile().params
+    assert params["avatar_filename"] == "abc.jpg"
+    assert 7 in params.values()          # the WHERE bind, whatever it is named
     mock_db.session.commit.assert_awaited_once()
 
 
 # Removing the picture is an update to NULL, not a delete: the user row stays.
+# `is None` and not a falsy check — "" is falsy too, and "" is exactly the bug.
 @pytest.mark.asyncio
 async def test_update_avatar_accepts_none_to_clear_the_picture(mock_connection, mock_db):
     repository = UsersRepository(mock_connection)
 
     await repository.update_avatar(7, None)
 
-    statement = str(mock_db.session.execute.call_args[0][0])
-    assert "UPDATE users" in statement
+    params = mock_db.session.execute.call_args[0][0].compile().params
+    assert params["avatar_filename"] is None
     mock_db.session.commit.assert_awaited_once()
 ```
 
