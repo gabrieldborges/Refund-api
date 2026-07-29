@@ -1,6 +1,7 @@
 from src.controllers.interfaces.refund_lister_controller_interface import (
     RefundListerControllerInterface,
 )
+from src.validators.refund_lister_validator import refund_lister_validator
 from src.views.http_types.http_request import HttpRequest
 from src.views.http_types.http_response import HttpResponse
 from src.errors.error_handler import error_handler
@@ -12,6 +13,10 @@ class RefundListerView:
 
     async def handle(self, http_request: HttpRequest) -> HttpResponse:
         try:
+            # Validator runs first: it is the whitelist barrier that keeps an
+            # invalid "sort" from ever reaching the controller/repository lookup.
+            refund_lister_validator(http_request)
+
             user_id = http_request.token_info["user_id"]
             role = http_request.token_info["role"]
 
@@ -21,6 +26,9 @@ class RefundListerView:
                 name=http_request.query.get("name"),
                 user_id=user_id,
                 role=role,
+                status=http_request.query.get("status"),
+                sort=http_request.query.get("sort"),
+                order=http_request.query.get("order"),
             )
             return HttpResponse(body=response, status_code=200)
         except Exception as e:
