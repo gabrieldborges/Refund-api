@@ -5,8 +5,14 @@
 schema.db
 *.db
 .env
-uploads/receipts/*
-!uploads/receipts/.gitkeep
 
 # Scratch de execução de planos (subagent-driven development)
 .superpowers/
+
+# Arquivos enviados vivem no disco local (ADR-003) e nunca são versionados.
+# As exceções mantêm a estrutura de pastas no repositório.
+uploads/**
+!uploads/receipts/
+!uploads/receipts/.gitkeep
+!uploads/avatars/
+!uploads/avatars/.gitkeep
