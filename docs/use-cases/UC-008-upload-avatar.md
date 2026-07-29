@@ -45,9 +45,10 @@ Definir ou substituir a foto de perfil do usuário autenticado.
 ## Pós-condições
 
 - Em caso de sucesso, `avatar_filename` aponta para o novo arquivo, o arquivo
-  anterior (quando existia) não existe mais no disco, e uma consulta a
-  `GET /avatars/{avatar_filename}` serve a nova imagem publicamente. Um login
-  subsequente devolve o novo `avatar_filename`.
+  anterior (quando existia) não existe mais no disco, e uma consulta
+  autenticada a `GET /users/{user_id}/avatar` (ver
+  [UC-011](UC-011-download-avatar.md)) serve a nova imagem para qualquer
+  usuário autenticado. Um login subsequente devolve o novo `avatar_filename`.
 - Em caso de falha de validação ou autenticação, nenhuma foto é trocada e o
   arquivo anterior permanece intacto.
 
@@ -55,10 +56,13 @@ Definir ou substituir a foto de perfil do usuário autenticado.
 
 - [BR-006](../business-rules.md#br-006--autenticação-das-operações-de-reembolso)
 - [BR-019](../business-rules.md#br-019--formato-e-tamanho-da-foto-de-perfil)
+- [BR-021](../business-rules.md#br-021--acesso-à-foto-de-perfil)
 
 ## Evidências
 
-- `src/main/routes/user_routes.py` protege e expõe `POST /users/me/avatar`.
+- `src/main/routes/user_routes.py` protege e expõe `POST /users/me/avatar` e,
+  separadamente, `GET /users/{user_id}/avatar` (ver
+  [UC-011](UC-011-download-avatar.md)) para servir a foto já autenticada.
 - `src/validators/avatar_upload_validator.py` restringe a extensão a JPG/PNG e
   o tamanho a 4MB, validado pela extensão do arquivo, não pelo `Content-Type`
   informado pelo cliente.
@@ -67,7 +71,6 @@ Definir ou substituir a foto de perfil do usuário autenticado.
   ordem, para nunca deixar o usuário sem foto caso a atualização falhe.
 - `src/drivers/file_storage.py` gera o nome único com UUID e grava o arquivo no
   diretório de avatares.
-- `src/main/server/server.py` expõe esse diretório estaticamente em
-  `/avatars`.
-- `src/controllers/user_login_controller.py` devolve `avatar_filename` na
-  resposta do login.
+- `src/controllers/user_login_controller.py` devolve `id` e `avatar_filename`
+  na resposta do login, para que o próprio usuário logado também possa montar
+  `GET /users/{user_id}/avatar` para a sua foto.

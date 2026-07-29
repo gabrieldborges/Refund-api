@@ -77,7 +77,7 @@ async def review_refund(
     return JSONResponse(content=response.body, status_code=response.status_code)
 
 
-@refund_routes.get("/{refund_id}/receipt")
+@refund_routes.get("/{refund_id}/receipt", response_class=Response)
 async def get_refund_receipt(
     refund_id: int,
     token_info: dict = Depends(get_current_user),

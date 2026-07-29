@@ -36,7 +36,7 @@ async def remove_avatar(token_info: dict = Depends(get_current_user)):
     return JSONResponse(content=response.body, status_code=response.status_code)
 
 
-@user_routes.get("/{user_id}/avatar")
+@user_routes.get("/{user_id}/avatar", response_class=Response)
 async def get_user_avatar(
     user_id: int,
     token_info: dict = Depends(get_current_user),  # pylint: disable=unused-argument

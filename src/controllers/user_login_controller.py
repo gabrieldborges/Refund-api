@@ -25,6 +25,7 @@ class UserLoginController(UserLoginControllerInterface):
 
     def __format_response(self, user: dict, token: str) -> dict:
         return {
+            "id": user["id"],
             "access": True,
             "name": user["name"],
             "email": user["email"],

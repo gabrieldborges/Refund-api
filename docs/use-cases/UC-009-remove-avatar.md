@@ -58,5 +58,7 @@ do produto.
   para nunca deixar a coluna apontando para um arquivo já removido.
 - `src/drivers/file_storage.py` não falha ao tentar remover um arquivo que já
   não existe, o que garante a idempotência de chamadas repetidas.
-- `src/controllers/user_login_controller.py` devolve `avatar_filename` na
-  resposta do login.
+- `src/controllers/user_login_controller.py` devolve `id` e `avatar_filename`
+  na resposta do login; com `avatar_filename` nulo, uma consulta subsequente a
+  `GET /users/{user_id}/avatar` (ver [UC-011](UC-011-download-avatar.md))
+  responde `404`.

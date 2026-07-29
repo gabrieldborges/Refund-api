@@ -78,3 +78,16 @@ async def test_login_response_includes_the_avatar_filename(mock_repository):
     response = await controller.login({"email": "gabriel@example.com", "password": "senha12345"})
 
     assert response["avatar_filename"] == "gabriel.png"
+
+
+# GET /users/{user_id}/avatar needs an id, and the logged-in user's id only
+# lives inside the JWT otherwise. We assert equality with the repository's
+# user id (not just that the key exists), so a controller that hardcoded
+# some other value would fail this test.
+@pytest.mark.asyncio
+async def test_login_response_includes_the_users_id(mock_repository):
+    controller = UserLoginController(mock_repository)
+
+    response = await controller.login({"email": "gabriel@example.com", "password": "senha12345"})
+
+    assert response["id"] == 1
