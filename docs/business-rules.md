@@ -128,7 +128,7 @@ decidida (`approved` ou `rejected`) não pode ser excluída.
 **Evidências:** `src/controllers/refund_deleter_controller.py` recusa a
 exclusão quando `status` não é `pending`, coordena a remoção do registro e do
 comprovante; `src/models/repositories/refunds_repository.py` remove o
-registro; `src/drivers/receipt_storage.py` remove o arquivo quando ele existe.
+registro; `src/drivers/file_storage.py` remove o arquivo quando ele existe.
 
 ## BR-016 — Segregação de funções na revisão
 
@@ -158,3 +158,11 @@ Revisar uma solicitação com `status` alvo igual a `rejected` exige informar
 **Evidências:** `src/validators/refund_reviewer_validator.py` recusa a
 requisição quando `status` é `rejected` e `reason` está ausente, vazio ou
 somente espaços.
+
+## BR-019 — Formato e tamanho da foto de perfil
+
+A foto de perfil aceita apenas JPG e PNG, validados pela extensão do arquivo, e
+no máximo 4MB. Nulo é um estado válido e representa o avatar padrão do produto.
+
+**Evidências:** `src/validators/avatar_upload_validator.py` restringe extensão e
+tamanho; `src/models/entities/users.py` declara `avatar_filename` como nulável.

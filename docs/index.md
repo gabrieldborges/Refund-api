@@ -27,6 +27,8 @@ frontend e pela API.
 - [UC-005 — Consultar solicitação](use-cases/UC-005-view-refund.md)
 - [UC-006 — Excluir solicitação](use-cases/UC-006-delete-refund.md)
 - [UC-007 — Revisar solicitação](use-cases/UC-007-review-refund.md)
+- [UC-008 — Enviar foto de perfil](use-cases/UC-008-upload-avatar.md)
+- [UC-009 — Remover foto de perfil](use-cases/UC-009-remove-avatar.md)
 
 ## Decisões
 - [ADR-001 — Manter a arquitetura em camadas da API](decisions/ADR-001-layered-api.md)

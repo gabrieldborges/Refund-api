@@ -28,8 +28,10 @@ Registrar uma despesa e seu comprovante como solicitação de reembolso.
    preserva a extensão original e grava o conteúdo.
 6. A API converte o valor em reais para um inteiro em centavos, associa o
    `user_id` extraído do token e persiste a solicitação.
-7. A API responde com a solicitação criada e o frontend direciona para a tela
-   de sucesso.
+7. A API responde com a solicitação criada no mesmo formato de
+   `GET /refunds/{refund_id}` — sem `user_id` no topo, com `status` e com o
+   objeto `user` (`id`, `name`, `avatar_filename`) do solicitante — e o
+   frontend direciona para a tela de sucesso.
 
 ## Fluxos alternativos e erros
 
@@ -57,6 +59,12 @@ Registrar uma despesa e seu comprovante como solicitação de reembolso.
   novo item.
 - Em caso de falha de validação ou autenticação, nenhuma solicitação é criada.
 
+> **Mudança de contrato:** a resposta não traz mais `user_id` no topo do
+> objeto; o solicitante agora vem em `user.id`, ao lado de `user.name` e
+> `user.avatar_filename`, no mesmo formato usado por `GET /refunds` e
+> `GET /refunds/{refund_id}`. Isso quebra nos dois sentidos com o frontend
+> anterior, então backend e frontend precisam ser implantados juntos.
+
 ## Regras relacionadas
 
 - [BR-006](../business-rules.md#br-006--autenticação-das-operações-de-reembolso)
@@ -80,7 +88,8 @@ Registrar uma despesa e seu comprovante como solicitação de reembolso.
   ou expirado.
 - `src/validators/refund_creator_validator.py` aplica as validações de domínio
   no servidor.
-- `src/drivers/receipt_storage.py` gera o nome único com UUID e grava o arquivo.
+- `src/drivers/file_storage.py` gera o nome único com UUID e grava o arquivo.
 - `src/views/refund_creator_view.py` extrai o `user_id` do token, e
   `src/controllers/refund_creator_controller.py` converte o valor, associa o
-  usuário e prepara a persistência.
+  usuário, persiste a solicitação e a relê pelo `id` para responder no mesmo
+  formato do GET, com o `user` já aninhado.

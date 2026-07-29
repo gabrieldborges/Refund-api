@@ -20,7 +20,9 @@ Visualizar os dados de uma solicitação específica e abrir seu comprovante.
 3. A API autentica o usuário, busca a solicitação pelo ID e verifica o escopo de
    acesso conforme o papel.
 4. A API devolve os campos da solicitação, inclusive o `status`
-   (`pending`, `approved` ou `rejected`) e o nome do comprovante.
+   (`pending`, `approved` ou `rejected`), o nome do comprovante e o objeto
+   `user` (`id`, `name`, `avatar_filename`) do solicitante, sem `user_id` no
+   topo.
 5. O frontend exibe nome, categoria e valor em modo somente leitura.
 6. Quando o usuário escolhe **Abrir comprovante**, o frontend abre em nova aba
    a URL pública `/receipts/{filename}`.
@@ -41,6 +43,11 @@ Visualizar os dados de uma solicitação específica e abrir seu comprovante.
 - Em caso de recurso inexistente ou alheio, nenhum dado da solicitação é
   exposto.
 
+> **Mudança de contrato:** a resposta não traz mais `user_id` no topo; o
+> solicitante agora vem em `user.id`, ao lado de `user.name` e
+> `user.avatar_filename`. Isso quebra nos dois sentidos com o frontend
+> anterior, então backend e frontend precisam ser implantados juntos.
+
 ## Regras relacionadas
 
 - [BR-006](../business-rules.md#br-006--autenticação-das-operações-de-reembolso)
@@ -55,6 +62,8 @@ Visualizar os dados de uma solicitação específica e abrir seu comprovante.
 - `src/controllers/refund_finder_controller.py` permite acesso global ao
   `admin`, limita o usuário `standard` ao proprietário e usa o mesmo `404` para
   recurso inexistente ou alheio.
+- `src/models/repositories/refunds_repository.py` faz `JOIN` com `Users` e
+  monta o objeto `user` (`id`, `name`, `avatar_filename`) na resposta.
 - `../Refund-FrontEnd/src/hooks/useRefund.ts` consulta a API pelo ID da rota.
 - `../Refund-FrontEnd/src/pages/PageRefundDetails.tsx` exibe os campos como
   somente leitura e oferece o link **Abrir comprovante** em nova aba.

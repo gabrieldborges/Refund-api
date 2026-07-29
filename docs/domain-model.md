@@ -12,6 +12,7 @@ dos campos abaixo correspondem aos dados persistidos pela API.
 | `email` | E-mail único usado na conta. |
 | `password` | Senha armazenada de forma protegida. |
 | `role` | Papel de acesso do usuário. |
+| `avatar_filename` | Nome do arquivo da foto de perfil; nulo quando o usuário usa o avatar padrão. |
 | `created_at` | Data e hora de criação do usuário. |
 
 ## Refund

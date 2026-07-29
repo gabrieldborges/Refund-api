@@ -6,7 +6,8 @@ Usuário autenticado, com papel `standard` ou `admin`.
 
 ## Objetivo
 
-Consultar uma página de solicitações, opcionalmente filtrada por parte do nome.
+Consultar uma página de solicitações, opcionalmente filtrada por parte do
+nome, por `status`, e ordenada pelo campo escolhido.
 
 ## Pré-condições
 
@@ -15,40 +16,58 @@ Consultar uma página de solicitações, opcionalmente filtrada por parte do nom
 
 ## Fluxo principal
 
-1. O frontend solicita `GET /refunds` com `page`, `per_page` e, quando houver
-   busca, `name`.
-2. A API valida `page >= 1` e `1 <= per_page <= 100`.
+1. O frontend solicita `GET /refunds` com `page`, `per_page` e, opcionalmente,
+   `name`, `status`, `sort` e `order`.
+2. A API valida `page >= 1` e `1 <= per_page <= 100`, e que `status`, `sort` e
+   `order`, quando informados, pertencem às listas de valores aceitos.
 3. Para um usuário `standard`, a API limita a consulta às solicitações cujo
    `user_id` corresponde ao token; para um `admin`, não aplica esse filtro.
 4. Quando `name` é informado, a API busca correspondências parciais sem
-   diferenciar maiúsculas de minúsculas.
-5. A API ordena os resultados de `created_at` mais recente para o mais antigo e
-   aplica limite e deslocamento da página.
+   diferenciar maiúsculas de minúsculas. Quando `status` é informado, a API
+   restringe o resultado às solicitações naquele status.
+5. A API ordena os resultados pelo campo de `sort` (`created_at` por padrão) na
+   direção de `order` (`desc` por padrão) e aplica limite e deslocamento da
+   página.
 6. A API devolve os itens — cada um com seu `status` (`pending`, `approved` ou
-   `rejected`) — e os metadados `count`, `total`, `sum_amount_in_cents`, `page`,
-   `per_page` e `total_pages`; o frontend apresenta a lista e os controles de
-   paginação.
+   `rejected`) e o objeto `user` (`id`, `name`, `avatar_filename`) do
+   solicitante, sem `user_id` no topo — e os metadados `count`, `total`,
+   `sum_amount_in_cents`, `page`, `per_page` e `total_pages`; o frontend
+   apresenta a lista e os controles de paginação.
+
+`status` aceita `pending`, `approved` ou `rejected`. `sort` aceita
+`created_at`, `amount_in_cents`, `name` ou `status`. `order` aceita `asc` ou
+`desc`.
 
 `sum_amount_in_cents` é a soma, em centavos, de todos os reembolsos que casam
 o filtro — respeitando a mesma regra de autorização da listagem (admin vê
-todos; usuário comum, apenas os seus). O valor cobre o conjunto filtrado
-inteiro, não apenas os itens da página atual.
+todos; usuário comum, apenas os seus) e o mesmo `status`, quando informado.
+Junto com `total`, o valor cobre o conjunto filtrado inteiro, não apenas os
+itens da página atual — ambos mudam conforme `status` restringe o conjunto.
 
 ## Fluxos alternativos e erros
 
 - Se o JWT estiver ausente, inválido ou expirado, a API responde `401`.
 - Se `page` for menor que 1, ou `per_page` estiver fora do intervalo de 1 a
   100, a validação da rota rejeita a requisição.
+- Se `status` não for `pending`, `approved` ou `rejected`, a API responde `422`.
+- Se `sort` não for `created_at`, `amount_in_cents`, `name` ou `status`, a API
+  responde `422`.
+- Se `order` não for `asc` ou `desc`, a API responde `422`.
 - Se nenhum item corresponder ao escopo e à busca, a API devolve lista vazia e
   o frontend informa que nenhuma solicitação foi encontrada.
 - Se a requisição falhar, o frontend informa que não foi possível carregar as
   solicitações.
 
+> **Mudança de contrato:** a resposta não traz mais `user_id` no topo de cada
+> item; o solicitante agora vem em `user.id`, ao lado de `user.name` e
+> `user.avatar_filename`. Isso quebra nos dois sentidos com o frontend
+> anterior, então backend e frontend precisam ser implantados juntos.
+
 ## Pós-condições
 
 - Nenhuma solicitação é alterada.
 - O usuário vê somente os itens permitidos por seu papel, na página solicitada
-  e em ordem decrescente de criação.
+  e na ordem de `sort`/`order` pedida (por padrão, `created_at` decrescente).
 
 ## Regras relacionadas
 
@@ -60,12 +79,21 @@ inteiro, não apenas os itens da página atual.
 ## Evidências
 
 - `src/main/routes/refund_routes.py` protege `GET /refunds` e define os limites
-  de `page` e `per_page` e o filtro opcional `name`.
+  de `page` e `per_page` e os filtros opcionais `name`, `status`, `sort` e
+  `order`.
+- `src/validators/refund_lister_validator.py` restringe `status`, `sort` e
+  `order` às respectivas listas de valores aceitos e responde `422` fora
+  delas — a primeira das duas barreiras contra um nome de coluna vindo do
+  cliente.
 - `src/controllers/refund_lister_controller.py` distingue `admin` de
   `standard` e calcula os metadados da paginação.
 - `src/models/repositories/refunds_repository.py` aplica o filtro parcial
-  `ilike`, o escopo por usuário, a ordenação decrescente, a paginação e calcula
-  `total` e `sum_amount_in_cents` numa única consulta sobre o mesmo filtro.
+  `ilike`, o filtro por `status`, o escopo por usuário, a ordenação por
+  `sort`/`order` (com `created_at` decrescente como padrão) e a paginação, e
+  calcula `total` e `sum_amount_in_cents` numa única consulta sobre o mesmo
+  filtro. A coluna de ordenação vem de um dicionário fixo indexado pelo nome
+  recebido — a segunda barreira: um `sort` desconhecido não produz coluna
+  nenhuma, então nenhuma string da requisição chega a um `ORDER BY`.
 - `../Refund-FrontEnd/src/features/refunds/hooks/useRefunds.ts` envia página, tamanho e busca;
   `../Refund-FrontEnd/src/pages/PageHome.tsx` reinicia a página ao buscar e
   apresenta resultados, estado vazio e controles de paginação.
