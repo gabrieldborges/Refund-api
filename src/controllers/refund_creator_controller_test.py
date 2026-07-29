@@ -95,3 +95,26 @@ async def test_create_returns_the_row_it_wrote(mock_repository, mock_storage):
     mock_repository.select_refund_by_id.assert_awaited_once_with(1)
     assert response["attributes"]["status"] == "pending"
     assert response["attributes"]["user"]["name"] == "Gabriel"
+
+
+# The create response is the first response a client sees for a refund; the
+# stored filename must not leak here either — same contract as list and detail.
+@pytest.mark.asyncio
+async def test_create_response_hides_filename_and_exposes_has_avatar(mock_repository, mock_storage):
+    mock_repository.select_refund_by_id = AsyncMock(
+        return_value={
+            "id": 1, "name": "Almoço", "category": "food", "amount_in_cents": 1000,
+            "filename": "a.jpg", "status": "pending", "created_at": None,
+            "user": {"id": 7, "name": "Gabriel", "avatar_filename": "foto.png"},
+        }
+    )
+    controller = RefundCreatorController(mock_repository, mock_storage)
+
+    response = await controller.create(
+        {"name": "Almoço", "category": "food", "amount": 10.0, "filename": "a.jpg", "content": b"x"},
+        user_id=7,
+    )
+
+    assert "filename" not in response["attributes"]
+    assert response["attributes"]["user"]["has_avatar"] is True
+    assert "avatar_filename" not in response["attributes"]["user"]

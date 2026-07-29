@@ -4,6 +4,7 @@ from src.models.repositories.interfaces.refunds_repository_interface import Refu
 from src.controllers.interfaces.refund_lister_controller_interface import (
     RefundListerControllerInterface,
 )
+from src.controllers.refund_serializer import serialize_refund
 
 
 class RefundListerController(RefundListerControllerInterface):
@@ -43,15 +44,5 @@ class RefundListerController(RefundListerControllerInterface):
             "page": page,
             "per_page": per_page,
             "total_pages": math.ceil(total / per_page) if total else 0,
-            "attributes": [self.__serialize(refund) for refund in refunds],
-        }
-
-    # The repository returns created_at as a raw Python datetime (straight from the
-    # database row), which JSONResponse can't encode on its own. This is where we
-    # convert DB types into JSON-safe ones, since that's an API-boundary concern.
-    def __serialize(self, refund: dict) -> dict:
-        created_at = refund.get("created_at")
-        return {
-            **refund,
-            "created_at": created_at.isoformat() if created_at else None,
+            "attributes": [serialize_refund(refund) for refund in refunds],
         }

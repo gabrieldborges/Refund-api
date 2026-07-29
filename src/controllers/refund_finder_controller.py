@@ -2,6 +2,7 @@ from src.models.repositories.interfaces.refunds_repository_interface import Refu
 from src.controllers.interfaces.refund_finder_controller_interface import (
     RefundFinderControllerInterface,
 )
+from src.controllers.refund_serializer import serialize_refund
 from src.errors.types.http_not_found_error import HttpNotFoundError
 
 
@@ -21,12 +22,8 @@ class RefundFinderController(RefundFinderControllerInterface):
         return self.__format_response(refund)
 
     def __format_response(self, refund: dict) -> dict:
-        created_at = refund.get("created_at")
         return {
             "type": "Refund",
             "count": 1,
-            "attributes": {
-                **refund,
-                "created_at": created_at.isoformat() if created_at else None,
-            },
+            "attributes": serialize_refund(refund),
         }

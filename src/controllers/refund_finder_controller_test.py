@@ -10,7 +10,11 @@ from .refund_finder_controller import RefundFinderController
 def mock_repository():
     mock_repo = MagicMock()
     mock_repo.select_refund_by_id = AsyncMock(
-        return_value={"id": 1, "name": "Ana", "user": {"id": 7, "name": "Ana", "avatar_filename": None}}
+        return_value={
+            "id": 1, "name": "Ana", "category": "food", "amount_in_cents": 1000,
+            "status": "pending", "created_at": None,
+            "user": {"id": 7, "name": "Ana", "avatar_filename": None},
+        }
     )
     return mock_repo
 
@@ -61,7 +65,8 @@ async def test_created_at_is_serialized_to_an_iso_string():
     mock_repo = MagicMock()
     mock_repo.select_refund_by_id = AsyncMock(
         return_value={
-            "id": 1, "created_at": raw_datetime,
+            "id": 1, "name": "Ana", "category": "food", "amount_in_cents": 1000,
+            "status": "pending", "created_at": raw_datetime,
             "user": {"id": 7, "name": "Ana", "avatar_filename": None},
         }
     )
@@ -73,14 +78,15 @@ async def test_created_at_is_serialized_to_an_iso_string():
 
 
 # The detail response must carry status: it is what lets the frontend tell a
-# pending refund from a decided one. It flows automatically because
-# select(Refunds) selects every column and __format_response spreads the row —
-# this test is here so a future refactor cannot drop it silently.
+# pending refund from a decided one. It flows through serialize_refund, which
+# lists status explicitly — this test is here so a future refactor cannot drop
+# it silently.
 @pytest.mark.asyncio
 async def test_detail_response_includes_the_status(mock_repository):
     mock_repository.select_refund_by_id = AsyncMock(
         return_value={
-            "id": 1, "status": "approved", "filename": "a.jpg",
+            "id": 1, "name": "Ana", "category": "food", "amount_in_cents": 1000,
+            "status": "approved", "filename": "a.jpg", "created_at": None,
             "user": {"id": 7, "name": "Ana", "avatar_filename": None},
         }
     )
@@ -89,3 +95,24 @@ async def test_detail_response_includes_the_status(mock_repository):
     response = await controller.find(refund_id=1, user_id=7, role="standard")
 
     assert response["attributes"]["status"] == "approved"
+
+
+# The detail response is where the client used to build /receipts/{filename};
+# now it fetches the file from GET /refunds/{id}/receipt instead, so the
+# storage filename must not leak here, and the avatar becomes a boolean flag.
+@pytest.mark.asyncio
+async def test_detail_response_hides_filename_and_exposes_has_avatar(mock_repository):
+    mock_repository.select_refund_by_id = AsyncMock(
+        return_value={
+            "id": 1, "name": "Ana", "category": "food", "amount_in_cents": 1000,
+            "status": "approved", "filename": "a.jpg", "created_at": None,
+            "user": {"id": 7, "name": "Ana", "avatar_filename": "foto.png"},
+        }
+    )
+    controller = RefundFinderController(mock_repository)
+
+    response = await controller.find(refund_id=1, user_id=7, role="standard")
+
+    assert "filename" not in response["attributes"]
+    assert response["attributes"]["user"]["has_avatar"] is True
+    assert "avatar_filename" not in response["attributes"]["user"]

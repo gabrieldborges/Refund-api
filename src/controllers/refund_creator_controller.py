@@ -3,6 +3,7 @@ from src.drivers.interfaces.file_storage_interface import FileStorageInterface
 from src.controllers.interfaces.refund_creator_controller_interface import (
     RefundCreatorControllerInterface,
 )
+from src.controllers.refund_serializer import serialize_refund
 
 
 class RefundCreatorController(RefundCreatorControllerInterface):
@@ -34,12 +35,8 @@ class RefundCreatorController(RefundCreatorControllerInterface):
         return self.__format_response(refund)
 
     def __format_response(self, refund: dict) -> dict:
-        created_at = refund.get("created_at")
         return {
             "type": "Refund",
             "count": 1,
-            "attributes": {
-                **refund,
-                "created_at": created_at.isoformat() if created_at else None,
-            },
+            "attributes": serialize_refund(refund),
         }
