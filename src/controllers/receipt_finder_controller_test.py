@@ -50,9 +50,12 @@ async def test_admin_receives_any_receipt(mock_repository, mock_storage):
 async def test_someone_elses_receipt_is_not_found(mock_repository, mock_storage):
     controller = ReceiptFinderController(mock_repository, mock_storage)
 
-    with pytest.raises(HttpNotFoundError):
+    with pytest.raises(HttpNotFoundError) as exception_info:
         await controller.find(refund_id=1, user_id=999, role="standard")
 
+    # Pinning the literal message (not just the type) is what actually proves
+    # this path is indistinguishable from the other two 404 paths below.
+    assert exception_info.value.message == "Refund not found"
     mock_storage.read.assert_not_called()
 
 
@@ -61,9 +64,10 @@ async def test_missing_refund_is_not_found(mock_repository, mock_storage):
     mock_repository.select_refund_by_id = AsyncMock(return_value=None)
     controller = ReceiptFinderController(mock_repository, mock_storage)
 
-    with pytest.raises(HttpNotFoundError):
+    with pytest.raises(HttpNotFoundError) as exception_info:
         await controller.find(refund_id=999, user_id=7, role="standard")
 
+    assert exception_info.value.message == "Refund not found"
     mock_storage.read.assert_not_called()
 
 
@@ -75,8 +79,10 @@ async def test_missing_file_on_disk_is_not_found(mock_repository, mock_storage):
     mock_storage.read = MagicMock(side_effect=FileNotFoundError())
     controller = ReceiptFinderController(mock_repository, mock_storage)
 
-    with pytest.raises(HttpNotFoundError):
+    with pytest.raises(HttpNotFoundError) as exception_info:
         await controller.find(refund_id=1, user_id=7, role="standard")
+
+    assert exception_info.value.message == "Refund not found"
 
 
 @pytest.mark.asyncio
