@@ -6,6 +6,7 @@ from src.configs.global_config import upload_info
 from src.models.entities import users, refunds, refund_reviews  # pylint: disable=unused-import
 from src.main.routes.auth_routes import auth_routes
 from src.main.routes.refund_routes import refund_routes
+from src.main.routes.user_routes import user_routes
 
 
 @asynccontextmanager
@@ -31,6 +32,7 @@ app.mount("/avatars", StaticFiles(directory=upload_info["AVATAR_DIR"]), name="av
 
 app.include_router(auth_routes)
 app.include_router(refund_routes)
+app.include_router(user_routes)
 
 
 @app.get("/health")

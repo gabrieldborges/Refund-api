@@ -1,0 +1,31 @@
+from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi.responses import JSONResponse
+from src.views.http_types.http_request import HttpRequest
+from src.main.composer.avatar_uploader_composer import avatar_uploader_composer
+from src.main.composer.avatar_remover_composer import avatar_remover_composer
+from src.main.middlewares.auth_jwt import get_current_user
+
+user_routes = APIRouter(prefix="/users", tags=["Users"])
+
+
+@user_routes.post("/me/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    token_info: dict = Depends(get_current_user),
+):
+    content = await file.read()
+    http_request = HttpRequest(
+        body={"filename": file.filename, "content": content},
+        token_info=token_info,
+    )
+    view = avatar_uploader_composer()
+    response = await view.handle(http_request)
+    return JSONResponse(content=response.body, status_code=response.status_code)
+
+
+@user_routes.delete("/me/avatar")
+async def remove_avatar(token_info: dict = Depends(get_current_user)):
+    http_request = HttpRequest(token_info=token_info)
+    view = avatar_remover_composer()
+    response = await view.handle(http_request)
+    return JSONResponse(content=response.body, status_code=response.status_code)
