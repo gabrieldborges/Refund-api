@@ -68,7 +68,7 @@ class RefundsRepository(RefundsRepositoryInterface):
                 )
                 .select_from(Refunds.join(Users, Refunds.c.user_id == Users.c.id))
                 .where(*filters)
-                .order_by(self.__order_by(sort, order))
+                .order_by(*self.__order_by(sort, order))
                 .limit(per_page)
                 .offset((page - 1) * per_page)
             )
@@ -92,7 +92,15 @@ class RefundsRepository(RefundsRepositoryInterface):
 
     def __order_by(self, sort: Optional[str], order: Optional[str]):
         column = SORTABLE_COLUMNS.get(sort or "created_at", Refunds.c.created_at)
-        return column.asc() if order == "asc" else column.desc()
+        primary = column.asc() if order == "asc" else column.desc()
+        # Tiebreaker: PostgreSQL guarantees no ordering among rows whose primary
+        # sort key is equal, so with LIMIT/OFFSET a tie can put the same row on
+        # two different pages while another row never appears at all. This is
+        # rare with created_at but the norm with status/name/amount_in_cents
+        # (e.g. every "pending" refund ties under sort=status). Appending id
+        # DESC as a secondary key makes the ordering total, so pagination is
+        # deterministic regardless of how many rows share the primary key.
+        return primary, Refunds.c.id.desc()
 
     def __to_refund(self, row) -> dict:
         data = dict(row._mapping)

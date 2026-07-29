@@ -67,6 +67,23 @@ ao banco acontece antes da checagem de papel**: por isso um `standard` recebe
 o mesmo `403` para um id real ou inventado, e nunca aprende, pela resposta, se
 o id existe.
 
+## Formato da resposta (divergente das demais)
+
+**Atenção:** ao contrário de UC-003, UC-004 e UC-005 — cujas respostas trazem
+o solicitante aninhado em `user` (`{"user": {"id", "name", "avatar_filename"}}`)
+— a resposta deste endpoint traz o formato **plano** herdado de
+`RefundStatusRepository.select_for_update`: `user_id` no nível superior, sem
+objeto `user` aninhado. Essa é uma inconsistência conhecida entre os
+endpoints que devolvem reembolso, e permanece assim deliberadamente nesta
+branch: `select_for_update` também alimenta o fluxo de aprovação (com
+`FOR UPDATE`), e mudar seu formato de retorno teria efeito cascata sobre esse
+fluxo. Um cliente que consome a resposta desta revisão precisa de um contrato
+próprio para o formato plano (ou deve simplesmente buscar novamente o
+reembolso via `GET /refunds/{refund_id}`, que já devolve o formato aninhado)
+em vez de reaproveitar o contrato usado para as demais respostas de
+reembolso. Resolver essa divergência é um passo pendente para quando a tela
+de revisão for construída no frontend.
+
 ## Tabela de códigos
 
 | Código | Cenário |

@@ -26,4 +26,6 @@ def refund_lister_validator(http_request: HttpRequest) -> None:
 
     order = query.get("order")
     if order is not None and order not in ALLOWED_ORDERS:
-        raise HttpUnprocessableEntityError("Order must be one of: asc, desc")
+        raise HttpUnprocessableEntityError(
+            f"Order must be one of: {', '.join(sorted(ALLOWED_ORDERS))}"
+        )

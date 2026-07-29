@@ -38,6 +38,8 @@ Definir ou substituir a foto de perfil do usuário autenticado.
   não é aceito como foto de perfil.
 - Se o arquivo exceder 4MB, a API responde `422` com
   `Avatar must be smaller than 4MB`.
+- Se o usuário do JWT não existir mais no banco, a API responde `404` com
+  `User not found`.
 - Se a requisição falhar, o frontend exibe o erro e mantém a foto atual.
 
 ## Pós-condições

@@ -70,5 +70,5 @@ Remover uma solicitação e seu comprovante armazenado.
   o mesmo `404` para ID inexistente ou alheio, recusa com `422` quando
   `status` não é `pending`, remove o registro e solicita a remoção do arquivo.
 - `src/models/repositories/refunds_repository.py` executa e confirma a remoção
-  no banco; `src/drivers/receipt_storage.py` remove o arquivo somente se ele
+  no banco; `src/drivers/file_storage.py` remove o arquivo somente se ele
   existir.

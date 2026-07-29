@@ -14,6 +14,11 @@ class RefundStatusRepository(RefundStatusRepositoryInterface):
         self.__session = session
 
     async def select_for_update(self, refund_id: int) -> Optional[dict]:
+        # Returns the FLAT row shape: top-level "user_id", no nested "user".
+        # RefundsRepository.select_refund_by_id also reads the refunds table
+        # and is also typed -> Optional[dict], but nests the requester under
+        # "user" instead. The two are NOT interchangeable — do not swap one
+        # for the other assuming the same shape comes back.
         query = select(Refunds).where(Refunds.c.id == refund_id).with_for_update()
         result = await self.__session.execute(query)
         refund = result.fetchone()

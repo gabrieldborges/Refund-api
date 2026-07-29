@@ -32,6 +32,8 @@ do produto.
   limpa os dados locais de sessão e direciona para `/login`.
 - Se o usuário já não possuía foto de perfil, a API responde `200` do mesmo
   jeito, sem tentar remover arquivo algum — a operação é idempotente.
+- Se o usuário do JWT não existir mais no banco, a API responde `404` com
+  `User not found`.
 - Se a requisição falhar, o frontend exibe o erro e mantém a foto atual.
 
 ## Pós-condições

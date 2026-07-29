@@ -278,6 +278,37 @@ async def test_default_ordering_is_newest_first(mock_connection, mock_db):
     assert "ORDER BY refunds.created_at DESC" in rows_statement
 
 
+# Ties are the norm, not the exception, for sort=status/name/amount_in_cents
+# (e.g. every "pending" refund ties). Without a secondary key, PostgreSQL is
+# free to order tied rows differently between the LIMIT/OFFSET calls for page
+# 1 and page 2, so a row can be duplicated across pages while another is
+# skipped entirely. Asserting only the primary ORDER BY (as the tests above
+# do) would stay green even if the tiebreaker were deleted — this test pins
+# the id DESC tiebreaker's presence, right after the primary key.
+@pytest.mark.asyncio
+async def test_order_by_appends_id_tiebreaker_for_explicit_sort(mock_connection, mock_db):
+    repository = RefundsRepository(mock_connection)
+
+    await repository.select_refunds(page=1, per_page=10, sort="status", order="asc")
+
+    rows_statement = str(mock_db.session.execute.call_args_list[-1][0][0])
+    assert "ORDER BY refunds.status ASC, refunds.id DESC" in rows_statement
+
+
+# The default ordering (no sort/order given) must be just as stable as an
+# explicit one: created_at ties are rarer but not impossible (e.g. two refunds
+# inserted in the same transaction/millisecond), so the tiebreaker must apply
+# here too.
+@pytest.mark.asyncio
+async def test_order_by_appends_id_tiebreaker_for_default_sort(mock_connection, mock_db):
+    repository = RefundsRepository(mock_connection)
+
+    await repository.select_refunds(page=1, per_page=10)
+
+    rows_statement = str(mock_db.session.execute.call_args_list[-1][0][0])
+    assert "ORDER BY refunds.created_at DESC, refunds.id DESC" in rows_statement
+
+
 # An unknown sort name must never reach the query. The validator refuses it
 # first, but the repository must not trust that: the dictionary lookup falls
 # back to the default instead of interpolating anything.
