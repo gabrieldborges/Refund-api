@@ -1,8 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from src.configs.global_config import upload_info
 from src.models.entities import users, refunds, refund_reviews  # pylint: disable=unused-import
 from src.main.routes.auth_routes import auth_routes
 from src.main.routes.refund_routes import refund_routes
@@ -27,8 +25,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/receipts", StaticFiles(directory=upload_info["UPLOAD_DIR"]), name="receipts")
-app.mount("/avatars", StaticFiles(directory=upload_info["AVATAR_DIR"]), name="avatars")
+# Uploaded files are NOT served statically: the UUID filenames would be
+# capability URLs, granting anyone who ever saw a link permanent access even
+# after losing access to the refund. They go through authenticated routes
+# instead (GET /refunds/{id}/receipt and GET /users/{id}/avatar).
 
 app.include_router(auth_routes)
 app.include_router(refund_routes)
