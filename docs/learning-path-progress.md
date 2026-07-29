@@ -2663,16 +2663,18 @@ descobertas aqui:
 
 **Limitações registradas — o que este ciclo NÃO validou:**
 
-- **Nada foi aberto no navegador.** Todas as verificações acima são
-  automatizadas. Continuam **sem validação manual**: o logout forçado das
+- ~~**Nada foi aberto no navegador.**~~ **Fechado em 2026-07-29**, ainda no mesmo
+  dia: o Gabriel percorreu o checklist contra a API real — o logout forçado das
   sessões antigas no primeiro carregamento, o preview do comprovante em imagem
   **e** em PDF (incluindo tela cheia), o badge nos três valores, e o 404 do
-  comprovante de outro usuário. Pelo contrato da trilha, o ciclo **não** pode ser
-  apresentado como totalmente validado.
-- **Consequência direta: a pendência "Aberto 1/4" continua aberta.** O runtime do
-  Item 2 contra a API real dependia justamente dessa passada no navegador.
-- **O deploy conjunto continua obrigatório** e a branch do frontend **não foi
-  mesclada**.
+  comprovante de outro usuário. Tudo passou, sem ressalvas.
+- **Consequência direta: a pendência "Aberto 1/4" foi baixada.** O runtime do
+  Item 2 contra a API real dependia dessa passada, e ela aconteceu. Vale guardar
+  o motivo de nenhum teste ter fechado esse item antes: a suíte roda contra o
+  MSW, que devolve o payload que **nós** escrevemos. Um mock não pode provar que
+  o servidor real concorda com o schema — só o servidor real pode.
+- **O deploy conjunto continua obrigatório.** A branch do frontend foi mesclada
+  na `main` depois da validação; o que resta é implantar os dois juntos.
 - **`ResizeObserver` em `Sidebar.test.tsx` (não confirmado).** Durante a onda de
   correções foi relatado um `ResizeObserver is not defined` dependente da ordem
   de execução, supostamente reproduzível também no baseline intocado. A suíte

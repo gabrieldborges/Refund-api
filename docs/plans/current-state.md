@@ -416,8 +416,11 @@ completo e obrigatório está em
     `npm run build` (ok; bundle **503,57 → 506,00 kB**, +2,43 kB — o aviso de
     > 500 kB é **pré-existente**), `pytest` (178 verdes) e `pylint src`
     (10.00/10) no `Refund-api` depois do fast-forward.
-  - **Nenhuma validação em navegador aconteceu** — ver pendências. Detalhes no
-    [diário](../learning-path-progress.md).
+  - **Validado em navegador em 2026-07-29**, pelo Gabriel, contra o checklist
+    derivado da Task 11 do plano: contrato sem erro de parse do Zod, logout
+    forçado da sessão antiga, preview do comprovante em imagem e em PDF
+    (incluindo tela cheia), badge nos três status e o 404 do comprovante alheio.
+    Sem ressalvas. Detalhes no [diário](../learning-path-progress.md).
 
 - **Próximo — o workflow de aprovação na UI.** Depende de mesclar e implantar o
   ciclo acima primeiro (deploy conjunto). O backlog remanescente está na seção
@@ -506,18 +509,12 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   `localStorage` com `storedUserSchema`, que exige `id` — campo que as sessões
   salvas hoje não têm. Não é bug; é a consequência correta de exigir um campo
   novo. Vale avisar antes de implantar, para não virar chamado de suporte.
-- **NADA DO CICLO DO CONTRATO NOVO FOI VALIDADO EM NAVEGADOR.** A Task 11
-  daquele plano pedia uma passada manual contra a API real e ela **não
-  aconteceu** — é trabalho do dono do repositório, e é o que falta para o ciclo
-  poder ser apresentado como validado. O mínimo a cobrir:
-  - login, listagem, detalhe e criação sem erro de parse do Zod — é o que fecha
-    a pendência "Aberto 1/4" mais abaixo;
-  - o **logout forçado** da sessão antiga, no primeiro carregamento após o
-    deploy;
-  - preview do comprovante em **imagem** e em **PDF**, incluindo a tela cheia;
-  - o badge de status nos **três** valores;
-  - o **404 do comprovante de outro usuário** — não pode vazar bytes nem
-    quebrar a tela.
+- ~~**NADA DO CICLO DO CONTRATO NOVO FOI VALIDADO EM NAVEGADOR.**~~ RESOLVIDO em
+  2026-07-29: o Gabriel percorreu no navegador, contra a API real, o checklist da
+  Task 11 — login/listagem/detalhe/criação sem erro de parse do Zod, o logout
+  forçado da sessão antiga, o preview do comprovante em imagem e em PDF
+  (incluindo a tela cheia), o badge nos três status e o 404 do comprovante de
+  outro usuário. Tudo passou, sem ressalvas.
 - **O endpoint de revisão devolve uma forma diferente das outras.**
   `PATCH /refunds/{id}/status` monta a resposta a partir de
   `RefundStatusRepository.select_for_update`, que continua devolvendo o formato
@@ -567,18 +564,16 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   mobile (overlay, Esc, scroll), a Home em tela estreita, a persistência de tema
   e de estado da sidebar, e a faixa de resumo (incluindo o total respeitando o
   filtro, não mudando entre páginas, e o plural de "1 solicitação").
-  **Restam 4 itens abertos**, listados abaixo.
-- **Aberto 1/4 — schemas contra a API real (Item 2) segue sem marcação.** É o
-  único bloco inteiro do checklist que não foi marcado: "login, listagem,
-  detalhe e criação sem erro de parse do Zod" e "`sum_amount_in_cents` presente".
-  **Nota importante:** os blocos de cache (Item 1) e da faixa de resumo *foram*
-  marcados, e ambos só passam se o backend real tiver respondido e o Zod tiver
-  aceitado o payload — ou seja, a evidência indireta é forte. Mas como o bloco
-  não foi marcado explicitamente, fica registrado como aberto em vez de deduzido.
-  Provavelmente basta uma conferência consciente para fechar. **Atualização
-  (2026-07-29): continua aberto.** A spec do ciclo do contrato previa fechá-lo na
-  validação manual daquele ciclo — e essa validação **não aconteceu**. Enquanto
-  ninguém abrir o navegador contra a API real, este item não pode ser baixado.
+  Daqueles 4 itens abertos, **restam 3** — o primeiro foi fechado em 2026-07-29.
+- ~~**Aberto 1/4 — schemas contra a API real (Item 2) segue sem marcação.**~~
+  RESOLVIDO em 2026-07-29, na validação do ciclo do contrato novo: login,
+  listagem, detalhe e criação foram exercitados no navegador contra a API real
+  sem nenhum erro de parse do Zod. O item vinha desde o restyle com evidência
+  apenas indireta (os blocos de cache e da faixa de resumo só passavam se o Zod
+  tivesse aceitado o payload), e agora tem confirmação direta. Vale registrar o
+  que fechou o item: não foi um teste novo, foi alguém abrir o navegador — a
+  suíte roda contra o MSW, que por definição devolve o payload que nós mesmos
+  escrevemos.
 - **Aberto 2/4 — contraste nunca foi auditado com ferramenta.** O checklist
   distingue "contraste parece legível" (marcado, olho humano) de "contraste
   auditado no DevTools/Lighthouse" (não marcado). Só a segunda forma produz
