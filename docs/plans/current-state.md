@@ -11,7 +11,7 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-07-28.
+Atualizado em: 2026-07-29.
 
 ## Visão geral
 
@@ -366,6 +366,92 @@ completo e obrigatório está em
   [spec do restyle](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-27-shadcn-restyle-design.md).
   (O **Item 11 — Error boundaries** pode interligar quando as páginas novas de
   dados entrarem.)
+
+## Backlog do frontend — o que os três últimos ciclos de backend criaram
+
+O `Refund-FrontEnd` está na `main`, **sem nada implementado destes ciclos**. Os
+três ciclos de backend (`feat/refund-query-and-avatar` e
+`feat/authenticated-file-serving`, ambos **não mesclados**) mudaram o contrato em
+três frentes, e o frontend atual **não consegue consumir a API nova**. Esta
+seção é o ponto de partida da spec do frontend.
+
+### 1. Quebras de contrato a absorver — de uma vez
+
+O `src/features/refunds/schemas/refund.ts` hoje declara `user_id` e `filename`
+como **obrigatórios**. Os dois sumiram das respostas. Concretamente:
+
+| Antes | Agora |
+|---|---|
+| `user_id: 13` no topo | `user: { id, name, has_avatar }` |
+| `filename: "abc.jpg"` | não existe — o arquivo vem por rota própria |
+| `user.avatar_filename` | `user.has_avatar` (booleano) |
+| login sem `id` | login devolve `id` |
+
+**Não existe ordem de deploy segura**: backend novo com frontend velho falha o
+`.parse` de toda listagem, e o inverso também. Os dois têm de ir juntos.
+
+### 2. Arquivos deixaram de ser públicos — muda como a tela busca imagem
+
+`getReceiptUrl(filename)` em `src/lib/api.ts` **deixa de existir**, e
+`PageRefundDetails` não pode mais usar `<img src>` direto. O padrão novo:
+
+```
+fetch("/refunds/{id}/receipt", { headers: { Authorization: `Bearer ${token}` } })
+  -> blob -> URL.createObjectURL -> <img src={blobUrl}>
+  -> URL.revokeObjectURL no cleanup
+```
+
+O mesmo vale para avatares, em `/users/{id}/avatar`. Isso significa **N
+requisições autenticadas por página** numa lista com avatares, e **sem cache do
+browser** — foi uma escolha consciente, com a alternativa (URL assinada) adiada
+para o Item 22.
+
+**O `AuthUser` precisa passar a guardar o `id`** (`src/context/AuthContext.tsx`
+hoje só guarda name/email/role). Sem ele não há como buscar a própria foto.
+
+### 3. Funcionalidades que a API já suporta e a tela ainda não tem
+
+- **Workflow de aprovação.** Badge de status na lista e no detalhe; rota de
+  revisão só para admin, com o clique do admin indo para lá em vez do detalhe;
+  aprovar/rejeitar com motivo obrigatório na rejeição. **Decidido:** a tela
+  **não** consome o corpo do `PATCH` — ela invalida a query e refaz o `GET`,
+  porque aquela resposta tem forma divergente (ver UC-007).
+- **TanStack Table com toolbar** (Item 13). Agora é honesto: a API tem
+  `status`, `sort` e `order` server-side. **Sem isso, um toolbar client-side
+  filtraria só as linhas da página** — o erro que originou o ciclo anterior.
+- **Terceiro card na faixa de resumo** (Pendente/Aprovado), adiado desde o
+  restyle esperando `status`.
+- **Preview do comprovante** com botão de tela cheia, e rota dedicada.
+- **Upload de foto de perfil**, com gradiente como padrão e `has_avatar`
+  decidindo entre foto e gradiente.
+
+### 4. Ajustes pequenos que cabem no mesmo ciclo
+
+- **`per_page` de 6 para 10.** Está em **dois** lugares:
+  `src/router-loaders.ts` (`REFUNDS_PER_PAGE`) e o default de
+  `src/features/refunds/hooks/useRefunds.ts`. Mudar só um deixa loader e hook
+  discordando.
+- **`localStorage` ainda usa type assertion** — `JSON.parse(raw) as AuthUser`
+  não valida a sessão persistida. Vale resolver agora que o `AuthUser` vai
+  mudar de forma de qualquer jeito.
+- **Asserção vazia no `PageHome.test.tsx`** — a metade que diz "reseta a página
+  para 1" não pode falhar. Conserto de uma linha, e o arquivo vai ser tocado.
+- **Rejeição de comprovante por tamanho/extensão** nunca foi vista em runtime.
+- **Contraste nunca auditado com ferramenta** (DevTools/Lighthouse).
+- **"Choose File / No file chosen"** — o input nativo em inglês numa UI em
+  português; decisão nunca tomada.
+- **`avatar_filename` cru nas respostas de login/upload/remoção de avatar** —
+  inconsistente com `has_avatar` dos reembolsos. Decidir aqui se incomoda.
+
+### 5. Armadilhas do frontend que continuam valendo
+
+- `src/components/ui/sidebar.tsx` **foi editado à mão**; regerar pelo CLI
+  reintroduz a escrita de cookie.
+- A altura `h-17.5` da topbar e do cabeçalho da sidebar é **deliberada** — é o
+  que alinha as duas bordas.
+- O CLI do shadcn escreve num diretório literal `./@/` na raiz a cada `add`.
+- `src/test/setup.ts` tem polyfills de jsdom para o Radix Select que parecem
+  não usados e não são.
 
 ## Pendências e riscos conhecidos
 
