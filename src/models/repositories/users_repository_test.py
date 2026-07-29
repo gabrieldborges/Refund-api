@@ -129,6 +129,11 @@ async def test_update_avatar_persists_the_filename(mock_connection, mock_db):
 
     mock_db.session.execute.assert_awaited_once()
     mock_db.session.commit.assert_awaited_once()
+    # Verify the bound parameters: filename set correctly and WHERE clause targets right user.
+    statement = mock_db.session.execute.call_args[0][0]
+    params = statement.compile().params
+    assert params["avatar_filename"] == "abc.jpg"
+    assert params["id_1"] == 7
 
 
 # Removing the picture is an update to NULL, not a delete: the user row stays.
@@ -138,6 +143,11 @@ async def test_update_avatar_accepts_none_to_clear_the_picture(mock_connection, 
 
     await repository.update_avatar(7, None)
 
-    statement = str(mock_db.session.execute.call_args[0][0])
-    assert "UPDATE users" in statement
+    # Verify the UPDATE statement was issued and committed.
+    mock_db.session.execute.assert_awaited_once()
     mock_db.session.commit.assert_awaited_once()
+    # Verify the bound parameters: avatar_filename is None (not empty string or other falsy).
+    statement = mock_db.session.execute.call_args[0][0]
+    params = statement.compile().params
+    assert params["avatar_filename"] is None
+    assert params["id_1"] == 7
