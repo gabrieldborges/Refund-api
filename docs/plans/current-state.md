@@ -313,14 +313,60 @@ completo e obrigatório está em
     **10/10 cenários ponta a ponta** contra a API real com os status HTTP
     conferidos um a um. Detalhes no [diário](../learning-path-progress.md).
 
-- **Próximo — spec do frontend do workflow de aprovação.** A API existe; falta a
-  tela. É o passo que fecha o ciclo 3 do roadmap. Depois dele vem o **Item 13 —
-  TanStack Table** (ciclo 4), sobre a Home já preparada. Roadmap completo na
+- **Ciclo de feature — Consulta da listagem e foto de perfil (backend):
+  CONCLUÍDO.** Quarto ciclo, na branch `feat/refund-query-and-avatar` do
+  `Refund-api` (`3fa42b2..2c2081c`, 19 commits). **Ainda não mesclado.**
+  Artefatos em `docs/superpowers/`
+  ([spec](../superpowers/specs/2026-07-29-refund-query-and-avatar-design.md),
+  [plano](../superpowers/plans/2026-07-29-refund-query-and-avatar.md)).
+  Feito antes do frontend de propósito. O que mudou:
+  - **`GET /refunds` ganhou `status`, `sort` e `order`**, com listas brancas e 422
+    fora delas, e ordenação estável (`id DESC` como desempate). `total` e
+    `sum_amount_in_cents` respeitam o filtro.
+  - **Objeto `user` aninhado** em toda resposta de reembolso; `user_id` saiu do
+    topo. `POST /refunds` passou a reler a linha gravada, unificando as três
+    formas.
+  - **Foto de perfil:** `users.avatar_filename`, `POST`/`DELETE
+    /users/me/avatar`, servida em `/avatars/{filename}`.
+  - `ReceiptStorage` virou **`FileStorage`** parametrizado pelo diretório.
+  - Dívida de storage: uploads ignorados pelo git, 7 órfãos removidos.
+  - Verificação: `pytest` (**154 verdes**, partiu de 105), `pylint src`
+    (**10.00/10**), ciclo `upgrade`/`downgrade` real, e **19/19 cenários ponta a
+    ponta** contra a API real. Detalhes no [diário](../learning-path-progress.md).
+  - **Backend e frontend TÊM de ir para produção juntos** — ver pendências.
+
+- **Próximo — spec do frontend.** Agora ela cobre o workflow de aprovação **e** o
+  que este ciclo desbloqueou: TanStack Table com toolbar honesto (**Item 13**),
+  preview do comprovante, e a foto de perfil com upload. Roadmap completo na
   [spec do restyle](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-27-shadcn-restyle-design.md).
   (O **Item 11 — Error boundaries** pode interligar quando as páginas novas de
   dados entrarem.)
 
 ## Pendências e riscos conhecidos
+
+- **DEPLOY CONJUNTO OBRIGATÓRIO — esta quebra não tem lado seguro.** O ciclo de
+  2026-07-29 tirou `user_id` do topo das respostas de reembolso e o moveu para
+  `user.id`. O Zod do frontend declara `user_id` como **obrigatório**: um backend
+  novo com frontend velho falha o `.parse` em toda listagem. E o inverso falha
+  igual, porque o frontend novo passará a exigir `user`. Diferente do
+  `sum_amount_in_cents` do ciclo anterior — que tinha uma ordem segura — **aqui
+  não existe nenhuma**. Os dois têm de ser implantados no mesmo momento. Se isso
+  não for viável, a alternativa é uma versão de transição devolvendo `user_id`
+  **e** `user`, removendo `user_id` só depois.
+- **O endpoint de revisão devolve uma forma diferente das outras.**
+  `PATCH /refunds/{id}/status` monta a resposta a partir de
+  `RefundStatusRepository.select_for_update`, que continua devolvendo o formato
+  achatado com `user_id` no topo — enquanto criação, listagem e detalhe devolvem
+  `user` aninhado. Está documentado no `UC-007` e **não** foi corrigido de
+  propósito: mudar aquele repositório rippla no workflow de aprovação. Resolver
+  quando a tela de revisão for construída.
+- **Duas repositories sobre a tabela `refunds`, com formas diferentes.**
+  `RefundsRepository.select_refund_by_id` devolve `user` aninhado;
+  `RefundStatusRepository.select_for_update` devolve `user_id` achatado. Ambas
+  são tipadas `-> Optional[dict]`. Há um comentário na segunda alertando, mas a
+  regra que vale é: **um call site segue a forma do método específico que
+  consome**, não a "forma da tabela". Essa divergência já quase virou um bug
+  durante a correção deste ciclo.
 
 - **`select_for_update` segura uma conexão do pool enquanto espera.** Achado na
   revisão final do ciclo de aprovação e **deliberadamente não corrigido**. O lock

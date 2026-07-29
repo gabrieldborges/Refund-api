@@ -2151,3 +2151,118 @@ defeitos do plano**, não da execução:
 - **`SELECT ... FOR UPDATE` só é possível porque existe uma transação em volta.**
   Com o padrão antigo, a leitura já teria encerrado a própria sessão antes de
   qualquer decisão ser tomada.
+
+## Ciclo de feature — Consulta da listagem e foto de perfil (2026-07-29)
+
+Quarto ciclo de feature, inteiramente de backend, feito **antes** do frontend de
+propósito: construir tela contra uma API que muda em seguida é retrabalho
+garantido.
+
+### O que originou o ciclo — uma armadilha, não uma funcionalidade
+
+O plano do frontend inclui o TanStack Table com toolbar de filtro e ordenação.
+Mas a API pagina **no servidor**: o frontend pede `per_page=6` e recebe 6 linhas.
+O toolbar do TanStack ordena e filtra **o que está na tabela** — ou seja, com 41
+reembolsos, um filtro de status olharia 6 deles e uma ordenação por valor
+ordenaria a página, não o conjunto.
+
+**Funcionaria visualmente e mentiria.** É pior do que não existir, porque o
+usuário confia no que vê.
+
+A lição que dá nome ao ciclo: **ordenação e filtro têm de viver onde vive a
+paginação.** Se a paginação é do servidor, filtrar no cliente é filtrar uma
+amostra arbitrária.
+
+### O que mudou
+
+- `GET /refunds` ganhou `status`, `sort` e `order`, com listas brancas e 422 fora
+  delas. `total` e `sum_amount_in_cents` respeitam o filtro — senão o card de
+  resumo diria um número e a lista mostraria outro.
+- Toda resposta de reembolso ganhou um objeto `user` aninhado e **perdeu o
+  `user_id` do topo**; a tela de revisão do admin precisa do nome de quem pediu,
+  não de um id.
+- `POST /refunds` passou a reler a linha gravada, para criação, listagem e
+  detalhe devolverem **uma** forma.
+- Foto de perfil: coluna, `POST`/`DELETE /users/me/avatar`, arquivo servido em
+  `/avatars/{filename}`.
+- `ReceiptStorage` virou `FileStorage` recebendo o diretório no construtor.
+- Dívida de storage: uploads ignorados pelo git e sete arquivos órfãos removidos.
+
+### Duas barreiras contra nome de coluna vindo do cliente
+
+`sort` acaba virando coluna num `ORDER BY`. A defesa tem duas camadas
+independentes:
+
+```python
+# 1. o validator recusa o que não está na lista branca
+SORTABLE_FIELDS = {"created_at", "amount_in_cents", "name", "status"}
+
+# 2. o repositório usa o nome como CHAVE, nunca como texto
+SORTABLE_COLUMNS = {"created_at": Refunds.c.created_at, ...}
+column = SORTABLE_COLUMNS.get(sort or "created_at", Refunds.c.created_at)
+```
+
+A segunda é a que importa: mesmo que a primeira falhasse, um nome desconhecido
+não produz coluna nenhuma — cai no padrão. Concatenar string em SQL nunca chega
+a ser uma opção.
+
+### Verificações
+
+| Comando | Resultado |
+|---|---|
+| `pytest` | **154 testes**, todos verdes (partiu de 105) |
+| `pylint src` | **10.00/10** ao fim de cada uma das 13 tasks |
+| Ponta a ponta contra a API real | **19/19 cenários**, com a ordem realmente conferida |
+| `alembic upgrade`/`downgrade` | ciclo completo contra o banco real |
+
+### O que a revisão pegou — e por que a suíte verde não bastava
+
+Foram cinco achados que a execução sozinha não teria encontrado, e **quatro deles
+eram defeitos do plano**, não do implementador:
+
+1. **Uma regressão Critical que 147 testes verdes escondiam.** Mover `user_id`
+   para dentro de `user` quebrou dois controllers que ainda liam a chave antiga:
+   `KeyError` → **500 em `GET /refunds/{id}` e `DELETE` para todo usuário
+   comum**. Admin não era afetado, porque a checagem de papel faz curto-circuito
+   antes — quebrava exatamente para quem a verificação de propriedade protege.
+   A suíte passava porque os mocks daqueles controllers ainda devolviam o formato
+   antigo: **testavam um contrato que o repositório havia deixado de cumprir.**
+2. **Paginação instável com a ordenação nova.** Ordenar por `status`, `name` ou
+   `amount_in_cents` sem critério de desempate: o PostgreSQL não garante ordem
+   entre empates, então com `LIMIT/OFFSET` a mesma linha pode sair em duas
+   páginas e outra em nenhuma. Antes só existia `created_at`, onde empate é raro;
+   as colunas novas tornam empate o caso normal. Conserto: `id DESC` como
+   segundo critério.
+3. **Testes que não podiam falhar**, de novo e em três formas diferentes:
+   asserção sobre `str(statement)` (parâmetros ligados não aparecem no SQL
+   renderizado, então `None` e `"abc.jpg"` produzem a mesma string); ausência de
+   qualquer teste sobre a **ordem** das três operações do upload; e dados de
+   teste com `"name"` e `"user_name"` iguais, que tornariam uma troca entre os
+   dois invisível.
+4. **Uma armadilha que quase virou bug novo durante a correção:** existe um
+   terceiro `["user_id"]`, no controller de revisão, que **não** podia ser
+   mudado — ele lê de `RefundStatusRepository.select_for_update`, outra classe,
+   que continua devolvendo o formato achatado.
+
+### O que lembrar
+
+- **Ordenação e filtro pertencem à camada que pagina.** Filtrar no cliente uma
+  lista paginada no servidor produz uma interface que mente com confiança.
+- **`ORDER BY` sem desempate não é ordenação, é sugestão.** Sempre que houver
+  `LIMIT/OFFSET`, o critério precisa ser único — ou a paginação duplica e pula
+  linhas, e nenhum teste de uma página só enxerga isso.
+- **Mock desatualizado é pior que ausência de teste.** Ele afirma que um contrato
+  vale quando o outro lado já mudou. Ao alterar a forma que um repositório
+  devolve, o trabalho não é atualizar o repositório — é **encontrar todos os
+  consumidores**, e a suíte não vai apontá-los.
+- **Parâmetro ligado não aparece em `str(statement)`.** Testar SQL por grep na
+  string é cego para valores. Asserte sobre `statement.compile().params`.
+- **Quando a ordem das operações é a garantia, ela precisa de um teste próprio.**
+  Asserções por chamada individual são todas verdadeiras em qualquer sequência;
+  `attach_mock` num pai comum põe as chamadas num log ordenado.
+- **Dado de teste igual esconde troca de campo.** Se dois campos podem ser
+  confundidos, eles têm de ter valores diferentes no fixture, ou o teste passa
+  igual invertido.
+- **Duas repositories sobre a mesma tabela podem devolver formas diferentes de
+  propósito** — e isso é uma armadilha real. Um call site tem de seguir a forma do
+  método específico que consome, não a "forma da tabela".
