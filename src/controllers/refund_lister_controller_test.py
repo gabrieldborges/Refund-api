@@ -106,3 +106,16 @@ async def test_response_includes_the_total_amount(mock_repository):
     response = await controller.list(page=1, per_page=10, user_id=7, role="standard")
 
     assert response["sum_amount_in_cents"] == 19290
+
+
+# Same guarantee as the detail response, for the list: every item carries status.
+@pytest.mark.asyncio
+async def test_list_items_include_the_status(mock_repository):
+    mock_repository.select_refunds = AsyncMock(
+        return_value=([{"id": 1, "status": "pending"}, {"id": 2, "status": "approved"}], 2, 19290)
+    )
+    controller = RefundListerController(mock_repository)
+
+    response = await controller.list(page=1, per_page=10, user_id=7, role="admin")
+
+    assert [item["status"] for item in response["attributes"]] == ["pending", "approved"]

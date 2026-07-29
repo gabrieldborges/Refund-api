@@ -283,18 +283,62 @@ completo e obrigatório está em
     a restrição vale agora para o **deploy**: implantar **primeiro** o
     `Refund-api`, **depois** o `Refund-FrontEnd`.
 
-- **Próximo — ciclo de feature: Workflow de aprovação** (backend primeiro:
-  `status` pendente/aprovado/rejeitado + aprovar/rejeitar por admin + autorização;
-  depois o frontend). É o passo 3 do roadmap de ciclos e o veículo natural do
-  **Item 18 (Alembic/migrations)** — não dá para alterar a tabela com dados sem
-  migration — e do **Item 20 (Unit of Work)**. Resolve de brinde o "nome do emissor
-  + data" na listagem. Roadmap completo dos ciclos na
+- **Ciclo de feature — Workflow de aprovação (backend): CONCLUÍDO.**
+  Terceiro ciclo de feature e o primeiro inteiramente de backend, na branch
+  `feat/refund-approval-workflow` do `Refund-api` (`5b50c0f..f083d0b`, 20
+  commits). **Ainda não mesclado.** Artefatos em `docs/superpowers/`
+  ([spec](../superpowers/specs/2026-07-28-refund-approval-workflow-design.md),
+  [plano](../superpowers/plans/2026-07-28-refund-approval-workflow.md)).
+  Cobriu **Item 18 (Alembic)** e **Item 20 (Unit of Work)**. O que mudou:
+  - **Schema sob migrations.** `metadata.create_all` saiu do lifespan; o schema é
+    governado por `alembic/versions/` e `alembic upgrade head`. Baseline escrito à
+    mão (o `autogenerate` sai vazio contra um banco que já bate) e conferido por
+    uma migration descartável que precisa sair vazia. `ADR-002` amendada.
+  - **`refunds.status`** (`pending`/`approved`/`rejected`, `server_default` fazendo
+    o backfill das 41 linhas) e a tabela **`refund_reviews`** com o histórico das
+    decisões.
+  - **`PATCH /refunds/{id}/status`** — só admin, e nunca a própria solicitação
+    (BR-016). Transições reversíveis entre decisões, nunca de volta a `pending`
+    (BR-017); rejeição exige justificativa (BR-018). A **ordem das checagens** é
+    decisão de segurança: o papel é verificado antes de qualquer consulta ao banco.
+  - **`UnitOfWork`** (`src/models/settings/unit_of_work.py`) delimita uma transação
+    por caso de uso, com dois repositories sessão-injetada que não commitam. Os
+    CRUDs existentes **não** foram refatorados — um write só não precisa de UoW.
+  - **Exclusão restrita a pendentes** (BR-015 alterada), com o `DELETE`
+    condicional ao status para fechar a corrida com uma aprovação concorrente.
+  - `UC-007` novo; `UC-004`/`UC-005`/`UC-006` amendados; `init/promote_admin.py`
+    para criar o primeiro admin (o cadastro público só cria `standard`).
+  - Verificação: `pytest` (**105 verdes**, partiu de 73), `pylint src`
+    (**10.00/10**), ciclo `upgrade`/`downgrade` executado contra o banco real, e
+    **10/10 cenários ponta a ponta** contra a API real com os status HTTP
+    conferidos um a um. Detalhes no [diário](../learning-path-progress.md).
+
+- **Próximo — spec do frontend do workflow de aprovação.** A API existe; falta a
+  tela. É o passo que fecha o ciclo 3 do roadmap. Depois dele vem o **Item 13 —
+  TanStack Table** (ciclo 4), sobre a Home já preparada. Roadmap completo na
   [spec do restyle](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-27-shadcn-restyle-design.md).
-  (O **Item 11 — Error boundaries** pode interligar quando as páginas novas de dados
-  entrarem. O **Item 13 — TanStack Table** vem no ciclo seguinte, sobre a Home já
-  preparada para ele.)
+  (O **Item 11 — Error boundaries** pode interligar quando as páginas novas de
+  dados entrarem.)
 
 ## Pendências e riscos conhecidos
+
+- **`select_for_update` segura uma conexão do pool enquanto espera.** Achado na
+  revisão final do ciclo de aprovação e **deliberadamente não corrigido**. O lock
+  é tomado dentro da transação do `UnitOfWork` e não há `NOWAIT` nem
+  `lock_timeout`. Cenário: três revisões concorrentes da mesma solicitação — A
+  segura o lock, B bloqueia ocupando a segunda conexão, e C (qualquer endpoint,
+  até um login) espera o `pool_timeout` de 30s e recebe 500. Antes deste ciclo
+  nenhum caminho segurava lock durante uma espera, então contenção não conseguia
+  esgotar o pool. Conserto: subir o `pool_size` ou definir um `lock_timeout`
+  curto nos `connect_args`. Conecta com a pendência do pool pequeno logo abaixo —
+  as duas devem ser resolvidas juntas, num item de backend próprio.
+- **O ciclo `upgrade`/`downgrade` das migrations é verificado à mão.**
+  Automatizá-lo exige um PostgreSQL descartável, que é o **Item 19**. Testar
+  migrations em SQLite seria pior que não testar: esconderia justamente as
+  diferenças que o Item 19 existe para expor. Limitação aceita e registrada.
+- **Existe um admin de teste no banco.** `admin.validacao@example.com` foi criado
+  e promovido durante a verificação ponta a ponta do ciclo de aprovação, junto de
+  `validacao.visual@example.com` e seus reembolsos de teste. São descartáveis.
 
 - **Uma asserção vazia no teste do `RefundSearch`.** Em
   `Refund-FrontEnd/src/pages/PageHome.test.tsx`, o teste da busca com debounce

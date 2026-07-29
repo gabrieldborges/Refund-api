@@ -24,9 +24,10 @@ Consultar uma página de solicitações, opcionalmente filtrada por parte do nom
    diferenciar maiúsculas de minúsculas.
 5. A API ordena os resultados de `created_at` mais recente para o mais antigo e
    aplica limite e deslocamento da página.
-6. A API devolve os itens e os metadados `count`, `total`, `sum_amount_in_cents`,
-   `page`, `per_page` e `total_pages`; o frontend apresenta a lista e os
-   controles de paginação.
+6. A API devolve os itens — cada um com seu `status` (`pending`, `approved` ou
+   `rejected`) — e os metadados `count`, `total`, `sum_amount_in_cents`, `page`,
+   `per_page` e `total_pages`; o frontend apresenta a lista e os controles de
+   paginação.
 
 `sum_amount_in_cents` é a soma, em centavos, de todos os reembolsos que casam
 o filtro — respeitando a mesma regra de autorização da listagem (admin vê
@@ -54,6 +55,7 @@ inteiro, não apenas os itens da página atual.
 - [BR-006](../business-rules.md#br-006--autenticação-das-operações-de-reembolso)
 - [BR-012](../business-rules.md#br-012--escopo-de-acesso-por-papel)
 - [BR-014](../business-rules.md#br-014--ordem-e-busca-da-listagem)
+- [BR-017](../business-rules.md#br-017--transições-de-status-permitidas)
 
 ## Evidências
 

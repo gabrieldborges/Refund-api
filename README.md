@@ -24,19 +24,34 @@ credenciais do seu ambiente. Nunca versione o `.env` (ele já está no
 
 ## Rodando localmente
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python run.py
-```
+1. Crie e ative o ambiente virtual, e instale as dependências:
+
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+2. Aplique as migrations (obrigatório antes de subir o servidor pela primeira
+   vez — sem isso a primeira requisição falha com `UndefinedTable`):
+
+   ```bash
+   alembic upgrade head
+   ```
+
+   O schema do banco é governado pelo Alembic (`alembic/versions/`). Rodar
+   `alembic upgrade head` é seguro a qualquer momento: ele aplica apenas as
+   migrations que faltam. O `init/schema.sql` continua existindo só como
+   referência histórica.
+
+3. Suba o servidor:
+
+   ```bash
+   python run.py
+   ```
 
 A API sobe em `http://localhost:3333`.
 Documentação automática (Swagger) em `http://localhost:3333/docs`.
-
-No startup do servidor, `metadata.create_all` cria no PostgreSQL as tabelas que
-ainda não existem (ver `src/main/server/server.py`). Não é preciso rodar
-`init/schema.sql` manualmente — ele existe só como referência do schema.
 
 ## Estrutura
 
@@ -73,5 +88,15 @@ Importe [`Refund-api.postman_collection.json`](Refund-api.postman_collection.jso
 - **Auth - Login** salva o token automaticamente na variável `{{token}}` (script
   na aba Tests) — as demais requisições já usam `Authorization: Bearer {{token}}`.
 - **Refunds - Create** salva o `id` criado em `{{refund_id}}`, usado por
-  **Get by ID** e **Delete**.
-- Rode na ordem: Register → Login → Create → List → Get by ID → Delete.
+  **Get by ID**, **Review Status** e **Delete**.
+- Rode na ordem: Register → Login → Create → List → Get by ID → Review Status
+  → Delete.
+- **Review Status** só funciona logado como `admin` (promova um usuário
+  diretamente no banco, já que o cadastro público sempre cria `standard` —
+  BR-003) e diferente do dono da solicitação (BR-016); com um usuário
+  `standard`, ou revisando a própria solicitação, a API responde `403`.
+- Note que **Review Status** decide a solicitação (`approved` ou `rejected`),
+  e uma solicitação decidida não pode mais ser excluída (BR-015): rodar
+  **Delete** depois de **Review Status** sobre o mesmo `refund_id` responde
+  `422`. Para testar o fluxo completo de exclusão, crie uma segunda solicitação
+  e pule **Review Status** para ela.

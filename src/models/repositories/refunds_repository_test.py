@@ -123,12 +123,36 @@ async def test_select_refund_by_id_not_found(mock_connection, mock_db):
     assert refund is None
 
 
-# Verifies deleting runs the DELETE and commits the transaction.
-# There's no return value to check, so we validate behavior through the mocks.
+# Verifies deleting runs the DELETE and commits the transaction, and that
+# rowcount is returned so the caller can tell "deleted" from "not eligible".
 @pytest.mark.asyncio
 async def test_delete_refund(mock_connection, mock_db):
+    execute_result = MagicMock()
+    execute_result.rowcount = 1
+    mock_db.session.execute = AsyncMock(return_value=execute_result)
+
     repository = RefundsRepository(mock_connection)
-    await repository.delete_refund(1)
+    deleted_count = await repository.delete_refund(1)
 
     mock_db.session.execute.assert_awaited_once()
     mock_db.session.commit.assert_awaited_once()
+    assert deleted_count == 1
+
+
+# The DELETE must be conditional on status, not just id: this is what closes the
+# race with a concurrent review that moves the refund out of "pending" between
+# the controller's read and this delete. Mirrors how
+# refund_status_repository_test.py asserts on "FOR UPDATE" by inspecting the
+# emitted statement's string form.
+@pytest.mark.asyncio
+async def test_delete_refund_filters_on_pending_status(mock_connection, mock_db):
+    execute_result = MagicMock()
+    execute_result.rowcount = 0
+    mock_db.session.execute = AsyncMock(return_value=execute_result)
+
+    repository = RefundsRepository(mock_connection)
+    deleted_count = await repository.delete_refund(1)
+
+    statement = str(mock_db.session.execute.call_args[0][0])
+    assert "status" in statement
+    assert deleted_count == 0

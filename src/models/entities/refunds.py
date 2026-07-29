@@ -11,5 +11,9 @@ Refunds = Table(
     Column("category", String, nullable=False),
     Column("amount_in_cents", Integer, nullable=False),
     Column("filename", String, nullable=False),
+    # server_default matters beyond new rows: it is what lets the ALTER TABLE in
+    # the migration backfill the rows that already exist without violating the
+    # NOT NULL constraint.
+    Column("status", String, nullable=False, server_default="pending"),
     Column("created_at", DateTime, server_default=func.now()),  # pylint: disable=not-callable
 )

@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Python 3.9.** Use `Optional[X]`, **nunca** `X | None` (sintaxe de união só existe a partir do 3.10). `list[dict]` e `tuple[...]` são válidos.
-- **Todo arquivo novo ganha um `_test.py` ao lado**, no mesmo diretório — nunca uma pasta `tests/` separada (`AGENTS.md`).
+- **Todo arquivo novo com lógica ganha um `_test.py` ao lado**, no mesmo diretório — nunca uma pasta `tests/` separada (`AGENTS.md`). **Exceção, conforme a convenção vigente:** composers (`src/main/composer/`) são fiação de injeção de dependência sem lógica e não têm teste — nenhum dos 6 existentes tem; scripts operacionais de `init/` também não.
 - **Testes assíncronos exigem `@pytest.mark.asyncio` explícito.** Não há arquivo de configuração do pytest; o modo é estrito.
 - **Comentários em inglês**, curtos e descritivos, explicando o cenário ou a razão — não o óbvio (`AGENTS.md`).
 - **`pylint src` deve terminar em 10.00/10.** É o patamar atual; qualquer queda é regressão.
@@ -97,11 +97,29 @@ Confirme com `grep -i "postgres\|password" alembic.ini` — a saída deve ser va
 .venv/bin/alembic revision --autogenerate -m "baseline users and refunds"
 ```
 
-- [ ] **Step 6: Ler o arquivo gerado e conferir**
+- [ ] **Step 6: Escrever o corpo do baseline à mão**
 
-Abra `alembic/versions/<hash>_baseline_users_and_refunds.py`. O `upgrade()` deve conter `op.create_table("users", ...)` e `op.create_table("refunds", ...)`, com as colunas exatamente como em `src/models/entities/`. O `downgrade()` deve derrubar as duas.
+**Espere uma migration vazia.** O `autogenerate` compara a metadata com o banco **conectado**, e o banco de desenvolvimento já tem `users` e `refunds` iguais às entidades — não há diferença, então o arquivo sai com `pass` nos dois corpos. Isso é o output honesto, não um erro.
 
-**Se aparecer qualquer `op.drop_table` no `upgrade()`, pare:** significa que as entidades não foram importadas no `env.py` e o autogenerate concluiu que as tabelas do banco são sobra. Volte ao Step 3.
+Mas um baseline vazio é inútil: não cria nada num banco novo (outra máquina, CI, um banco de teste futuro), e a Task 2 encadeia sua `down_revision` nele.
+
+Escreva à mão, em `upgrade()`, os `op.create_table("users", ...)` e `op.create_table("refunds", ...)` espelhando **exatamente** `src/models/entities/users.py` e `refunds.py` — cada coluna, tipo, nulabilidade, chave primária, chave estrangeira e `server_default`. Em `downgrade()`, derrube as duas, `refunds` primeiro (é quem carrega a FK para `users`).
+
+**Se aparecer qualquer `op.drop_table` no `upgrade()` gerado, pare:** significa que as entidades não foram importadas no `env.py` e o autogenerate concluiu que as tabelas do banco são sobra. Volte ao Step 3.
+
+- [ ] **Step 6b: Provar que o baseline escrito à mão está correto**
+
+Sem banco descartável, use o próprio `autogenerate` como conferência. **Depois** do `stamp` do Step 7, rode:
+
+```bash
+.venv/bin/python -m alembic revision --autogenerate -m "baseline verification throwaway"
+```
+
+O arquivo produzido **tem que sair vazio**. É a prova: o autogenerate está comparando a metadata contra o schema real, então qualquer coluna que você tenha errado — ausente, tipo errado, nulabilidade errada — apareceria aqui como `op.add_column` ou `op.alter_column`.
+
+Se **não** sair vazio, ele acabou de dizer exatamente o que está errado: corrija o baseline, apague o descartável e repita até sair vazio.
+
+Quando sair vazio, **apague o arquivo descartável** (ele não pode ser commitado) e confirme que `alembic current` continua apontando só para o baseline.
 
 - [ ] **Step 7: Reconciliar o banco existente com `stamp`**
 
@@ -699,6 +717,13 @@ def mock_connection(mock_session):
 
 # Both repositories must share the SAME session — that is the entire mechanism
 # by which their writes end up in one transaction.
+#
+# Note what this test has to assert to be worth anything: the mock returns the
+# same session on every call, so counting executes would ALSO pass for a broken
+# UnitOfWork that opened one connection per repository — which in production
+# would put the two writes in different transactions. Asserting connect() was
+# called once, and that both repositories hold the same object, is what actually
+# pins the property.
 @pytest.mark.asyncio
 async def test_both_repositories_share_the_same_session(mock_connection, mock_session):
     async with UnitOfWork(mock_connection) as unit_of_work:
@@ -707,7 +732,27 @@ async def test_both_repositories_share_the_same_session(mock_connection, mock_se
             refund_id=1, reviewer_id=9, from_status="pending", to_status="approved", reason=None
         )
 
+    assert mock_connection.connect.call_count == 1
+    assert (
+        unit_of_work.refunds._RefundStatusRepository__session
+        is unit_of_work.reviews._RefundReviewsRepository__session
+    )
     assert mock_session.execute.await_count == 2
+
+
+# Closing the session must not depend on the rollback succeeding: a rollback can
+# raise when the original error already broke the connection, and a session that
+# never closes never returns its connection to a pool of size 2.
+@pytest.mark.asyncio
+async def test_the_session_is_closed_even_when_rollback_fails(mock_connection, mock_session):
+    mock_session.rollback = AsyncMock(side_effect=RuntimeError("rollback failed"))
+
+    with pytest.raises(RuntimeError):
+        async with UnitOfWork(mock_connection) as unit_of_work:
+            await unit_of_work.refunds.update_status(1, "approved")
+            raise ValueError("boom")
+
+    mock_connection.connect.return_value.__aexit__.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -784,9 +829,17 @@ class UnitOfWork:
     async def __aexit__(self, exc_type, exc_value, traceback) -> None:
         # Rolling back on the way out is what makes an exception anywhere in the
         # block safe: no caller needs a try/except to undo a partial write.
-        if exc_type is not None:
-            await self.__session.rollback()
-        await self.__session_ctx.__aexit__(exc_type, exc_value, traceback)
+        #
+        # The finally is load-bearing: closing the session must not depend on the
+        # rollback succeeding. A rollback can itself raise — the original error may
+        # already have left the connection broken — and without the finally the
+        # session would never close, leaking its connection. The pool is
+        # pool_size=2, max_overflow=0, so two leaks hang the whole API.
+        try:
+            if exc_type is not None:
+                await self.__session.rollback()
+        finally:
+            await self.__session_ctx.__aexit__(exc_type, exc_value, traceback)
 
     async def commit(self) -> None:
         await self.__session.commit()

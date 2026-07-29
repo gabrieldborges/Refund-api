@@ -121,9 +121,40 @@ minúsculas ao nome.
 
 ## BR-015 — Exclusão da solicitação e do comprovante
 
-Exclusão remove o registro e tenta remover seu arquivo de comprovante.
+Exclusão exige que a solicitação esteja com `status = 'pending'`; remove o
+registro e tenta remover seu arquivo de comprovante. Uma solicitação já
+decidida (`approved` ou `rejected`) não pode ser excluída.
 
-**Evidências:** `src/controllers/refund_deleter_controller.py` coordena a remoção
-do registro e do comprovante; `src/models/repositories/refunds_repository.py`
-remove o registro; `src/drivers/receipt_storage.py` remove o arquivo quando ele
-existe.
+**Evidências:** `src/controllers/refund_deleter_controller.py` recusa a
+exclusão quando `status` não é `pending`, coordena a remoção do registro e do
+comprovante; `src/models/repositories/refunds_repository.py` remove o
+registro; `src/drivers/receipt_storage.py` remove o arquivo quando ele existe.
+
+## BR-016 — Segregação de funções na revisão
+
+Somente usuário `admin` aprova ou rejeita uma solicitação, e nenhum admin decide
+sobre solicitação de sua própria autoria.
+
+**Evidências:** `src/controllers/refund_reviewer_controller.py` verifica o papel
+antes de qualquer consulta ao banco e recusa a revisão quando
+`refund["user_id"]` é igual ao id do revisor.
+
+## BR-017 — Transições de status permitidas
+
+A partir de `pending`, uma solicitação vai para `approved` ou `rejected`. Uma
+solicitação já decidida pode ter a decisão trocada (`approved` ↔ `rejected`),
+mas nunca retorna a `pending`. Repetir a decisão vigente é recusado, porque não
+há mudança de estado a registrar.
+
+**Evidências:** `src/validators/refund_reviewer_validator.py` restringe o alvo a
+`approved` ou `rejected`, e `src/controllers/refund_reviewer_controller.py`
+recusa quando o status atual já é o alvo.
+
+## BR-018 — Justificativa obrigatória na rejeição
+
+Revisar uma solicitação com `status` alvo igual a `rejected` exige informar
+`reason` não vazio. Aprovar (`approved`) não exige `reason`.
+
+**Evidências:** `src/validators/refund_reviewer_validator.py` recusa a
+requisição quando `status` é `rejected` e `reason` está ausente, vazio ou
+somente espaços.

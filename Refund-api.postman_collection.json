@@ -179,6 +179,27 @@
 				}
 			},
 			"response": []
+		},
+		{
+			"name": "Refunds - Review Status",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{ "key": "Authorization", "value": "Bearer {{token}}" },
+					{ "key": "Content-Type", "value": "application/json" }
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"status\": \"rejected\",\n  \"reason\": \"Comprovante ilegível\"\n}",
+					"options": { "raw": { "language": "json" } }
+				},
+				"url": {
+					"raw": "{{host}}/refunds/{{refund_id}}/status",
+					"host": ["{{host}}"],
+					"path": ["refunds", "{{refund_id}}", "status"]
+				}
+			},
+			"response": []
 		}
 	]
 }

@@ -23,5 +23,5 @@ class RefundsRepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def delete_refund(self, refund_id: int) -> None:
+    async def delete_refund(self, refund_id: int) -> int:
         pass

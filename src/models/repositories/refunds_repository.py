@@ -61,8 +61,15 @@ class RefundsRepository(RefundsRepositoryInterface):
             refund = result.fetchone()
             return dict(refund._mapping) if refund else None
 
-    async def delete_refund(self, refund_id: int) -> None:
+    async def delete_refund(self, refund_id: int) -> int:
         async with self.__db_connection.connect() as session:
-            query = delete(Refunds).where(Refunds.c.id == refund_id)
-            await session.execute(query)
+            # The status filter closes the race with a concurrent review: this
+            # delete only touches the row if it is still "pending" at the moment
+            # the DELETE runs, instead of trusting a status read by the caller
+            # moments earlier in a separate session/transaction. rowcount tells
+            # the controller whether a row was actually removed, so it can tell
+            # "deleted" apart from "no longer eligible" without a second read.
+            query = delete(Refunds).where(Refunds.c.id == refund_id, Refunds.c.status == "pending")
+            result = await session.execute(query)
             await session.commit()
+            return result.rowcount
