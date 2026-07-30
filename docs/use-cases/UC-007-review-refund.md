@@ -55,8 +55,21 @@ anterior passou:
 4. **Autoria da solicitação.** Um `admin`, pela BR-012, já pode ver qualquer
    solicitação — não há mais nada a esconder nesse ponto, então recusar a
    revisão da própria solicitação com `403` não vaza informação nova.
-5. **Transição de status.** Repetir a decisão vigente é recusado com `422`,
-   porque não há mudança de estado a registrar.
+5. **Transição de status.** Duas checagens distintas, nesta ordem:
+   1. **`paid` é terminal (BR-017 emendada).** Se o status atual já é
+      `paid`, a revisão é recusada com `422` e a mensagem `Refund is
+      already paid and cannot be reviewed` — o dinheiro já se moveu, então
+      nenhuma revisão pode tirar a solicitação desse estado. Esta checagem
+      roda **antes** da seguinte de propósito: se rodasse depois, uma
+      solicitação paga nunca a alcançaria, porque o alvo (`status`) está
+      sempre em `{approved, rejected}` — nunca igual a `paid` — então a
+      checagem de repetição, sozinha, nunca capturaria esse caso.
+   2. **Repetir a decisão vigente** (`current_status == status`) é recusado
+      com `422` e a mensagem `Refund is already {status}`, porque não há
+      mudança de estado a registrar. As duas checagens têm mensagens
+      diferentes porque significam coisas diferentes: a primeira é sobre um
+      fato consumado (dinheiro pago), a segunda é sobre um não-evento
+      (nenhuma mudança a registrar).
 6. **Sucesso.** `200`, com a solicitação refletindo o novo `status`.
 
 Note que a validação do corpo (passo 1) precede a checagem de papel (passo 2)
@@ -97,53 +110,15 @@ reaproveitar o contrato usado para as demais respostas de reembolso.
 Resolver essa divergência é um passo pendente para quando a tela de revisão
 for construída no frontend.
 
-## Nota: `paid` como status de origem (lacuna conhecida)
-
-O ciclo de pagamento e estatísticas (UC-012) introduziu um quarto status,
-`paid`, definido por decisão como **terminal**: `paid` é um fato consumado
-(o dinheiro já se moveu), não uma decisão a ser revista, então nenhuma
-solicitação paga deveria voltar a `approved` ou `rejected` por este
-endpoint (BR-017 emendada).
-
-**A implementação atual não impõe essa regra.** O comentário em
-`src/validators/refund_reviewer_validator.py` já registrava a premissa por
-trás da checagem única do controller:
-
-> "RefundReviewerController.review() relies on this set being exactly these
-> two values: its entire transition rule is the single check
-> `current_status == status` [...] Widening this set (e.g. adding
-> "pending") reopens transitions the controller does not guard against —
-> revisit its transition check first."
-
-O aviso previa alargar o **conjunto de status alvo** (`status`). O que de
-fato mudou neste ciclo foi o **conjunto de status de origem possíveis**
-(`current_status`), ampliado com `paid` — e a premissa deixou de valer pela
-mesma razão que o comentário já apontava: `current_status == status` só
-bloqueia repetir a decisão vigente. Com `current_status = "paid"` e
-`status = "approved"` (ou `"rejected"`), a comparação nunca é verdadeira, e
-a revisão prossegue.
-
-Verificado por reprodução direta contra `RefundReviewerController.review()`
-(não há teste automatizado cobrindo este caminho): hoje,
-`PATCH /refunds/{refund_id}/status` sobre uma solicitação com
-`status = "paid"` responde `200`, reverte `Refund.status` para o valor
-pedido e grava uma linha em `RefundReview` com `from_status: "paid"` — não o
-`422` que a regra pretendida descreve. Fechar a lacuna exigiria uma
-checagem explícita (por exemplo, recusar quando `current_status == "paid"`,
-antes da checagem de repetição) em
-`src/controllers/refund_reviewer_controller.py`. Nenhuma das Tasks 1–10
-deste ciclo alterou esse arquivo, e esta tarefa de documentação não altera
-código de produção — a lacuna fica registrada aqui como pendência.
-
 ## Tabela de códigos
 
 | Código | Cenário |
 | --- | --- |
-| `200` | Revisão aplicada; corpo traz a solicitação com o `status` atualizado. Inclui, hoje, reverter uma solicitação `paid` — ver a nota acima. |
+| `200` | Revisão aplicada; corpo traz a solicitação com o `status` atualizado. |
 | `401` | JWT ausente, inválido ou expirado. |
 | `403` | Revisor não é `admin`, ou é `admin` revisando a própria solicitação. |
 | `404` | Id de solicitação inexistente. |
-| `422` | `status` fora de `{approved, rejected}`, `reason` ausente ao rejeitar, ou a solicitação já está no status alvo. |
+| `422` | `status` fora de `{approved, rejected}`, `reason` ausente ao rejeitar, a solicitação já está paga, ou a solicitação já está no status alvo. |
 
 ## Fluxos alternativos e erros
 
@@ -155,6 +130,9 @@ código de produção — a lacuna fica registrada aqui como pendência.
   `You cannot review your own refund`.
 - Se `status` não estiver em `{approved, rejected}`, a API responde `422`.
 - Se `status` for `rejected` sem `reason`, a API responde `422`.
+- Se a solicitação já estiver com `status = "paid"`, a API responde `422`
+  com `Refund is already paid and cannot be reviewed` — `paid` é terminal
+  (BR-017 emendada), então nenhum alvo é aceito nesse caso.
 - Se a solicitação já estiver no status informado, a API responde `422` com
   `Refund is already {status}`.
 
@@ -184,7 +162,12 @@ código de produção — a lacuna fica registrada aqui como pendência.
 - `src/validators/refund_reviewer_validator.py` restringe `status` a
   `{approved, rejected}` e exige `reason` ao rejeitar.
 - `src/controllers/refund_reviewer_controller.py` aplica a ordem das
-  checagens, atualiza o status e insere a revisão numa única transação.
+  checagens — incluindo a checagem de terminalidade de `paid` antes da
+  checagem de repetição — atualiza o status e insere a revisão numa única
+  transação;
+  `src/controllers/refund_reviewer_controller_test.py::test_a_paid_refund_cannot_be_reverted_to_approved`
+  e `::test_a_paid_refund_cannot_be_reverted_to_rejected` comprovam a
+  checagem de terminalidade nas duas direções.
 - `src/models/settings/unit_of_work.py` delimita a transação que cobre a
   atualização do status e a inserção da revisão.
 - `src/models/repositories/refund_reviews_repository.py` insere a linha de

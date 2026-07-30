@@ -78,9 +78,9 @@ exatamente uma solicitação.
 - A partir de `pending`, `Refund.status` só transiciona para `approved` ou
   `rejected` por revisão; uma decisão já tomada pode ser trocada pela outra,
   mas nunca retorna a `pending` (`BR-017`). `paid`, alcançado somente por
-  `POST /refunds/{refund_id}/payment`, é terminal por decisão — ver a
-  lacuna conhecida na implementação atual, documentada em
-  [UC-007](use-cases/UC-007-review-refund.md#nota-paid-como-status-de-origem-lacuna-conhecida).
+  `POST /refunds/{refund_id}/payment`, é terminal: `PATCH
+  /refunds/{refund_id}/status` sobre uma solicitação paga responde `422`
+  (`BR-017` emendada).
 - `Refund.status` aceita `paid` como quarto valor sem migration de schema: a
   coluna é um `String` livre, sem `ENUM` nem `CHECK` no banco — a lista de
   valores válidos vive inteiramente na camada de aplicação, para os quatro

@@ -169,14 +169,34 @@ há mudança de estado a registrar. `paid` — alcançado apenas por
 pagamento é um fato consumado, não uma decisão a ser revista, então nenhuma
 solicitação paga deveria retornar a `approved` ou `rejected`.
 
-**Evidências:** `src/validators/refund_reviewer_validator.py` restringe o alvo a
-`approved` ou `rejected`, e `src/controllers/refund_reviewer_controller.py`
-recusa quando o status atual já é o alvo. **Lacuna conhecida, documentada em
-[UC-007](use-cases/UC-007-review-refund.md#nota-paid-como-status-de-origem-lacuna-conhecida):**
-a checagem existente (`current_status == status`) cobre apenas a repetição
-da decisão vigente, não o caso em que o status de origem é `paid` — nesse
-caso, a implementação atual permite a transição em vez de recusá-la com
-`422`. Não há teste automatizado cobrindo o caminho de "`paid` revertido".
+A regra é aplicada por **duas** checagens no controller, nesta ordem, e elas
+significam coisas diferentes: "`paid` é terminal" é sobre um fato consumado
+(o dinheiro já se moveu), enquanto "repetir a decisão vigente" é sobre um
+não-evento (nenhuma mudança a registrar) — por isso cada uma recusa com sua
+própria mensagem, em vez de caírem no mesmo `422` genérico.
+
+**Nota para quem for adicionar um quinto status:** o raciocínio que antes
+tornava uma única checagem suficiente era *baseado em conjuntos*, e quebrou
+quando este ciclo ampliou o conjunto de status **de origem** possíveis
+(`current_status` passou a poder ser `paid`) — o comentário que justificava
+a checagem única só previa alargar o conjunto de status **alvo**
+(`ALLOWED_REVIEW_STATUSES`). As duas direções precisam ser revisadas juntas
+antes de qualquer novo status: alargar o conjunto de alvos pode fazer um
+novo valor colidir com um status atual que o controller não rejeita à
+parte; alargar o conjunto de status de origem alcançáveis (isto é, criar um
+novo jeito de uma solicitação chegar a um status além de
+pending/approved/rejected/paid) exige sua própria guarda no controller, do
+mesmo jeito que `paid` passou a exigir.
+
+**Evidências:** `src/validators/refund_reviewer_validator.py` restringe o
+alvo a `approved` ou `rejected`, com um comentário que registra as duas
+direções acima; `src/controllers/refund_reviewer_controller.py` recusa
+primeiro quando o status atual já é `paid` (`Refund is already paid and
+cannot be reviewed`) e, em seguida, quando o status atual já é o alvo
+(`Refund is already {status}`);
+`src/controllers/refund_reviewer_controller_test.py::test_a_paid_refund_cannot_be_reverted_to_approved`
+e `::test_a_paid_refund_cannot_be_reverted_to_rejected` comprovam a
+checagem de terminalidade nas duas direções possíveis a partir de `paid`.
 
 ## BR-018 — Justificativa obrigatória na rejeição
 
