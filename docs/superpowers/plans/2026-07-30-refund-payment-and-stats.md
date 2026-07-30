@@ -220,7 +220,15 @@ engine = create_async_engine(
     # GLOBAL — every statement, not just that one — which is acceptable because
     # that is the only place in the system that takes a lock. The surgical
     # alternative would be SET LOCAL lock_timeout inside UnitOfWork.
-    connect_args={"server_settings": {"lock_timeout": "3000"}},
+    #
+    # Delivered through `options` rather than as a server_settings key of its
+    # own, which is what asyncpg's docs suggest and what this plan first
+    # specified. Against this Neon endpoint that silently does nothing: the
+    # proxy forwards startup parameters it "reports" (application_name arrives
+    # fine) and drops the rest, so SHOW lock_timeout answered 0 with no error
+    # anywhere. `options` is passed through as a single opaque string and
+    # survives. Verified with SHOW lock_timeout — see Step 5.
+    connect_args={"server_settings": {"options": "-c lock_timeout=3000"}},
 )
 ```
 
@@ -254,21 +262,25 @@ asyncio.run(main())
 Esperado: `lock_timeout = 3s`. É o próprio PostgreSQL respondendo qual valor
 está em vigor na sessão — nenhum mock no caminho.
 
-Se aparecer `0` (sem limite), o `server_settings` não foi aplicado: confira que
-está aninhado como `connect_args={"server_settings": {...}}` e que o valor é
-**string**, não int. Se der erro de conexão, o `connect_args` está numa forma
-que o asyncpg recusa.
+**Se aparecer `0`, não conserte adivinhando.** Foi exatamente o que aconteceu na
+primeira execução desta task, e a causa não é óbvia: passar `lock_timeout` como
+chave própria de `server_settings` — a forma que a documentação do asyncpg
+sugere — não produz erro nenhum e mesmo assim não chega ao servidor. O proxy do
+Neon repassa os parâmetros de startup que ele "reporta" (`application_name`
+chega) e descarta o resto, em silêncio. Por isso o valor vai dentro de
+`options`, que trafega como string opaca.
 
 Confirme também que a aplicação sobe:
 
 ```bash
-.venv/bin/python3 -m uvicorn run:app --port 3333 &
+.venv/bin/python3 -m uvicorn src.main.server.server:app --port 3333 &
 sleep 5
 curl -s -o /dev/null -w "%{http_code}\n" localhost:3333/refunds
 kill %1
 ```
 
-Esperado: `401` (sem token) — a aplicação subiu e a rota respondeu.
+Esperado: `401` (sem token) — a aplicação subiu e a rota respondeu. **Não existe
+`run:app`** — `run.py` não expõe `app` no nível do módulo.
 
 - [ ] **Step 6: Rodar a suíte inteira e o lint**
 
@@ -1940,7 +1952,10 @@ git commit -m "docs: document payment, review history and stats"
 
 - [ ] **Step 1: Subir a API e preparar os dados**
 
-Suba com `.venv/bin/python3 -m uvicorn run:app --port 3333`. Use os usuários de teste que já existem (`admin.validacao@example.com`, `validacao.visual@example.com`) ou crie novos com `init/promote_admin.py`.
+Suba com `.venv/bin/python3 -m uvicorn src.main.server.server:app --port 3333`
+— **não** `run:app`, que não existe. Use os usuários de teste que já existem
+(`admin.validacao@example.com`, `validacao.visual@example.com`) ou crie novos
+com `init/promote_admin.py`.
 
 - [ ] **Step 2: Percorrer os cenários e anotar o código de cada um**
 
