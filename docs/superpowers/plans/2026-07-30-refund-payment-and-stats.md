@@ -440,10 +440,19 @@ def build_request(filename="proof.pdf", content=b"x"):
 
 
 # BR-009 extended: the payment receipt obeys the same format rule as the
-# expense receipt.
-def test_accepts_the_allowed_extensions():
-    for filename in ("proof.jpg", "proof.jpeg", "proof.png", "proof.pdf"):
-        refund_payer_validator(build_request(filename=filename))
+# expense receipt. Parametrized rather than looped so a failure names the
+# extension that broke instead of hiding the ones after it.
+@pytest.mark.parametrize("filename", ["proof.jpg", "proof.jpeg", "proof.png", "proof.pdf"])
+def test_accepts_the_allowed_extensions(filename):
+    refund_payer_validator(build_request(filename=filename))
+
+
+# A real upload can arrive named PROOF.PDF. Without this, deleting .lower()
+# from the validator would pass the whole suite — every other filename here is
+# already lowercase. Mirrors refund_creator_validator_test.py's own case test.
+@pytest.mark.parametrize("filename", ["proof.PDF", "PROOF.JPG", "Proof.PnG"])
+def test_accepts_the_allowed_extensions_regardless_of_case(filename):
+    refund_payer_validator(build_request(filename=filename))
 
 
 # Validated by extension, never by the client-supplied Content-Type: that
@@ -458,11 +467,27 @@ def test_rejects_a_missing_file():
         refund_payer_validator(build_request(filename=""))
 
 
+# The ceiling is read from config, not hardcoded, so this test stays valid if
+# the limit changes.
+def test_accepts_a_file_exactly_at_the_size_ceiling():
+    at_limit = b"x" * upload_info["MAX_FILE_SIZE_BYTES"]
+    refund_payer_validator(build_request(content=at_limit))
+
+
+# Paired with the test above on purpose: testing only MAX + 1 passes whether
+# the operator is > or >=, so an off-by-one that started rejecting files of
+# exactly 4MB would slip through. The pair pins the boundary.
 def test_rejects_a_file_over_the_size_ceiling():
-    oversized = b"x" * (4 * 1024 * 1024 + 1)
+    oversized = b"x" * (upload_info["MAX_FILE_SIZE_BYTES"] + 1)
     with pytest.raises(HttpUnprocessableEntityError):
         refund_payer_validator(build_request(content=oversized))
 ```
+
+O arquivo de teste importa `from src.configs.global_config import upload_info`.
+
+**Prove que os dois testes novos podem falhar** antes de commitar: troque `>`
+por `>=` e veja o teste de fronteira ficar vermelho; remova o `.lower()` e veja
+o teste de maiúsculas ficar vermelho. Restaure os dois e confirme o verde.
 
 - [ ] **Step 2: Rodar e ver falhar**
 
