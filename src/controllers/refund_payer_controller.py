@@ -68,6 +68,15 @@ class RefundPayerController(RefundPayerControllerInterface):
         # holding. A lock timeout is an ordinary infrastructure error, not "this
         # refund was not approved" — it must surface unchanged, not become a
         # 422, so we only compensate and re-raise, never swallow or translate.
+        #
+        # `committed` gates that compensation. The `async with` block covers
+        # UnitOfWork.__aexit__ too, which runs AFTER a successful commit() to
+        # close the session — and closing can itself raise (e.g. the same
+        # dropped Neon connection that pool_pre_ping/pool_recycle exist to
+        # handle). By the time that happens the row is already durably
+        # committed with payment_filename = stored_filename, so deleting the
+        # file would break a live reference instead of cleaning up a dead one.
+        committed = False
         try:
             async with self.__unit_of_work as unit_of_work:
                 affected = await unit_of_work.refunds.mark_as_paid(refund_id, stored_filename)
@@ -89,8 +98,14 @@ class RefundPayerController(RefundPayerControllerInterface):
                     reason=None,
                 )
                 await unit_of_work.commit()
+                committed = True
         except Exception:
-            self.__delete_orphaned_file(stored_filename)
+            # Do NOT simplify this to an unconditional delete: once
+            # `committed` is True the row already points at this file, and
+            # deleting it here would destroy a valid payment receipt instead
+            # of an orphaned one.
+            if not committed:
+                self.__delete_orphaned_file(stored_filename)
             raise
 
         # Re-read instead of patching the row we already have. The PATCH /status

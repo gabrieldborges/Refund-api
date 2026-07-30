@@ -210,6 +210,31 @@ async def test_commit_raising_deletes_the_file_and_reraises(approved_refund):
     storage.delete.assert_called_once_with("stored.pdf")
 
 
+# Re-review follow-up: UnitOfWork.__aexit__ runs AFTER a successful commit()
+# to close the session, and closing can itself raise (e.g. the same dropped
+# Neon connection pool_pre_ping/pool_recycle exist to handle). By then the row
+# is already durably committed with payment_filename pointing at this file —
+# deleting it here would destroy a valid receipt, not clean up an orphan. The
+# error must still surface; only the compensation must be skipped.
+@pytest.mark.asyncio
+async def test_a_failure_after_a_successful_commit_does_not_delete_the_file(approved_refund):
+    unit_of_work = build_unit_of_work()
+    unit_of_work.__aexit__ = AsyncMock(side_effect=RuntimeError("session close failed"))
+    repository = build_repository(approved_refund)
+    storage = MagicMock()
+    storage.save = MagicMock(return_value="stored.pdf")
+    storage.delete = MagicMock()
+    controller = RefundPayerController(unit_of_work, repository, storage)
+
+    with pytest.raises(RuntimeError):
+        await controller.pay(
+            refund_id=1, payer_id=9, role="admin", filename="proof.pdf", content=b"x"
+        )
+
+    unit_of_work.commit.assert_awaited_once()
+    storage.delete.assert_not_called()
+
+
 # Deferred minor: if the compensating delete itself raises (e.g. the file is
 # already gone), that must not replace the original error the caller needs to
 # see.
