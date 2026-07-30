@@ -120,6 +120,28 @@ class RefundsRepository(RefundsRepositoryInterface):
             },
         }
 
+    async def count_by_status(self, user_id: int) -> dict:
+        async with self.__db_connection.connect() as session:
+            # One round trip for every status. SUM over an empty group cannot
+            # happen here (a group only exists if it has rows), but `or 0`
+            # guards the NULL that a all-NULL column would produce.
+            query = (
+                select(
+                    Refunds.c.status,
+                    func.count(),  # pylint: disable=not-callable
+                    func.sum(Refunds.c.amount_in_cents),
+                )
+                .select_from(Refunds)
+                .where(Refunds.c.user_id == user_id)
+                .group_by(Refunds.c.status)
+            )
+            rows = (await session.execute(query)).fetchall()
+
+            return {
+                status: {"count": count, "amount_in_cents": amount or 0}
+                for status, count, amount in rows
+            }
+
     async def delete_refund(self, refund_id: int) -> int:
         async with self.__db_connection.connect() as session:
             # The status filter closes the race with a concurrent review: this

@@ -327,3 +327,56 @@ async def test_unknown_sort_falls_back_to_the_default_column(mock_connection, mo
     rows_statement = str(mock_db.session.execute.call_args_list[-1][0][0])
     assert "ORDER BY refunds.created_at DESC" in rows_statement
     assert "password" not in rows_statement
+
+
+# count_by_status runs a single grouped query and turns each (status, count,
+# sum) row into the {status: {"count", "amount_in_cents"}} shape the
+# controller relies on to fill in the statuses that had no rows.
+@pytest.mark.asyncio
+async def test_count_by_status_builds_a_dict_from_the_grouped_rows(mock_connection, mock_db):
+    fetch_result = MagicMock()
+    fetch_result.fetchall = MagicMock(return_value=[
+        ("pending", 2, 3000),
+        ("approved", 1, 1000),
+    ])
+    mock_db.session.execute = AsyncMock(return_value=fetch_result)
+
+    repository = RefundsRepository(mock_connection)
+    totals = await repository.count_by_status(1)
+
+    mock_db.session.execute.assert_awaited_once()
+    assert totals == {
+        "pending": {"count": 2, "amount_in_cents": 3000},
+        "approved": {"count": 1, "amount_in_cents": 1000},
+    }
+
+
+# A status group can never have a NULL sum in practice (a group only exists
+# if it has rows), but the `or 0` guard is what keeps that true; this test
+# pins the guard itself in case a group ever carries a NULL amount.
+@pytest.mark.asyncio
+async def test_count_by_status_guards_a_null_sum(mock_connection, mock_db):
+    fetch_result = MagicMock()
+    fetch_result.fetchall = MagicMock(return_value=[("pending", 1, None)])
+    mock_db.session.execute = AsyncMock(return_value=fetch_result)
+
+    repository = RefundsRepository(mock_connection)
+    totals = await repository.count_by_status(1)
+
+    assert totals == {"pending": {"count": 1, "amount_in_cents": 0}}
+
+
+# The query must filter by the given user and group by status, otherwise the
+# stats would leak other users' refunds or collapse every status into one row.
+@pytest.mark.asyncio
+async def test_count_by_status_filters_by_user_and_groups_by_status(mock_connection, mock_db):
+    fetch_result = MagicMock()
+    fetch_result.fetchall = MagicMock(return_value=[])
+    mock_db.session.execute = AsyncMock(return_value=fetch_result)
+
+    repository = RefundsRepository(mock_connection)
+    await repository.count_by_status(1)
+
+    statement = str(mock_db.session.execute.call_args[0][0])
+    assert "refunds.user_id =" in statement
+    assert "GROUP BY refunds.status" in statement

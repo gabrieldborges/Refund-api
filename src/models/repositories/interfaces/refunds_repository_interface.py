@@ -28,3 +28,7 @@ class RefundsRepositoryInterface(ABC):
     @abstractmethod
     async def delete_refund(self, refund_id: int) -> int:
         pass
+
+    @abstractmethod
+    async def count_by_status(self, user_id: int) -> dict:
+        pass
