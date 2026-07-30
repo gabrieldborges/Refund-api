@@ -8,6 +8,7 @@ from src.main.composer.refund_finder_composer import refund_finder_composer
 from src.main.composer.refund_deleter_composer import refund_deleter_composer
 from src.main.composer.refund_reviewer_composer import refund_reviewer_composer
 from src.main.composer.receipt_finder_composer import receipt_finder_composer
+from src.main.composer.refund_payer_composer import refund_payer_composer
 from src.main.middlewares.auth_jwt import get_current_user
 
 refund_routes = APIRouter(prefix="/refunds", tags=["Refunds"])
@@ -92,6 +93,23 @@ async def get_refund_receipt(
         media_type=response.body["media_type"],
         status_code=response.status_code,
     )
+
+
+@refund_routes.post("/{refund_id}/payment")
+async def pay_refund(
+    refund_id: int,
+    file: UploadFile = File(...),
+    token_info: dict = Depends(get_current_user),
+):
+    content = await file.read()
+    http_request = HttpRequest(
+        path_params={"refund_id": refund_id},
+        body={"filename": file.filename, "content": content},
+        token_info=token_info,
+    )
+    view = refund_payer_composer()
+    response = await view.handle(http_request)
+    return JSONResponse(content=response.body, status_code=response.status_code)
 
 
 @refund_routes.get("/{refund_id}")

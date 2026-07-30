@@ -16,3 +16,5 @@ uploads/**
 !uploads/receipts/.gitkeep
 !uploads/avatars/
 !uploads/avatars/.gitkeep
+!uploads/payment_receipts/
+!uploads/payment_receipts/.gitkeep
