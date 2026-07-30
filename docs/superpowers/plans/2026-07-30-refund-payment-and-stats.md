@@ -162,10 +162,13 @@ git commit -m "feat: add payment_filename column to refunds"
 Crie `src/models/settings/database_connection_handler_pool_test.py`:
 
 ```python
-# The pool settings are the one change in this cycle with no behavioural test:
-# "the pool is healthier" is not observable from a unit test. This asserts the
-# configured values instead, so an accidental revert shows up as a red test
-# rather than as a 500 under concurrency months later.
+# These are revert-nets, not behaviour tests: they read back what we
+# configured, so an accidental revert shows up red instead of as a 500 under
+# concurrency months later. They CANNOT catch a connect_args shape the driver
+# rejects — Step 5 asks PostgreSQL itself, which is the behavioural half.
+#
+# The private attributes are unavoidable: SQLAlchemy's pool exposes size()
+# publicly but has no public accessor for max_overflow, pre_ping or recycle.
 from src.models.settings.database_connection_handler import engine
 
 
@@ -226,7 +229,37 @@ engine = create_async_engine(
 Run: `.venv/bin/python3 -m pytest src/models/settings/ -v`
 Expected: PASS.
 
-- [ ] **Step 5: Confirmar que a aplicação sobe e fala com o banco**
+- [ ] **Step 5: Provar que a configuração chegou ao banco de verdade**
+
+O teste do Step 1 é uma rede contra revert acidental — ele lê o que
+configuramos, não o que o servidor recebeu. Este step é a verificação
+comportamental, e é **obrigatório**: se `connect_args` estiver na forma errada
+para o asyncpg, o teste do Step 1 continua verde e a aplicação quebra na
+primeira conexão.
+
+```bash
+.venv/bin/python3 -c "
+import asyncio
+from sqlalchemy import text
+from src.models.settings.database_connection_handler import engine
+
+async def main():
+    async with engine.connect() as connection:
+        print('lock_timeout =', (await connection.execute(text('SHOW lock_timeout'))).scalar())
+
+asyncio.run(main())
+"
+```
+
+Esperado: `lock_timeout = 3s`. É o próprio PostgreSQL respondendo qual valor
+está em vigor na sessão — nenhum mock no caminho.
+
+Se aparecer `0` (sem limite), o `server_settings` não foi aplicado: confira que
+está aninhado como `connect_args={"server_settings": {...}}` e que o valor é
+**string**, não int. Se der erro de conexão, o `connect_args` está numa forma
+que o asyncpg recusa.
+
+Confirme também que a aplicação sobe:
 
 ```bash
 .venv/bin/python3 -m uvicorn run:app --port 3333 &
@@ -235,7 +268,7 @@ curl -s -o /dev/null -w "%{http_code}\n" localhost:3333/refunds
 kill %1
 ```
 
-Esperado: `401` (sem token) — prova que a aplicação subiu e a rota respondeu. Se vier erro de conexão, o `connect_args` está errado para o driver.
+Esperado: `401` (sem token) — a aplicação subiu e a rota respondeu.
 
 - [ ] **Step 6: Rodar a suíte inteira e o lint**
 
@@ -1232,17 +1265,49 @@ Acrescente a `src/models/repositories/refund_reviews_repository_test.py` (crie o
 # The reader opens its own session (via mock_connection from conftest.py),
 # unlike RefundReviewsRepository above, which is handed one by the UnitOfWork.
 @pytest.mark.asyncio
-async def test_select_by_refund_id_queries_the_reviews_of_one_refund(mock_db, mock_connection):
+async def test_select_by_refund_id_returns_every_field_the_timeline_needs(
+    mock_db, mock_connection
+):
+    row = MagicMock()
+    row._mapping = {  # pylint: disable=protected-access
+        "from_status": "pending",
+        "to_status": "approved",
+        "reason": None,
+        "created_at": datetime(2026, 7, 30, 10, 0, 0),
+        "reviewer_id": 1,
+        "reviewer_name": "Gabriel",
+    }
+    result = MagicMock()
+    result.fetchall = MagicMock(return_value=[row])
+    mock_db.session.execute = AsyncMock(return_value=result)
     repository = RefundReviewsReaderRepository(mock_connection)
 
-    await repository.select_by_refund_id(1)
+    reviews = await repository.select_by_refund_id(1)
 
-    mock_db.session.execute.assert_awaited_once()
+    # These six keys are exactly what RefundReviewListerController.__serialize
+    # reads. Asserting only "a query ran" would let a SELECT that drops or
+    # renames a column pass here and fail at runtime — reviewer_name in
+    # particular comes from the join, not from refund_reviews.
+    assert set(reviews[0]) == {
+        "from_status",
+        "to_status",
+        "reason",
+        "created_at",
+        "reviewer_id",
+        "reviewer_name",
+    }
+    assert reviews[0]["reviewer_name"] == "Gabriel"
 ```
+
+Imports necessários no arquivo de teste: `from datetime import datetime` e
+`from unittest.mock import AsyncMock, MagicMock`.
 
 O `mock_connection` vem do `conftest.py` daquele diretório e depende de um
 `mock_db` definido no próprio arquivo de teste — siga como os outros testes de
 repositório já fazem.
+
+**A ordenação não é verificável aqui:** ela vive no `ORDER BY` do SQL, e a
+sessão está mockada. Ela é conferida ponta a ponta na Task 12, cenário 18.
 
 - [ ] **Step 2: Implementar o método numa classe de leitura própria**
 
