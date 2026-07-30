@@ -68,8 +68,9 @@ async def test_select_refunds_returns_items_total_and_sum(mock_connection, mock_
     row = MagicMock()
     row._mapping = {
         "id": 1, "user_id": 1, "name": "Almoço", "category": "food",
-        "amount_in_cents": 1000, "filename": "receipt.jpg", "status": "pending",
-        "created_at": "2026-07-29", "user_name": "Ana", "avatar_filename": "ana.png",
+        "amount_in_cents": 1000, "filename": "receipt.jpg", "payment_filename": None,
+        "status": "pending", "created_at": "2026-07-29", "user_name": "Ana",
+        "avatar_filename": "ana.png",
     }
     fetch_result = MagicMock()
     fetch_result.fetchall = MagicMock(return_value=[row])
@@ -89,7 +90,8 @@ async def test_select_refunds_returns_items_total_and_sum(mock_connection, mock_
     assert total_amount == 1000
     assert refunds == [{
         "id": 1, "name": "Almoço", "category": "food", "amount_in_cents": 1000,
-        "filename": "receipt.jpg", "status": "pending", "created_at": "2026-07-29",
+        "filename": "receipt.jpg", "payment_filename": None, "status": "pending",
+        "created_at": "2026-07-29",
         "user": {"id": 1, "name": "Ana", "avatar_filename": "ana.png"},
     }]
 
@@ -122,8 +124,9 @@ async def test_select_refund_by_id_found(mock_connection, mock_db):
     row = MagicMock()
     row._mapping = {
         "id": 1, "user_id": 1, "name": "Almoço", "category": "food",
-        "amount_in_cents": 1000, "filename": "receipt.jpg", "status": "pending",
-        "created_at": "2026-07-29", "user_name": "Ana", "avatar_filename": "ana.png",
+        "amount_in_cents": 1000, "filename": "receipt.jpg", "payment_filename": None,
+        "status": "pending", "created_at": "2026-07-29", "user_name": "Ana",
+        "avatar_filename": "ana.png",
     }
     result = MagicMock()
     # fetchone returns a row -> refund found.
@@ -135,7 +138,8 @@ async def test_select_refund_by_id_found(mock_connection, mock_db):
 
     assert refund == {
         "id": 1, "name": "Almoço", "category": "food", "amount_in_cents": 1000,
-        "filename": "receipt.jpg", "status": "pending", "created_at": "2026-07-29",
+        "filename": "receipt.jpg", "payment_filename": None, "status": "pending",
+        "created_at": "2026-07-29",
         "user": {"id": 1, "name": "Ana", "avatar_filename": "ana.png"},
     }
 
@@ -201,8 +205,9 @@ async def test_select_refunds_joins_users_and_nests_the_requester(mock_connectio
     # as the other fixtures: a swap between them must fail this test.
     row._mapping = {
         "id": 1, "user_id": 5, "name": "Almoço", "category": "food",
-        "amount_in_cents": 1000, "filename": "receipt.jpg", "status": "pending",
-        "created_at": "2026-07-29", "user_name": "Ana", "avatar_filename": "ana.png",
+        "amount_in_cents": 1000, "filename": "receipt.jpg", "payment_filename": None,
+        "status": "pending", "created_at": "2026-07-29", "user_name": "Ana",
+        "avatar_filename": "ana.png",
     }
     totals_result = MagicMock()
     totals_result.one = MagicMock(return_value=(1, 1000))
@@ -218,7 +223,8 @@ async def test_select_refunds_joins_users_and_nests_the_requester(mock_connectio
     assert "JOIN users" in rows_statement
     assert refunds == [{
         "id": 1, "name": "Almoço", "category": "food", "amount_in_cents": 1000,
-        "filename": "receipt.jpg", "status": "pending", "created_at": "2026-07-29",
+        "filename": "receipt.jpg", "payment_filename": None, "status": "pending",
+        "created_at": "2026-07-29",
         "user": {"id": 5, "name": "Ana", "avatar_filename": "ana.png"},
     }]
 

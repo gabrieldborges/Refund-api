@@ -110,6 +110,7 @@ class RefundsRepository(RefundsRepositoryInterface):
             "category": data["category"],
             "amount_in_cents": data["amount_in_cents"],
             "filename": data["filename"],
+            "payment_filename": data["payment_filename"],
             "status": data["status"],
             "created_at": data["created_at"],
             "user": {
