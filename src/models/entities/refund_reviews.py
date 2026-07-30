@@ -9,6 +9,14 @@ from src.models.settings.metadata import metadata
 # the race with a concurrent review) together with the refund_id foreign key
 # below — the pair is what makes a decided refund's row un-deletable in practice,
 # which is why there is no ON DELETE CASCADE.
+#
+# NOTE: despite the table name, this is now a status-transition log, not only
+# a review log. RefundPayerController (POST /refunds/{id}/payment, UC-012)
+# also inserts a row here for the approved -> paid transition, with
+# reviewer_id set to whoever paid and reason=None, even though paying is a
+# fact rather than a reviewer's decision. Renaming the table would cost a
+# migration and a rewrite across the layers that reference it; kept as-is
+# and documented in docs/domain-model.md instead.
 RefundReviews = Table(
     "refund_reviews",
     metadata,

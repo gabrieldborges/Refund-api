@@ -97,11 +97,49 @@ reaproveitar o contrato usado para as demais respostas de reembolso.
 Resolver essa divergência é um passo pendente para quando a tela de revisão
 for construída no frontend.
 
+## Nota: `paid` como status de origem (lacuna conhecida)
+
+O ciclo de pagamento e estatísticas (UC-012) introduziu um quarto status,
+`paid`, definido por decisão como **terminal**: `paid` é um fato consumado
+(o dinheiro já se moveu), não uma decisão a ser revista, então nenhuma
+solicitação paga deveria voltar a `approved` ou `rejected` por este
+endpoint (BR-017 emendada).
+
+**A implementação atual não impõe essa regra.** O comentário em
+`src/validators/refund_reviewer_validator.py` já registrava a premissa por
+trás da checagem única do controller:
+
+> "RefundReviewerController.review() relies on this set being exactly these
+> two values: its entire transition rule is the single check
+> `current_status == status` [...] Widening this set (e.g. adding
+> "pending") reopens transitions the controller does not guard against —
+> revisit its transition check first."
+
+O aviso previa alargar o **conjunto de status alvo** (`status`). O que de
+fato mudou neste ciclo foi o **conjunto de status de origem possíveis**
+(`current_status`), ampliado com `paid` — e a premissa deixou de valer pela
+mesma razão que o comentário já apontava: `current_status == status` só
+bloqueia repetir a decisão vigente. Com `current_status = "paid"` e
+`status = "approved"` (ou `"rejected"`), a comparação nunca é verdadeira, e
+a revisão prossegue.
+
+Verificado por reprodução direta contra `RefundReviewerController.review()`
+(não há teste automatizado cobrindo este caminho): hoje,
+`PATCH /refunds/{refund_id}/status` sobre uma solicitação com
+`status = "paid"` responde `200`, reverte `Refund.status` para o valor
+pedido e grava uma linha em `RefundReview` com `from_status: "paid"` — não o
+`422` que a regra pretendida descreve. Fechar a lacuna exigiria uma
+checagem explícita (por exemplo, recusar quando `current_status == "paid"`,
+antes da checagem de repetição) em
+`src/controllers/refund_reviewer_controller.py`. Nenhuma das Tasks 1–10
+deste ciclo alterou esse arquivo, e esta tarefa de documentação não altera
+código de produção — a lacuna fica registrada aqui como pendência.
+
 ## Tabela de códigos
 
 | Código | Cenário |
 | --- | --- |
-| `200` | Revisão aplicada; corpo traz a solicitação com o `status` atualizado. |
+| `200` | Revisão aplicada; corpo traz a solicitação com o `status` atualizado. Inclui, hoje, reverter uma solicitação `paid` — ver a nota acima. |
 | `401` | JWT ausente, inválido ou expirado. |
 | `403` | Revisor não é `admin`, ou é `admin` revisando a própria solicitação. |
 | `404` | Id de solicitação inexistente. |
@@ -134,6 +172,7 @@ for construída no frontend.
 - [BR-013](../business-rules.md#br-013--recurso-inexistente-ou-alheio)
 - [BR-016](../business-rules.md#br-016--segregação-de-funções-na-revisão)
 - [BR-017](../business-rules.md#br-017--transições-de-status-permitidas)
+- [BR-022](../business-rules.md#br-022--comprovante-de-pagamento-obrigatório)
 
 ## Evidências
 

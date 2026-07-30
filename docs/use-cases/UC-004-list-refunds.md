@@ -17,7 +17,7 @@ nome, por `status`, e ordenada pelo campo escolhido.
 ## Fluxo principal
 
 1. O frontend solicita `GET /refunds` com `page`, `per_page` e, opcionalmente,
-   `name`, `status`, `sort` e `order`.
+   `name`, `status`, `sort`, `order` e `user_id`.
 2. A API valida `page >= 1` e `1 <= per_page <= 100`, e que `status`, `sort` e
    `order`, quando informados, pertencem às listas de valores aceitos.
 3. Para um usuário `standard`, a API limita a consulta às solicitações cujo
@@ -40,6 +40,15 @@ nome, por `status`, e ordenada pelo campo escolhido.
 `status` aceita `pending`, `approved` ou `rejected`. `sort` aceita
 `created_at`, `amount_in_cents`, `name` ou `status`. `order` aceita `asc` ou
 `desc`.
+
+`user_id` restringe a listagem a um solicitante específico, mas só tem
+efeito para `admin`: para um usuário `standard`, a API **ignora** o
+parâmetro — o filtro por usuário já está fixado no próprio token pela
+BR-012, então não há nada a vazar e nenhum caminho de erro novo nasce dessa
+combinação. Diferente de `status`, `sort` e `order`, `user_id` não tem uma
+lista de valores aceitos para validar: é tipado como inteiro na própria
+rota, e a validação nativa do FastAPI já rejeita um valor que não seja um
+número.
 
 `sum_amount_in_cents` é a soma, em centavos, de todos os reembolsos que casam
 o filtro — respeitando a mesma regra de autorização da listagem (admin vê
@@ -85,16 +94,23 @@ itens da página atual — ambos mudam conforme `status` restringe o conjunto.
 ## Evidências
 
 - `src/main/routes/refund_routes.py` protege `GET /refunds` e define os limites
-  de `page` e `per_page` e os filtros opcionais `name`, `status`, `sort` e
-  `order`.
+  de `page` e `per_page`, os filtros opcionais `name`, `status`, `sort` e
+  `order`, e o filtro `user_id` (tipado como `Optional[int]`, sem lista de
+  valores a validar).
 - `src/validators/refund_lister_validator.py` restringe `status`, `sort` e
   `order` às respectivas listas de valores aceitos e responde `422` fora
   delas — a primeira das duas barreiras contra um nome de coluna vindo do
   cliente.
+- `src/views/refund_lister_view.py` repassa o `user_id` da query ao
+  controller como `filter_user_id`, distinto do `user_id` do token.
 - `src/controllers/refund_lister_controller.py` distingue `admin` de
   `standard`, calcula os metadados da paginação e usa
   `src/controllers/refund_serializer.py` para produzir cada item sem
-  `filename` e com `user.has_avatar`.
+  `filename` e com `user.has_avatar`. Decide `filter_user_id` só para
+  `admin`; para `standard`, sempre usa o `user_id` do próprio token, mesmo
+  que `filter_user_id` tenha sido informado.
+  `src/controllers/refund_lister_controller_test.py::test_admin_can_filter_the_list_by_requester`
+  e `::test_the_filter_is_ignored_for_a_standard_user` cobrem os dois casos.
 - `src/models/repositories/refunds_repository.py` aplica o filtro parcial
   `ilike`, o filtro por `status`, o escopo por usuário, a ordenação por
   `sort`/`order` (com `created_at` decrescente como padrão) e a paginação, e

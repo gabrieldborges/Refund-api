@@ -31,6 +31,9 @@ frontend e pela API.
 - [UC-009 — Remover foto de perfil](use-cases/UC-009-remove-avatar.md)
 - [UC-010 — Baixar comprovante de reembolso](use-cases/UC-010-download-receipt.md)
 - [UC-011 — Baixar foto de perfil](use-cases/UC-011-download-avatar.md)
+- [UC-012 — Pagar solicitação de reembolso](use-cases/UC-012-pay-refund.md)
+- [UC-013 — Consultar histórico de revisões](use-cases/UC-013-list-refund-reviews.md)
+- [UC-014 — Consultar estatísticas de reembolso por usuário](use-cases/UC-014-user-refund-stats.md)
 
 ## Decisões
 - [ADR-001 — Manter a arquitetura em camadas da API](decisions/ADR-001-layered-api.md)

@@ -67,14 +67,25 @@ Categorias permitidas são `food`, `lodging`, `transport`, `service` e `others`.
 **Evidências:** `src/validators/refund_creator_validator.py` define e aplica o
 conjunto de categorias aceitas.
 
-## BR-009 — Formato e tamanho do comprovante
+## BR-009 — Formato e tamanho do comprovante (emendada)
 
 Comprovante deve ter extensão `jpg`, `jpeg`, `png` ou `pdf` e tamanho máximo de
-4 MiB.
+4 MiB. A partir do ciclo de pagamento e estatísticas, a regra vale igualmente
+para os **dois** comprovantes de uma solicitação: o de despesa (enviado na
+criação) e o de pagamento (enviado em `POST /refunds/{refund_id}/payment`,
+UC-012). Mesma extensão aceita, mesmo limite de tamanho, validado por
+extensão — nunca pelo `Content-Type` enviado pelo cliente, que é definido
+por quem faz o upload e não é confiável na prática.
 
-**Evidências:** `src/validators/refund_creator_validator.py` valida a extensão e
-o tamanho do conteúdo; `src/configs/global_config.py` fixa o limite em
-`4 * 1024 * 1024` bytes.
+**Evidências:** `src/validators/refund_creator_validator.py` e
+`src/validators/refund_payer_validator.py` validam extensão e tamanho, cada
+um com sua própria constante `ALLOWED_EXTENSIONS` — mantidas separadas de
+propósito, para que afrouxar a regra de um comprovante não afrouxe a do
+outro silenciosamente; `src/configs/global_config.py` fixa o limite
+compartilhado `MAX_FILE_SIZE_BYTES` em `4 * 1024 * 1024` bytes;
+`src/validators/refund_payer_validator_test.py` cobre extensões aceitas,
+extensão inválida e os dois limites de tamanho para o comprovante de
+pagamento.
 
 ## BR-010 — Persistência do valor monetário
 
@@ -130,25 +141,42 @@ exclusão quando `status` não é `pending`, coordena a remoção do registro e 
 comprovante; `src/models/repositories/refunds_repository.py` remove o
 registro; `src/drivers/file_storage.py` remove o arquivo quando ele existe.
 
-## BR-016 — Segregação de funções na revisão
+## BR-016 — Segregação de funções na revisão (estendida)
 
-Somente usuário `admin` aprova ou rejeita uma solicitação, e nenhum admin decide
-sobre solicitação de sua própria autoria.
+Somente usuário `admin` aprova, rejeita **ou paga** uma solicitação, e nenhum
+admin decide — nem paga — sobre solicitação de sua própria autoria. A
+extensão a pagamento existe porque um admin que já não pode aprovar a
+própria solicitação teria, sem essa regra, uma brecha equivalente ao poder
+pagá-la.
 
 **Evidências:** `src/controllers/refund_reviewer_controller.py` verifica o papel
 antes de qualquer consulta ao banco e recusa a revisão quando
-`refund["user_id"]` é igual ao id do revisor.
+`refund["user_id"]` é igual ao id do revisor;
+`src/controllers/refund_payer_controller.py` aplica a mesma ordem — papel
+antes de qualquer consulta — e recusa o pagamento quando
+`refund["user"]["id"]` é igual ao id de quem paga;
+`src/controllers/refund_payer_controller_test.py::test_admin_cannot_pay_their_own_refund`
+comprova a extensão.
 
-## BR-017 — Transições de status permitidas
+## BR-017 — Transições de status permitidas (emendada)
 
 A partir de `pending`, uma solicitação vai para `approved` ou `rejected`. Uma
 solicitação já decidida pode ter a decisão trocada (`approved` ↔ `rejected`),
 mas nunca retorna a `pending`. Repetir a decisão vigente é recusado, porque não
-há mudança de estado a registrar.
+há mudança de estado a registrar. `paid` — alcançado apenas por
+`POST /refunds/{refund_id}/payment` (UC-012), nunca por
+`PATCH /refunds/{refund_id}/status` — é **terminal** por decisão: o
+pagamento é um fato consumado, não uma decisão a ser revista, então nenhuma
+solicitação paga deveria retornar a `approved` ou `rejected`.
 
 **Evidências:** `src/validators/refund_reviewer_validator.py` restringe o alvo a
 `approved` ou `rejected`, e `src/controllers/refund_reviewer_controller.py`
-recusa quando o status atual já é o alvo.
+recusa quando o status atual já é o alvo. **Lacuna conhecida, documentada em
+[UC-007](use-cases/UC-007-review-refund.md#nota-paid-como-status-de-origem-lacuna-conhecida):**
+a checagem existente (`current_status == status`) cobre apenas a repetição
+da decisão vigente, não o caso em que o status de origem é `paid` — nesse
+caso, a implementação atual permite a transição em vez de recusá-la com
+`422`. Não há teste automatizado cobrindo o caminho de "`paid` revertido".
 
 ## BR-018 — Justificativa obrigatória na rejeição
 
@@ -167,15 +195,25 @@ no máximo 4MB. Nulo é um estado válido e representa o avatar padrão do produ
 **Evidências:** `src/validators/avatar_upload_validator.py` restringe extensão e
 tamanho; `src/models/entities/users.py` declara `avatar_filename` como nulável.
 
-## BR-020 — Acesso ao comprovante
+## BR-020 — Acesso ao comprovante (emendada)
 
-O comprovante de uma solicitação só é acessível ao seu proprietário e a usuários
-`admin`. Solicitação inexistente e solicitação alheia respondem igualmente como
-não encontrada, para não revelar quais identificadores existem.
+O comprovante de uma solicitação — o de despesa (UC-010) e, desde o ciclo de
+pagamento, também o de pagamento (`GET /refunds/{refund_id}/payment-receipt`)
+— só é acessível ao seu proprietário e a usuários `admin`. Solicitação
+inexistente e solicitação alheia respondem igualmente como não encontrada,
+para não revelar quais identificadores existem. Para o comprovante de
+pagamento, o mesmo `404`, com a mesma mensagem, também cobre uma solicitação
+que existe mas nunca foi paga, e um registro cujo arquivo sumiu do disco —
+os quatro cenários são indistinguíveis de propósito, porque qualquer
+diferença entre eles seria um oráculo para quem não tem direito de acesso.
 
 **Evidências:** `src/controllers/receipt_finder_controller.py` aplica a mesma
 regra de `refund_finder_controller.py` e levanta `HttpNotFoundError` nos dois
-casos.
+casos; `src/controllers/payment_receipt_finder_controller.py` aplica a
+mesma regra ao comprovante de pagamento, incluindo os dois cenários
+adicionais (não pago, arquivo ausente do disco);
+`src/controllers/payment_receipt_finder_controller_test.py` cobre os quatro
+cenários com a mesma mensagem `Refund not found`.
 
 ## BR-021 — Acesso à foto de perfil
 
@@ -185,3 +223,24 @@ Usuário inexistente e usuário sem foto respondem igualmente como não encontra
 **Evidências:** `src/controllers/avatar_finder_controller.py` não recebe a
 identidade de quem pede; a autenticação é exigida pela dependência da rota em
 `src/main/routes/user_routes.py`.
+
+## BR-022 — Comprovante de pagamento obrigatório
+
+Nenhuma solicitação transiciona para `status = "paid"` sem um comprovante de
+pagamento anexado. Como o arquivo é obrigatório para alcançar `paid`, vale a
+invariante `status == "paid"` ⟺ existe comprovante de pagamento
+(`Refund.payment_filename` preenchido). É por isso que nenhuma resposta de
+reembolso ganha um campo `has_payment_receipt`: o próprio `status` já
+carrega essa informação — o oposto de `has_avatar` (BR-019), que existe
+justamente porque o avatar é opcional.
+
+**Evidências:** `src/controllers/refund_payer_controller.py` só tenta a
+transição condicional para `paid` depois de salvar o arquivo, e desfaz o
+arquivo salvo se a transição falhar (corrida perdida), nunca deixando
+`status = "paid"` sem um `payment_filename`; `src/models/entities/refunds.py`
+comenta a invariante junto à coluna `payment_filename`, nulável porque nada
+no banco a impõe — a garantia é inteiramente aplicacional, como já vale para
+o `status` como um todo (nenhum `ENUM` nem `CHECK`);
+`src/controllers/refund_payer_controller_test.py::test_admin_pays_an_approved_refund`
+comprova que a resposta de sucesso traz `status: "paid"` sem expor
+`payment_filename`.

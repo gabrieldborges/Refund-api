@@ -24,21 +24,32 @@ dos campos abaixo correspondem aos dados persistidos pela API.
 | `name` | Nome ou descrição curta da despesa. |
 | `category` | Categoria da despesa. |
 | `amount_in_cents` | Valor monetário inteiro em centavos. |
-| `filename` | Nome do arquivo de comprovante armazenado. |
-| `status` | Estado da solicitação: `pending`, `approved` ou `rejected`. |
+| `filename` | Nome do arquivo de comprovante de despesa armazenado. |
+| `payment_filename` | Nome do arquivo de comprovante de pagamento armazenado; nulo até a solicitação ser paga (BR-022). |
+| `status` | Estado da solicitação: `pending`, `approved`, `paid` ou `rejected`. |
 | `created_at` | Data e hora de criação da solicitação. |
 
 ## RefundReview
 
+Apesar do nome — tanto do conceito de domínio quanto da tabela
+`refund_reviews` que o persiste — esta entidade deixou de guardar somente
+revisões a partir do ciclo de pagamento: a transição `approved → paid`
+(UC-012) também grava uma linha aqui, com `reviewer_id` igual a quem pagou e
+`reason` nulo, mesmo pagar sendo um fato e não uma decisão de revisor. Na
+prática, `RefundReview` é hoje um **log de transição de status**, não só de
+revisões. Renomear a tabela custaria uma migration e a reescrita das
+camadas que a referenciam; a decisão foi manter o nome e documentar aqui a
+imprecisão, em vez de pagar esse custo.
+
 | Campo | Descrição |
 | --- | --- |
-| `id` | Identificador único da revisão. |
-| `refund_id` | Identificador da solicitação revisada. |
-| `reviewer_id` | Identificador do usuário `admin` que tomou a decisão. |
-| `from_status` | Status da solicitação antes da decisão. |
-| `to_status` | Status da solicitação depois da decisão (`approved` ou `rejected`). |
-| `reason` | Motivo da decisão; obrigatório quando `to_status` é `rejected`. |
-| `created_at` | Data e hora em que a decisão foi registrada. |
+| `id` | Identificador único da linha. |
+| `refund_id` | Identificador da solicitação afetada. |
+| `reviewer_id` | Identificador do usuário `admin` que tomou a decisão ou efetuou o pagamento. |
+| `from_status` | Status da solicitação antes da transição. |
+| `to_status` | Status da solicitação depois da transição (`approved`, `rejected` ou `paid`). |
+| `reason` | Motivo da decisão; obrigatório quando `to_status` é `rejected`. Sempre nulo quando `to_status` é `paid`. |
+| `created_at` | Data e hora em que a transição foi registrada. Para `to_status = "paid"`, é também a data do pagamento — não existe uma coluna `paid_at` separada. |
 
 ## Relação
 
@@ -62,8 +73,18 @@ exatamente uma solicitação.
   convertido para centavos (`BR-010`).
 - Todo `Refund` possui um `user_id` obrigatório, obtido do usuário autenticado
   que criou a solicitação (`BR-011`).
-- Somente `admin` decide sobre uma solicitação, e nunca sobre uma de sua própria
-  autoria (`BR-016`).
+- Somente `admin` decide sobre uma solicitação, ou a paga, e nunca sobre uma de
+  sua própria autoria (`BR-016`).
 - A partir de `pending`, `Refund.status` só transiciona para `approved` ou
-  `rejected`; uma decisão já tomada pode ser trocada pela outra, mas nunca
-  retorna a `pending` (`BR-017`).
+  `rejected` por revisão; uma decisão já tomada pode ser trocada pela outra,
+  mas nunca retorna a `pending` (`BR-017`). `paid`, alcançado somente por
+  `POST /refunds/{refund_id}/payment`, é terminal por decisão — ver a
+  lacuna conhecida na implementação atual, documentada em
+  [UC-007](use-cases/UC-007-review-refund.md#nota-paid-como-status-de-origem-lacuna-conhecida).
+- `Refund.status` aceita `paid` como quarto valor sem migration de schema: a
+  coluna é um `String` livre, sem `ENUM` nem `CHECK` no banco — a lista de
+  valores válidos vive inteiramente na camada de aplicação, para os quatro
+  status igualmente.
+- `status == "paid"` implica a existência de um comprovante de pagamento
+  (`payment_filename` preenchido), porque o arquivo é gravado antes da
+  transição e nunca depois dela (`BR-022`).

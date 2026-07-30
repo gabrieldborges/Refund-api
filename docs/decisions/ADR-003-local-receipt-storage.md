@@ -4,7 +4,9 @@
 
 Aceita. Emendada em 2026-07-29: primeiro para cobrir também as fotos de
 perfil dos usuários; em seguida, no mesmo ciclo, para encerrar o acesso
-público aos arquivos — ver o amendamento ao final da seção de Decisão.
+público aos arquivos. Emendada novamente em 2026-07-30 para cobrir um
+terceiro tipo de arquivo, o comprovante de pagamento — ver os amendamentos
+ao final da seção de Decisão.
 
 ## Contexto
 
@@ -59,13 +61,40 @@ de compartilhamento direto do link sem reabrir a janela de acesso permanente.
 Não foi adotada nesta branch porque exige gerar e validar assinaturas
 temporais — território do Item 22 do learning path, não deste ciclo.
 
+**Amendamento (2026-07-30):** o ciclo de pagamento e estatísticas introduziu
+um terceiro tipo de arquivo — o comprovante de pagamento (UC-012) — sob o
+mesmo `FileStorage` parametrizado desta decisão, agora com **três**
+diretórios de destino: `UPLOAD_DIR` (comprovantes de despesa, padrão
+`uploads/receipts`), `AVATAR_DIR` (fotos de perfil, padrão
+`uploads/avatars`) e o novo `PAYMENT_DIR` (comprovantes de pagamento,
+padrão `uploads/payment_receipts`), cada um com seu próprio validator de
+extensão e tamanho (BR-009 emendada, mesmo limite dos comprovantes de
+despesa). O terceiro tipo de arquivo confirma a consequência já prevista
+nesta decisão: reaproveitou a mesma classe `FileStorage`, bastando seu
+próprio diretório e seu próprio validador, sem duplicar a lógica de salvar
+e excluir.
+
+O acesso ao novo arquivo segue o mesmo modelo de rota autenticada do
+amendamento de 2026-07-29 — `GET /refunds/{refund_id}/payment-receipt`,
+dono ou `admin`, reavaliando a autorização a cada requisição, nunca um
+mount estático (BR-020 emendada) — em vez de reabrir a discussão sobre URL
+pública que aquele amendamento já fechou.
+
+Como `uploads/receipts` e `uploads/avatars`, o diretório
+`uploads/payment_receipts` existe no repositório só por ter um `.gitkeep`
+versionado, com a negação correspondente adicionada ao `.gitignore`
+(linhas 19-20). Nenhum código da aplicação cria diretório de upload — vale
+a mesma ressalva já registrada para os dois primeiros tipos de arquivo, e
+falha do mesmo jeito silencioso num clone limpo sem o `.gitkeep`.
+
 ## Consequências
 
 - A solução é simples e não requer infraestrutura adicional de armazenamento.
 - Um único driver parametrizado evita duplicar a lógica de salvar e excluir
-  entre comprovantes e avatares; um terceiro tipo de arquivo enviado no futuro
-  reaproveitaria a mesma classe, bastando seu próprio diretório e seu próprio
-  validador de extensão e tamanho.
+  entre os três tipos de arquivo — comprovante de despesa, avatar e, desde
+  2026-07-30, comprovante de pagamento; um quarto tipo de arquivo enviado no
+  futuro reaproveitaria a mesma classe, bastando seu próprio diretório e seu
+  próprio validador de extensão e tamanho.
 - Os arquivos dependem do disco e do ciclo de vida da instância que executa a
   API.
 - Ambientes com múltiplas instâncias não compartilham os arquivos entre si.
