@@ -29,6 +29,7 @@ class RefundListerView:
                 status=http_request.query.get("status"),
                 sort=http_request.query.get("sort"),
                 order=http_request.query.get("order"),
+                filter_user_id=http_request.query.get("user_id"),
             )
             return HttpResponse(body=response, status_code=200)
         except Exception as e:

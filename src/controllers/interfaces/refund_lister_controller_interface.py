@@ -15,5 +15,6 @@ class RefundListerControllerInterface(ABC):
         status: Optional[str] = None,
         sort: Optional[str] = None,
         order: Optional[str] = None,
+        filter_user_id: Optional[int] = None,
     ) -> dict:
         pass

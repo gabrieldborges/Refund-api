@@ -181,3 +181,29 @@ async def test_list_forwards_status_sort_and_order_to_the_repository(mock_reposi
         page=1, per_page=10, name=None, user_id=None,
         status="pending", sort="amount_in_cents", order="asc",
     )
+
+
+# The repository already accepted user_id; only the controller decided it, and
+# the route never exposed it. An admin can now scope the list to one requester.
+@pytest.mark.asyncio
+async def test_admin_can_filter_the_list_by_requester():
+    repository = MagicMock()
+    repository.select_refunds = AsyncMock(return_value=([], 0, 0))
+    controller = RefundListerController(repository)
+
+    await controller.list(page=1, per_page=10, user_id=9, role="admin", filter_user_id=3)
+
+    assert repository.select_refunds.await_args.kwargs["user_id"] == 3
+
+
+# A standard user is already locked to their own refunds, so the parameter is
+# ignored rather than rejected: there is nothing to leak and no new error path.
+@pytest.mark.asyncio
+async def test_the_filter_is_ignored_for_a_standard_user():
+    repository = MagicMock()
+    repository.select_refunds = AsyncMock(return_value=([], 0, 0))
+    controller = RefundListerController(repository)
+
+    await controller.list(page=1, per_page=10, user_id=9, role="standard", filter_user_id=3)
+
+    assert repository.select_refunds.await_args.kwargs["user_id"] == 9

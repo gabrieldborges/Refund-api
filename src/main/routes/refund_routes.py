@@ -52,11 +52,15 @@ async def list_refunds(
     status: Optional[str] = Query(None),
     sort: Optional[str] = Query(None),
     order: Optional[str] = Query(None),
+    # Typed as int so FastAPI's native validation rejects garbage, matching how
+    # page and per_page already behave. Unlike `status`, there is no whitelist
+    # to express, so this project's 422 envelope buys nothing here.
+    user_id: Optional[int] = Query(None),
     token_info: dict = Depends(get_current_user),
 ):
     http_request = HttpRequest(
         query={"page": page, "per_page": per_page, "name": name,
-               "status": status, "sort": sort, "order": order},
+               "status": status, "sort": sort, "order": order, "user_id": user_id},
         token_info=token_info,
     )
     view = refund_lister_composer()

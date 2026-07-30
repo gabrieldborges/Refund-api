@@ -29,7 +29,7 @@ async def test_refund_lister_view_forwards_query_and_token_info_to_the_controlle
     assert response.status_code == 200
     mock_controller.list.assert_awaited_once_with(
         page=2, per_page=20, name="Ana", user_id=7, role="standard",
-        status=None, sort=None, order=None
+        status=None, sort=None, order=None, filter_user_id=None
     )
 
 
@@ -46,7 +46,7 @@ async def test_refund_lister_view_defaults_name_to_none_when_absent(mock_control
 
     mock_controller.list.assert_awaited_once_with(
         page=1, per_page=10, name=None, user_id=7, role="admin",
-        status=None, sort=None, order=None
+        status=None, sort=None, order=None, filter_user_id=None
     )
 
 
@@ -65,6 +65,22 @@ async def test_the_new_query_parameters_reach_the_controller(mock_controller):
     assert mock_controller.list.await_args.kwargs["status"] == "pending"
     assert mock_controller.list.await_args.kwargs["sort"] == "name"
     assert mock_controller.list.await_args.kwargs["order"] == "asc"
+
+
+# The "user_id" query param (Task 10) must reach the controller as filter_user_id,
+# the name the controller's authorization rule expects.
+@pytest.mark.asyncio
+async def test_the_user_id_query_parameter_reaches_the_controller_as_filter_user_id(mock_controller):
+    view = RefundListerView(mock_controller)
+    http_request = HttpRequest(
+        query={"page": 1, "per_page": 10, "name": None,
+               "status": None, "sort": None, "order": None, "user_id": 3},
+        token_info={"user_id": 7, "role": "admin"},
+    )
+
+    await view.handle(http_request)
+
+    assert mock_controller.list.await_args.kwargs["filter_user_id"] == 3
 
 
 # The validator runs before the controller: an invalid sort must be refused with
