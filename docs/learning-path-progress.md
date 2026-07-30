@@ -2799,3 +2799,202 @@ código:
   um `eslint` já vermelhos na `main` tornariam sem sentido o portão de qualidade
   de todas as tasks seguintes. Descobrir isso na task 3 é barato; descobrir no
   fim, não.
+
+## Ciclo de feature — Pagamento, histórico de revisões e estatísticas (2026-07-30)
+
+Sétimo ciclo de feature e o segundo inteiramente de backend, na branch
+`feat/refund-payment-and-stats` do `Refund-api` (`23c6675..1381241`, 28
+commits, 12 tasks). Artefatos em `.superpowers/sdd/2026-07-30-refund-payment-
+and-stats/`. Fecha o `UC-012` (pagar reembolso), `UC-013` (histórico de
+revisões) e `UC-014` (estatísticas por usuário), e acrescenta um quarto status
+(`paid`) ao ciclo de vida do `refunds.status`.
+
+### Por que agora
+
+Depois do workflow de aprovação (ciclo anterior), a máquina de estados parava
+em `approved`/`rejected` — sem nenhum jeito de marcar que o dinheiro
+efetivamente saiu. Sem `paid`, o card "Total" do frontend não tinha como
+distinguir um passivo aprovado de uma despesa já realizada, e não existia
+nenhum registro de **quem** pagou nem **quando**. As três rotas novas
+(`POST /payment`, `GET /payment-receipt`, `GET /reviews`, `GET
+/refund-stats`) e o quarto status vieram juntos porque um não faz sentido
+sozinho: pagar sem comprovante não é auditável, e estatísticas sem `paid`
+contam a metade da história.
+
+### Achado 1 — o `lock_timeout` que nunca chegava ao Postgres
+
+**Estado anterior.** O pool de conexões (herdado, sem mudança neste ciclo até
+agora) tinha `pool_size=2, max_overflow=0, pool_timeout=30`: um teto de duas
+operações concorrentes para o processo inteiro. Como `select_for_update` na
+revisão segura uma conexão enquanto espera o lock da linha, duas revisões
+concorrentes já bastavam para esgotar o pool — e uma terceira requisição
+qualquer, até um login, esperava 30s e recebia `500`.
+
+**A correção planejada** era direta: aumentar o pool (`pool_size=5,
+max_overflow=10`) e adicionar um `lock_timeout` curto, para que uma espera
+por lock falhe rápido e com erro legível em vez de travar a conexão
+indefinidamente. O plano especificava a forma que a documentação do asyncpg
+recomenda:
+
+```python
+connect_args={"server_settings": {"lock_timeout": "3000"}}
+```
+
+**A limitação encontrada.** Aplicado exatamente assim, `SHOW lock_timeout`
+respondia `0` — sem nenhum erro de conexão, sem exceção, nada. O valor
+simplesmente não pegava. A investigação isolou a causa camada por camada:
+
+1. Reproduzido com `asyncpg` puro, sem SQLAlchemy no caminho — mesmo `0`.
+   Descartava um bug de tradução do `connect_args`.
+2. `SET lock_timeout = '3000'` como comando comum, depois de conectado,
+   funcionava (`SHOW` respondia `3s`). O GUC em si estava saudável; o
+   problema era só no **pacote de inicialização** da conexão.
+3. Sondado quais parâmetros de startup realmente chegam: `application_name`
+   sobrevivia, `lock_timeout` e `statement_timeout` — enviados juntos, do
+   mesmo jeito — não.
+4. `options="-c lock_timeout=3000"` (o parâmetro que proxies costumam usar
+   para repassar GUCs arbitrários como uma string opaca) sobreviveu e
+   produziu `SHOW lock_timeout = 3s`.
+
+**Causa raiz:** o endpoint do Neon usado (`DATABASE_URL` sem `-pooler`) ainda
+passa por um proxy de autenticação/roteamento mesmo fora do modo pooler, e
+esse proxy só repassa os parâmetros de startup que o próprio Postgres
+"reporta" de volta ao cliente (como `application_name`); os demais —
+inclusive `lock_timeout` e `statement_timeout` — são descartados **em
+silêncio**, sem erro em lugar nenhum. `SHOW <parâmetro> = 0` com um
+`server_settings` corretamente formado é o sintoma; a causa é esse filtro do
+proxy, não o código.
+
+```python
+# ANTES (nunca aplicado — barrado pela verificação Passo 5 do plano):
+connect_args={"server_settings": {"lock_timeout": "3000"}}   # SHOW lock_timeout -> 0
+
+# DEPOIS — o valor sobrevive porque `options` é repassado como string opaca:
+connect_args={"server_settings": {"options": "-c lock_timeout=3000"}}   # SHOW lock_timeout -> 3s
+```
+
+A decisão de produto (um `lock_timeout` global de 3s) não mudou — só o
+transporte. O plano tinha um passo de verificação explícito (`SHOW
+lock_timeout` deveria responder `3s`) e a instrução de **não** commitar se
+isso não acontecesse; foi exatamente esse portão que impediu a correção
+silenciosa de passar. Verificado de novo nesta Task 12, contra o servidor
+real e sem mocks: os testes automatizados (`database_connection_handler_pool_
+test.py`) só provam que os *parâmetros do engine* são os esperados — não que
+o Postgres os aceitou. Só uma consulta `SHOW` contra a conexão real prova
+isso, e é exatamente o tipo de verificação que uma suíte verde não cobre.
+
+### Achado 2 — `paid` não era terminal, e o comentário que explicava por quê estava certo até deixar de estar
+
+**Estado anterior.** A regra de transição de status (`BR-017`) vivia num único
+comparador no controller:
+
+```python
+# RefundReviewerController.review(), antes deste ciclo
+if current_status == status:
+    raise HttpUnprocessableEntityError(f"Refund is already {status}")
+```
+
+E um comentário no validador, escrito **no ciclo anterior**, quando só
+existiam três status (`pending`, `approved`, `rejected`), afirmava que essa
+única comparação bastava para cobrir a regra inteira — com um aviso explícito
+para revisitar o controller **se o conjunto de alvos permitidos fosse
+ampliado** (`ALLOWED_REVIEW_STATUSES`).
+
+**A limitação encontrada.** Este ciclo não ampliou o conjunto de *alvos* — ele
+ampliou o conjunto de **status de origem alcançáveis**, adicionando `paid`
+como um quarto status possível para `refunds.status`. O aviso do comentário
+apontava para o eixo errado. Como `paid` nunca é um alvo válido de revisão
+(`ALLOWED_REVIEW_STATUSES = {"approved", "rejected"}`), a condição
+`current_status == status` nunca é `True` quando `current_status == "paid"` —
+e por isso a única guarda existente deixava passar `PATCH
+/refunds/{id}/status` num reembolso já pago, revertendo-o silenciosamente
+para `approved` ou `rejected` com `200`, sem nenhum erro.
+
+Reproduzido isoladamente antes do conserto (`repro_bug.py`, Task 11.5):
+
+```
+BUG REPRODUCED: paid -> approved succeeded with response:
+{'type': 'Refund', 'count': 1, 'attributes': {'id': 1, ..., 'status': 'approved', ...}}
+insert_review called with: call(..., from_status='paid', to_status='approved', ...)
+```
+
+Um `refund_review` era até gravado com `from_status="paid"` — a auditoria
+registrava fielmente uma reversão de dinheiro já pago, sem nada que a
+impedisse de acontecer primeiro.
+
+**Comparação:**
+
+| | Antes | Depois |
+|---|---|---|
+| Guarda de terminalidade | nenhuma — dependia de `current_status == status` nunca coincidir com `paid` por construção do conjunto de alvos | guarda explícita, `if current_status == "paid": raise ...`, antes da checagem de repetição |
+| `PATCH .../status` num reembolso pago | `200`, reverte o status | `422 "Refund is already paid and cannot be reviewed"` |
+| Onde a regra de terminalidade vivia | implícita — dependia dos dois conjuntos (`ALLOWED_REVIEW_STATUSES` e os status de origem alcançáveis) nunca se cruzarem | explícita — uma condição dedicada, que não depende de nenhum outro conjunto |
+| Comentário do validador | avisava sobre ampliar o conjunto de **alvos** | avisa sobre ampliar **qualquer um dos dois eixos** — alvos ou origens |
+
+**Estado ajustado:**
+
+```python
+# src/controllers/refund_reviewer_controller.py, depois do conserto (commit 5f78777)
+if current_status == "paid":
+    raise HttpUnprocessableEntityError("Refund is already paid and cannot be reviewed")
+
+if current_status == status:
+    raise HttpUnprocessableEntityError(f"Refund is already {status}")
+```
+
+O achado só apareceu porque a verificação ponta a ponta desta mesma Task 12
+incluiu um cenário que a tabela original do plano não previa (`PATCH` numa
+solicitação paga) — a suíte de testes unitários, toda mockada, nunca
+exercitou a combinação real "quatro status possíveis, dois deles nunca alvo
+de revisão". Uma correção retroativa (**Task 11.5**) fechou a lacuna antes
+desta verificação começar; os cenários 12 e 26 desta task confirmam o
+conserto contra a API real.
+
+### Verificações
+
+| Comando | Resultado |
+|---|---|
+| `pytest` | **226 testes**, todos verdes (partiu de 178) |
+| `pylint src` | **10.00/10** |
+| Ponta a ponta contra a API real | **26/26 cenários**, status HTTP e corpo conferidos um a um, sem nenhum ajustado para caber no resultado |
+| `ls uploads/payment_receipts/` antes/depois | vazio (só `.gitkeep`) → 1 arquivo após 1 pagamento bem-sucedido; nenhum arquivo órfão dos 5 cenários de guarda/duplicata |
+| Anti-enumeração — `403` de standard, id real vs. inventado | corpos **byte-idênticos** (`diff`) |
+| Anti-enumeração — os quatro caminhos `404` do comprovante de pagamento (id inexistente, não é seu, nunca pago, arquivo sumiu do disco) | os **quatro** corpos **byte-idênticos** (`diff` par a par) — verificação mais ampla do que a tabela do plano exigia |
+| Contenção do pool — 3 `PATCH` concorrentes na mesma solicitação | nenhum `500`, nenhuma espera de 30s; um `200` e dois `422 "already rejected"`, os três completos em **~1,5s** no total |
+
+Detalhes completos, incluindo a tabela dos 26 cenários e os ids de teste
+criados, em `.superpowers/sdd/2026-07-30-refund-payment-and-stats/task-12-
+report.md`.
+
+### O que lembrar
+
+- **Um comentário que diz "esta condição cobre a regra inteira" descreve uma
+  invariante entre dois conjuntos — e invariantes têm dois lados.** O aviso
+  escrito no ciclo anterior sobre `ALLOWED_REVIEW_STATUSES` só cobria o eixo
+  que aquele ciclo conseguia imaginar mudar (o conjunto de alvos). O eixo que
+  de fato mudou foi o outro (o conjunto de origens alcançáveis). Um aviso
+  sobre "não amplie X" vale a pena reler perguntando "e se eu ampliar o outro
+  lado da comparação?".
+- **`SHOW <parâmetro>` contra a conexão real é a única prova de que um
+  `connect_args` funcionou.** Um teste unitário que verifica os argumentos
+  passados ao `create_async_engine` prova a intenção, não o efeito — e a
+  intenção aqui era exatamente correta segundo a documentação do driver.
+  Só faltou ao Postgres real recebê-la.
+- **"Sem erro" não é sinônimo de "funcionou".** O proxy do Neon não recusou
+  a conexão, não logou nada, não alertou. Um parâmetro de startup
+  simplesmente evaporou. Ausência de exceção é a evidência mais fraca que
+  existe de que algo deu certo.
+- **Um portão de verificação com critério de parada explícito (`SHOW
+  lock_timeout` deve responder `3s`, senão não commite) é o que separa "a
+  correção parece certa" de "a correção está certa".** Sem esse portão, o
+  `server_settings={"lock_timeout": ...}` — plausível, documentado,
+  revisado — teria sido commitado quieto, e o comportamento antigo (conexão
+  presa indefinidamente numa espera de lock) continuaria existindo atrás de
+  uma configuração que parecia consertá-lo.
+- **Um teste que não pode falhar contra mock nenhum é o mesmo problema de um
+  teste que não pode falhar contra código nenhum.** As duas descobertas mais
+  sérias deste ciclo — o `lock_timeout` e o `paid` não-terminal — eram
+  ambas invisíveis a uma suíte 100% verde, porque nenhuma delas é
+  expressável como uma asserção sobre um mock: uma precisa do Postgres real
+  atrás de um proxy real; a outra precisa da combinação de quatro status
+  reais que nenhum teste unitário isolado compõe sozinho.

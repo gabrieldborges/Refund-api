@@ -11,15 +11,20 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-07-29.
+Atualizado em: 2026-07-30.
 
 ## Visão geral
 
 O produto é um sistema de **reembolso de despesas com comprovante**. São dois
-repositórios Git irmãos e independentes, cada um com seu remote. O `Refund-api`
-está na `main` (`ef7c60f`); o `Refund-FrontEnd` está na branch
-`feat/frontend-contract-and-receipt` (`39e0683`), **ainda sem merge** — ver
-pendências:
+repositórios Git irmãos e independentes, cada um com seu remote. O
+`Refund-FrontEnd` está na `main`, sem branch de trabalho aberta e com a árvore
+limpa, em `39e0683`, igual ao `origin/main`. O `Refund-api` tem uma branch de
+trabalho aberta, `feat/refund-payment-and-stats` (`23c6675..1381241`, 28
+commits), **concluída e verificada ponta a ponta, ainda não mesclada nem
+implantada** — ver o ciclo de pagamento, histórico e estatísticas abaixo. O
+contrato novo (`user` aninhado), do ciclo anterior, segue mesclado dos dois
+lados; o que resta ali é **deploy**, e ele tem de ser conjunto (ver
+pendências):
 
 - **`Refund-api`** — backend Python + FastAPI, Clean Architecture pragmática.
 - **`Refund-FrontEnd`** — frontend React 19 + TypeScript + Vite.
@@ -354,9 +359,10 @@ completo e obrigatório está em
   Quinto ciclo, na branch `feat/authenticated-file-serving` (`55be4d4..ba51c4b`,
   8 commits de código), **empilhada sobre `feat/refund-query-and-avatar`**. A
   pilha inteira **foi mesclada na `main`** no início do ciclo do frontend, por
-  **fast-forward** (`3fa42b2..ef7c60f`, 33 commits): a `main` do `Refund-api`
-  está hoje em `ef7c60f`, com `pytest` 178/178 e `pylint src` 10.00/10 depois do
-  merge. Artefatos em `docs/superpowers/`
+  **fast-forward** (`3fa42b2..ef7c60f`, 33 commits), com `pytest` 178/178 e
+  `pylint src` 10.00/10 depois do merge. Desde então a `main` do `Refund-api`
+  só recebeu documentação (`d332cb9` e `23c6675`, o fechamento do ciclo do
+  frontend), e é onde ela está hoje. Artefatos em `docs/superpowers/`
   ([spec](../superpowers/specs/2026-07-29-authenticated-file-serving-design.md),
   [plano](../superpowers/plans/2026-07-29-authenticated-file-serving.md)).
   Nasceu de uma verificação de rotina que achou `GET /receipts/<uuid>`
@@ -378,11 +384,12 @@ completo e obrigatório está em
     depois provando que a exclusão ainda apaga o arquivo.
 
 - **Ciclo de feature — Contrato novo e comprovante autenticado (frontend):
-  IMPLEMENTAÇÃO CONCLUÍDA, `main` do frontend AINDA NÃO MESCLADA E NADA VALIDADO
-  EM NAVEGADOR.** Sexto ciclo e o primeiro de frontend desde o restyle, na branch
+  CONCLUÍDO.** Sexto ciclo e o primeiro de frontend desde o restyle, na branch
   `feat/frontend-contract-and-receipt` do `Refund-FrontEnd`
   (`6326606..39e0683`, 17 commits), executado em 11 tasks com revisão por task
-  mais uma revisão da branch inteira. Artefatos em
+  mais uma revisão da branch inteira. **Mesclada na `main` em 2026-07-29 por
+  fast-forward** e empurrada para o `origin/main`; a branch local não existe
+  mais. A `main` do frontend está hoje em `39e0683`. Artefatos em
   `Refund-FrontEnd/docs/superpowers/`
   ([spec](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-29-frontend-contract-and-receipt-design.md),
   [plano](../../../Refund-FrontEnd/docs/superpowers/plans/2026-07-29-frontend-contract-and-receipt.md)).
@@ -422,16 +429,64 @@ completo e obrigatório está em
     (incluindo tela cheia), badge nos três status e o 404 do comprovante alheio.
     Sem ressalvas. Detalhes no [diário](../learning-path-progress.md).
 
-- **Próximo — o workflow de aprovação na UI.** Depende de mesclar e implantar o
-  ciclo acima primeiro (deploy conjunto). O backlog remanescente está na seção
-  abaixo.
+- **Ciclo de feature — Pagamento, histórico de revisões e estatísticas
+  (backend): CONCLUÍDO, ainda não mesclado na `main`.** Sétimo ciclo, o
+  segundo inteiramente de backend, na branch `feat/refund-payment-and-stats`
+  do `Refund-api` (`23c6675..1381241`, 28 commits, 12 tasks com revisão por
+  task). Artefatos em `.superpowers/sdd/2026-07-30-refund-payment-and-stats/`.
+  Fecha `UC-012`/`UC-013`/`UC-014` e acrescenta um quarto status (`paid`) ao
+  ciclo de vida de `refunds.status`. O que mudou:
+  - **`POST /refunds/{id}/payment`** — só admin, nunca a própria solicitação,
+    só sobre `approved`, comprovante JPG/PNG/PDF até 4MB. Marca `paid` com
+    `UPDATE` condicional (fecha a corrida com outro admin pagando ao mesmo
+    tempo) e grava uma linha em `refund_reviews`
+    (`from_status="approved", to_status="paid"`) na mesma transação.
+  - **`GET /refunds/{id}/payment-receipt`** — dono ou admin; os quatro
+    caminhos de 404 (id inexistente, não é seu, nunca pago, arquivo sumiu do
+    disco) respondem **idênticos**, verificado byte a byte na Task 12.
+  - **`GET /refunds/{id}/reviews`** — histórico de decisões (quem, quando, de
+    qual status para qual, motivo). `RefundReviewsReaderRepository` segue o
+    par que o projeto já usa — sessão própria, sem transação — porque a
+    leitura não tem nada com que compartilhar uma.
+  - **`GET /users/{id}/refund-stats`** — contagem e soma por status, sempre as
+    quatro chaves (`pending/approved/paid/rejected`), mesmo com zero linhas
+    num status. Dono, admin, ou `404` para terceiro (mesmo raciocínio
+    anti-enumeração da BR-013).
+  - **`GET /refunds?user_id=`** — admin pode escopar a listagem a um
+    solicitante; para `standard` o parâmetro é **ignorado**, não rejeitado.
+  - **Pool de conexões** (`pool_size=2, max_overflow=0` → `pool_size=5,
+    max_overflow=10`) e um `lock_timeout` de 3s — achado de transporte: a
+    forma que a documentação do asyncpg recomenda
+    (`server_settings={"lock_timeout": ...}`) é descartada em silêncio pelo
+    proxy do Neon; sobrevive como `options="-c lock_timeout=3000"`. Detalhes
+    no [diário](../learning-path-progress.md).
+  - **`paid` não era terminal.** A única guarda de transição
+    (`current_status == status`) nunca cobria `paid`, porque `paid` nunca é um
+    alvo válido de revisão — um `PATCH` revertia silenciosamente um reembolso
+    já pago. Corrigido numa correção retroativa (Task 11.5, commit `5f78777`)
+    com uma guarda dedicada. Achado só na verificação ponta a ponta, invisível
+    à suíte mockada. Detalhes no [diário](../learning-path-progress.md).
+  - Verificação: `pytest` (**226 verdes**, partiu de 178), `pylint src`
+    (**10.00/10**), **26/26 cenários ponta a ponta** contra a API real (a
+    tabela original do plano tinha 25; o 26º veio do achado do `paid`), `ls
+    uploads/payment_receipts/` antes/depois provando que os cenários de guarda
+    e de duplicata não deixam arquivo órfão, e três `PATCH` concorrentes na
+    mesma solicitação completando em ~1,5s, sem `500` nem espera longa.
+    Detalhes completos em
+    `.superpowers/sdd/2026-07-30-refund-payment-and-stats/task-12-report.md`.
+
+- **Próximo — o workflow de aprovação na UI, no `Refund-FrontEnd`.** Depende de
+  mesclar e implantar o ciclo acima primeiro: a tela vai consumir `paid`, o
+  comprovante de pagamento e o histórico de revisões, nenhum dos quais existe
+  no backend em produção ainda. O badge de status hoje cobre só três variantes
+  (`pending`/`approved`/`rejected`); vai precisar de uma quarta para `paid` —
+  ver pendências. O backlog remanescente está na seção abaixo.
 
 ## Backlog do frontend — o que ainda falta
 
 O ciclo de 2026-07-29 (`feat/frontend-contract-and-receipt`) absorveu o contrato
-novo, o comprovante autenticado, o badge de status e os ajustes pequenos. **Essa
-branch ainda não foi mesclada** — enquanto isso, a `main` do `Refund-FrontEnd`
-continua incapaz de consumir a API atual.
+novo, o comprovante autenticado, o badge de status e os ajustes pequenos, e **já
+está mesclado na `main`** — a `main` do `Refund-FrontEnd` consome a API atual.
 
 O que resta, em ciclos próprios (um por vez, na ordem do roadmap):
 
@@ -493,17 +548,17 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
 
 - **DEPLOY CONJUNTO OBRIGATÓRIO — esta quebra não tem lado seguro, e continua
   valendo.** O ciclo de 2026-07-29 tirou `user_id` do topo das respostas de
-  reembolso e o moveu para `user.id`. O Zod do frontend na `main` declara
-  `user_id` como **obrigatório**: um backend novo com frontend velho falha o
-  `.parse` em toda listagem. E o inverso falha igual, porque o frontend da
-  branch `feat/frontend-contract-and-receipt` exige `user`. Diferente do
+  reembolso e o moveu para `user.id`. O frontend **que está em produção** declara
+  `user_id` como **obrigatório** no Zod: implantar só o backend faz o `.parse`
+  falhar em toda listagem. E o inverso falha igual, porque o frontend da `main`
+  exige `user` e o backend em produção ainda não o envia. Diferente do
   `sum_amount_in_cents` do ciclo anterior — que tinha uma ordem segura — **aqui
   não existe nenhuma**. Os dois têm de ser implantados no mesmo momento. Se isso
   não for viável, a alternativa é uma versão de transição devolvendo `user_id`
   **e** `user`, removendo `user_id` só depois.
-  **Situação em 2026-07-29:** o backend já está na `main` (`ef7c60f`); o frontend
-  **não** — a branch com o contrato novo segue sem merge. Implantar o backend
-  isoladamente hoje quebraria a Home de todo usuário.
+  **Situação em 2026-07-30:** os dois já estão na `main` — backend em `23c6675`,
+  frontend em `39e0683`. O merge deixou de ser o risco; o risco agora é
+  **implantar um sem o outro**, em qualquer ordem.
 - **Efeito colateral esperado do deploy do frontend: todo usuário logado é
   deslogado uma vez.** O `AuthContext` passou a validar a sessão do
   `localStorage` com `storedUserSchema`, que exige `id` — campo que as sessões
@@ -530,16 +585,31 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   consome**, não a "forma da tabela". Essa divergência já quase virou um bug
   durante a correção deste ciclo.
 
-- **`select_for_update` segura uma conexão do pool enquanto espera.** Achado na
-  revisão final do ciclo de aprovação e **deliberadamente não corrigido**. O lock
-  é tomado dentro da transação do `UnitOfWork` e não há `NOWAIT` nem
-  `lock_timeout`. Cenário: três revisões concorrentes da mesma solicitação — A
-  segura o lock, B bloqueia ocupando a segunda conexão, e C (qualquer endpoint,
-  até um login) espera o `pool_timeout` de 30s e recebe 500. Antes deste ciclo
-  nenhum caminho segurava lock durante uma espera, então contenção não conseguia
-  esgotar o pool. Conserto: subir o `pool_size` ou definir um `lock_timeout`
-  curto nos `connect_args`. Conecta com a pendência do pool pequeno logo abaixo —
-  as duas devem ser resolvidas juntas, num item de backend próprio.
+- ~~**`select_for_update` segura uma conexão do pool enquanto espera.**~~
+  RESOLVIDO no ciclo de 2026-07-30 (pagamento/estatísticas): `pool_size` subiu
+  de 2 para 5 (`max_overflow` de 0 para 10) e um `lock_timeout` de 3s foi
+  adicionado — via `connect_args={"server_settings": {"options": "-c
+  lock_timeout=3000"}}`, não a forma que a documentação do asyncpg sugere
+  (`server_settings={"lock_timeout": ...}`), porque essa forma é descartada em
+  silêncio pelo proxy do Neon (achado documentado no
+  [diário](../learning-path-progress.md)). Verificado na Task 12 desse ciclo:
+  três `PATCH /refunds/{id}/status` concorrentes na mesma solicitação
+  completaram em ~1,5s no total, sem `500` e sem espera longa — o cenário que
+  antes produzia o 500 depois de 30s. **Pendência nova, mais restrita:** essa
+  verificação foi manual (Task 12), não existe teste automatizado que
+  exercite contenção real de pool/lock — ver logo abaixo.
+- **O ajuste de pool/lock_timeout não tem teste comportamental na suíte.**
+  `database_connection_handler_pool_test.py` verifica os *parâmetros* passados
+  a `create_async_engine` (que `pool_size` é 5, que `pool_pre_ping` é `True`),
+  não que o Postgres real os aceitou nem que a contenção efetivamente some.
+  A única prova de que `lock_timeout` chegou ao servidor foi um `SHOW
+  lock_timeout` manual contra a conexão real, e a única prova de que a
+  contenção não trava mais foi a corrida de três `PATCH` concorrentes rodada à
+  mão na Task 12 de verificação. Nenhuma das duas é repetível em CI. Escrever
+  um teste de integração contra Postgres real (não mockado) que dispare N
+  operações concorrentes e afirme que nenhuma delas espera além do
+  `lock_timeout` é candidato a um item de backend futuro — depende de alguma
+  forma de banco descartável em teste, a mesma dependência do Item 19.
 - **O ciclo `upgrade`/`downgrade` das migrations é verificado à mão.**
   Automatizá-lo exige um PostgreSQL descartável, que é o **Item 19**. Testar
   migrations em SQLite seria pior que não testar: esconderia justamente as
@@ -547,6 +617,30 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
 - **Existe um admin de teste no banco.** `admin.validacao@example.com` foi criado
   e promovido durante a verificação ponta a ponta do ciclo de aprovação, junto de
   `validacao.visual@example.com` e seus reembolsos de teste. São descartáveis.
+- **O badge de status do frontend cobre só três variantes; vai precisar de uma
+  quarta.** `features/refunds/constants/status.ts` mapeia
+  `pending`/`approved`/`rejected` para `{label, variant}` do `ui/badge`, sem
+  fallback (ver a pendência de fronteira de schema acima — `refundStatusSchema`
+  é um `z.enum` e um valor fora dele derruba a query em `isError`). Desde o
+  ciclo de 2026-07-30 do backend, `paid` é um quarto valor real de
+  `refund.status`. Qualquer resposta de reembolso pago que chegue ao frontend
+  atual (schema desatualizado) termina em erro de parse, não em um badge sem
+  estilo — o que é o comportamento correto por construção, mas significa que o
+  ciclo da UI de aprovação **precisa** adicionar a quarta entrada ao mapa e ao
+  `z.enum` antes de qualquer tela poder listar um reembolso pago.
+- **Mais usuários de teste no banco, do ciclo de 2026-07-30 (pagamento/
+  histórico/estatísticas):** `task12-owner@example.com` (id 17, dono da
+  maioria dos reembolsos de teste), `task12-other@example.com` (id 18,
+  terceiro sem reembolso nenhum, usado só para os cenários `404`/`403`) e
+  `task12-admin@example.com` (id 19, promovido a admin). Reembolsos de teste
+  criados sob esses ids: 65–73 (nove reembolsos, cobrindo os quatro status,
+  incluindo dois pagos e um com o arquivo do comprovante apagado do disco de
+  propósito para testar o quarto caminho de 404 do comprovante de pagamento).
+  Detalhes completos em
+  `.superpowers/sdd/2026-07-30-refund-payment-and-stats/task-12-report.md`.
+  Somam-se a `admin.validacao@example.com`, `validacao.visual@example.com` e
+  `task1-verify@example.com`; todos descartáveis, nenhum removível sem acesso
+  direto ao banco (não existe endpoint de exclusão de usuário).
 
 - ~~**Uma asserção vazia no teste do `RefundSearch`.**~~ RESOLVIDO em 2026-07-29,
   no ciclo do contrato novo: `src/pages/PageHome.test.tsx` passou a iniciar o
@@ -730,14 +824,24 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
 - **Referência quebrada.** `AGENTS.md` (dos dois repos) aponta para
   `../../CODING_PROFILE.md`, que não existe na árvore. O perfil de
   desenvolvedor equivalente está hoje no `CLAUDE.md` global do usuário.
-- **Fragilidade latente banco+arquivo.** Na criação de reembolso, o comprovante
-  é salvo em disco **antes** do insert; se o insert falhar, o arquivo fica órfão
-  (o mesmo vale na exclusão). É o Item 21 do `learning_path.md` ("consistência
-  entre banco e arquivo"); ainda não tratado.
-- **Pool de conexões pequeno.** O `engine` usa `pool_size=2, max_overflow=0`.
-  Depois do fix de concorrência não há mais vazamento, mas o limite é apertado
-  para carga real; é candidato a ajuste/observabilidade num item de backend
-  futuro (não é um bug, é tuning).
+- **Fragilidade latente banco+arquivo — agora em DOIS lugares, não um.** Na
+  criação de reembolso, o comprovante é salvo em disco **antes** do insert; se
+  o insert falhar, o arquivo fica órfão (o mesmo vale na exclusão). É o Item 21
+  do `learning_path.md` ("consistência entre banco e arquivo"); ainda não
+  tratado. **Novo no ciclo de 2026-07-30:** `RefundPayerController.pay()`
+  repete exatamente o mesmo padrão — `self.__payment_storage.save(...)` roda
+  antes do `UPDATE`/`INSERT` dentro do `UnitOfWork`, e um crash entre os dois
+  órfa o comprovante de pagamento. O código tem um comentário reconhecendo
+  isso explicitamente ("A crash between here and the UPDATE still orphans it —
+  that is Item 21, unresolved, and the UnitOfWork does NOT cover it"). Diferente
+  da criação, aqui existe uma compensação parcial: se o `UPDATE` afeta 0 linhas
+  (outro admin pagou primeiro), o controller **apaga** o arquivo que acabou de
+  gravar antes de responder 422 — mas essa compensação só cobre a corrida
+  perdida, não um crash do processo entre o `save()` e o commit. O Item 21
+  agora precisa resolver dois call sites com o mesmo formato de bug, não um.
+- ~~**Pool de conexões pequeno.**~~ RESOLVIDO no ciclo de 2026-07-30: ver a
+  pendência resolvida acima (`select_for_update` segurava conexão) — é o
+  mesmo ajuste, `pool_size=5, max_overflow=10`.
 - **Boundaries não cobre 4 arquivos-raiz do frontend.** No `eslint-plugin-boundaries`
   v7 um elemento é uma **pasta**, então `App.tsx`, `main.tsx`, `router.tsx` e
   `router-loaders.ts` (soltos em `src/`) ficaram **unknown** e não são checados como
