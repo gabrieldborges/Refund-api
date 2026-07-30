@@ -28,6 +28,7 @@ def refund():
 @pytest.fixture
 def review_rows():
     return [
+        # Approval: reason stays null, as insert_review already allows.
         {
             "from_status": "pending",
             "to_status": "approved",
@@ -35,7 +36,18 @@ def review_rows():
             "created_at": datetime(2026, 7, 30, 10, 0, 0),
             "reviewer_id": 1,
             "reviewer_name": "Gabriel",
-        }
+        },
+        # Rejection with a real, non-null reason: the case a reader of this
+        # endpoint actually cares about, and the field this whole task exists
+        # to expose (it was write-only until now).
+        {
+            "from_status": "pending",
+            "to_status": "rejected",
+            "reason": "Comprovante ilegível",
+            "created_at": datetime(2026, 7, 30, 11, 0, 0),
+            "reviewer_id": 2,
+            "reviewer_name": "Ana",
+        },
     ]
 
 
@@ -47,9 +59,26 @@ async def test_owner_reads_their_own_history(refund, review_rows):
 
     response = await controller.list(refund_id=1, user_id=7, role="standard")
 
-    assert response["count"] == 1
-    assert response["attributes"][0]["reviewer"] == {"id": 1, "name": "Gabriel"}
-    assert response["attributes"][0]["created_at"] == "2026-07-30T10:00:00"
+    assert response["count"] == 2
+    # Assert the FULL serialized entry, not just a subset of keys. A fixture
+    # of all-null reasons can't distinguish "passed through" from "dropped and
+    # defaulted to None" — the rejection entry's non-null reason closes that
+    # gap, and comparing the whole dict (not individual fields) also catches
+    # a from_status/to_status swap in __serialize.
+    assert response["attributes"][0] == {
+        "from_status": "pending",
+        "to_status": "approved",
+        "reason": None,
+        "reviewer": {"id": 1, "name": "Gabriel"},
+        "created_at": "2026-07-30T10:00:00",
+    }
+    assert response["attributes"][1] == {
+        "from_status": "pending",
+        "to_status": "rejected",
+        "reason": "Comprovante ilegível",
+        "reviewer": {"id": 2, "name": "Ana"},
+        "created_at": "2026-07-30T11:00:00",
+    }
 
 
 @pytest.mark.asyncio
@@ -58,7 +87,7 @@ async def test_admin_reads_someone_elses_history(refund, review_rows):
 
     response = await controller.list(refund_id=1, user_id=99, role="admin")
 
-    assert response["count"] == 1
+    assert response["count"] == 2
 
 
 # A refund nobody has decided yet is not an error: it has an empty history.
