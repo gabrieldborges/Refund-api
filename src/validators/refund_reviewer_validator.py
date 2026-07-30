@@ -5,11 +5,16 @@ from src.views.http_types.http_request import HttpRequest
 # valid target of a review — nothing goes back to pending (BR-017).
 #
 # RefundReviewerController.review() relies on this set being exactly these two
-# values: its entire transition rule is the single check
-# `current_status == status`, which is only complete because every allowed
-# target here differs from every possible current status pair except "no
-# change". Widening this set (e.g. adding "pending") reopens transitions the
-# controller does not guard against — revisit its transition check first.
+# values, paired with an explicit "current_status == 'paid'" guard for the
+# terminal state: together they cover every (current, target) pair. Both
+# halves of that reasoning are set-shaped, not fixed by inspection — widening
+# either one can reopen a transition the controller does not guard against:
+# - Widening this set (e.g. adding "pending") lets a new value collide with a
+#   current status the controller does not separately reject.
+# - Widening the set of reachable *source* statuses (i.e. adding a way to
+#   reach a status other than pending/approved/rejected/paid) needs its own
+#   guard in the controller, the same way "paid" needed one.
+# Revisit the controller's transition checks before widening either set.
 ALLOWED_REVIEW_STATUSES = {"approved", "rejected"}
 
 

@@ -44,10 +44,16 @@ class RefundReviewerController(RefundReviewerControllerInterface):
 
             current_status = refund["status"]
 
-            # This single comparison covers BR-017 entirely. The validator already
-            # restricts the target to {approved, rejected}, so of the possible
-            # (current, target) pairs the only forbidden one left is "no change".
-            # A transition table here would be dead code.
+            # BR-017 (amended) needs two checks now, not one. "paid" is terminal:
+            # money already moved, so no review may leave it, regardless of the
+            # target. That is a different rule from "no change to record", which
+            # is why it gets its own error instead of folding into the check
+            # below. Order matters too — a paid refund with status == "paid"
+            # would otherwise never reach it, since the target is always
+            # {approved, rejected} and can never equal "paid".
+            if current_status == "paid":
+                raise HttpUnprocessableEntityError("Refund is already paid and cannot be reviewed")
+
             if current_status == status:
                 raise HttpUnprocessableEntityError(f"Refund is already {status}")
 

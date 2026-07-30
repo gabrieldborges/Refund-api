@@ -121,6 +121,40 @@ async def test_repeating_the_current_decision_raises():
     unit_of_work.refunds.update_status.assert_not_awaited()
 
 
+# BR-017 (amended): "paid" is terminal because the money already moved — no
+# review may revert it, even to a different target than the current status.
+@pytest.mark.asyncio
+async def test_a_paid_refund_cannot_be_reverted_to_approved():
+    unit_of_work = build_unit_of_work(refund={"id": 1, "user_id": 7, "status": "paid"})
+    controller = RefundReviewerController(unit_of_work)
+
+    with pytest.raises(HttpUnprocessableEntityError):
+        await controller.review(
+            refund_id=1, reviewer_id=9, role="admin", status="approved", reason=None
+        )
+
+    unit_of_work.refunds.update_status.assert_not_awaited()
+    unit_of_work.reviews.insert_review.assert_not_awaited()
+    unit_of_work.commit.assert_not_awaited()
+
+
+# Same rule, other target: "paid" is terminal regardless of which decision is
+# being attempted.
+@pytest.mark.asyncio
+async def test_a_paid_refund_cannot_be_reverted_to_rejected():
+    unit_of_work = build_unit_of_work(refund={"id": 1, "user_id": 7, "status": "paid"})
+    controller = RefundReviewerController(unit_of_work)
+
+    with pytest.raises(HttpUnprocessableEntityError):
+        await controller.review(
+            refund_id=1, reviewer_id=9, role="admin", status="rejected", reason="Duplicado"
+        )
+
+    unit_of_work.refunds.update_status.assert_not_awaited()
+    unit_of_work.reviews.insert_review.assert_not_awaited()
+    unit_of_work.commit.assert_not_awaited()
+
+
 # THE test of this cycle: if the history insert fails, the status change must not
 # survive. Without the UnitOfWork the UPDATE would have committed on its own and
 # there would be no way to assert this.
