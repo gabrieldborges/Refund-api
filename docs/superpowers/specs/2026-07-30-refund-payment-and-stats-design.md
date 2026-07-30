@@ -331,11 +331,22 @@ com nomenclatura de agente (`creator`, `lister`, `finder`, `deleter`,
 
 **Métodos de repositório novos:**
 
-- `RefundsRepository.mark_as_paid(refund_id, payment_filename)` — o `UPDATE`
-  condicional acima; devolve o número de linhas afetadas.
-- `RefundsRepository.count_by_status(user_id)` — o `GROUP BY`.
+- `RefundStatusRepository.mark_as_paid(refund_id, payment_filename)` — o
+  `UPDATE` condicional acima; devolve o número de linhas afetadas. Vai **nesta**
+  classe, não em `RefundsRepository`: só ela é injetada por sessão e
+  commit-free, então só ela escreve dentro da transação do `UnitOfWork` e
+  aterrissa junto com a linha do log.
+- `RefundsRepository.count_by_status(user_id)` — o `GROUP BY`. Leitura
+  independente, sem transação a coordenar, então fica na classe que abre a
+  própria sessão.
 - `RefundReviewsRepository.select_by_refund_id(refund_id)` — join com `Users`
   para o nome do revisor.
+
+**As guardas leem sem lock.** O controller de pagamento não usa
+`select_for_update`: ele lê o reembolso por `RefundsRepository.select_refund_by_id`
+(fora da transação) para decidir 404/403/422, e deixa a corrida para o `UPDATE`
+condicional. Ler com lock aqui reintroduziria exatamente o que esta spec decidiu
+evitar.
 
 **Armadilha do `payment_filename`:** o repositório continua devolvendo o nome
 do arquivo (o `payment_receipt_finder` precisa dele para ler o disco), mas
