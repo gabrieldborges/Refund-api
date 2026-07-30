@@ -59,23 +59,39 @@ class RefundPayerController(RefundPayerControllerInterface):
         # the database transaction, and the filesystem is not part of it.
         stored_filename = self.__payment_storage.save(filename, content)
 
-        async with self.__unit_of_work as unit_of_work:
-            affected = await unit_of_work.refunds.mark_as_paid(refund_id, stored_filename)
+        # From here on, ANY failure leaves an orphaned file on disk unless we
+        # compensate: not just the lost-race check below, but mark_as_paid,
+        # insert_review or commit raising too. That is reachable, not
+        # theoretical — the engine's global 3s lock_timeout (Task 2) can expire
+        # with PostgreSQL's 55P03 lock_not_available while this UPDATE waits
+        # for the row lock RefundReviewerController's select_for_update is
+        # holding. A lock timeout is an ordinary infrastructure error, not "this
+        # refund was not approved" — it must surface unchanged, not become a
+        # 422, so we only compensate and re-raise, never swallow or translate.
+        try:
+            async with self.__unit_of_work as unit_of_work:
+                affected = await unit_of_work.refunds.mark_as_paid(refund_id, stored_filename)
 
-            if affected == 0:
-                # Another admin paid between our read and our write. Compensate
-                # for the file we just wrote before failing.
-                self.__payment_storage.delete(stored_filename)
-                raise HttpUnprocessableEntityError("Only an approved refund can be paid")
+                if affected == 0:
+                    # Another admin paid between our read and our write. A
+                    # different message from the pre-write "not approved" guard
+                    # above: this one is a lost race, not a status mismatch, and
+                    # logs need to tell the two apart when auditing an orphan.
+                    raise HttpUnprocessableEntityError(
+                        "Refund was already paid by another admin"
+                    )
 
-            await unit_of_work.reviews.insert_review(
-                refund_id=refund_id,
-                reviewer_id=payer_id,
-                from_status="approved",
-                to_status="paid",
-                reason=None,
-            )
-            await unit_of_work.commit()
+                await unit_of_work.reviews.insert_review(
+                    refund_id=refund_id,
+                    reviewer_id=payer_id,
+                    from_status="approved",
+                    to_status="paid",
+                    reason=None,
+                )
+                await unit_of_work.commit()
+        except Exception:
+            self.__delete_orphaned_file(stored_filename)
+            raise
 
         # Re-read instead of patching the row we already have. The PATCH /status
         # endpoint built its response from a different repository and created the
@@ -87,3 +103,13 @@ class RefundPayerController(RefundPayerControllerInterface):
             "count": 1,
             "attributes": serialize_refund(paid_refund),
         }
+
+    def __delete_orphaned_file(self, stored_filename: str) -> None:
+        # Best-effort compensation. If delete() itself raises (e.g. the file
+        # is already gone), that new exception must not replace the original
+        # one already in flight in the `except` block above — swallowing it
+        # here is what lets `raise` re-propagate the real failure untouched.
+        try:
+            self.__payment_storage.delete(stored_filename)
+        except Exception:
+            pass

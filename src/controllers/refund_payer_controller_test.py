@@ -162,3 +162,87 @@ async def test_a_lost_race_deletes_the_file_it_had_written(approved_refund):
     storage.delete.assert_called_once_with("stored.pdf")
     unit_of_work.commit.assert_not_awaited()
     unit_of_work.reviews.insert_review.assert_not_awaited()
+
+
+# I2: a lock timeout (PostgreSQL 55P03 lock_not_available, reachable through
+# the engine's global 3s lock_timeout from Task 2 when RefundReviewerController
+# holds the same row with select_for_update) fails INSIDE the transaction,
+# after the file was already written. The file must not be orphaned, and the
+# original exception must survive untouched — it is not "not approved", so it
+# must not be laundered into a 422.
+@pytest.mark.asyncio
+async def test_mark_as_paid_raising_deletes_the_file_and_reraises(approved_refund):
+    unit_of_work = build_unit_of_work()
+    unit_of_work.refunds.mark_as_paid = AsyncMock(
+        side_effect=RuntimeError("lock_not_available")
+    )
+    repository = build_repository(approved_refund)
+    storage = MagicMock()
+    storage.save = MagicMock(return_value="stored.pdf")
+    storage.delete = MagicMock()
+    controller = RefundPayerController(unit_of_work, repository, storage)
+
+    with pytest.raises(RuntimeError):
+        await controller.pay(
+            refund_id=1, payer_id=9, role="admin", filename="proof.pdf", content=b"x"
+        )
+
+    storage.delete.assert_called_once_with("stored.pdf")
+
+
+# Same guarantee, but the failure happens at commit() instead of mark_as_paid
+# — a different line, same orphaning risk.
+@pytest.mark.asyncio
+async def test_commit_raising_deletes_the_file_and_reraises(approved_refund):
+    unit_of_work = build_unit_of_work()
+    unit_of_work.commit = AsyncMock(side_effect=RuntimeError("commit failed"))
+    repository = build_repository(approved_refund)
+    storage = MagicMock()
+    storage.save = MagicMock(return_value="stored.pdf")
+    storage.delete = MagicMock()
+    controller = RefundPayerController(unit_of_work, repository, storage)
+
+    with pytest.raises(RuntimeError):
+        await controller.pay(
+            refund_id=1, payer_id=9, role="admin", filename="proof.pdf", content=b"x"
+        )
+
+    storage.delete.assert_called_once_with("stored.pdf")
+
+
+# Deferred minor: if the compensating delete itself raises (e.g. the file is
+# already gone), that must not replace the original error the caller needs to
+# see.
+@pytest.mark.asyncio
+async def test_a_failing_compensation_delete_does_not_mask_the_original_error(approved_refund):
+    unit_of_work = build_unit_of_work(affected=0)
+    repository = build_repository(approved_refund)
+    storage = MagicMock()
+    storage.save = MagicMock(return_value="stored.pdf")
+    storage.delete = MagicMock(side_effect=OSError("disk gone"))
+    controller = RefundPayerController(unit_of_work, repository, storage)
+
+    with pytest.raises(HttpUnprocessableEntityError):
+        await controller.pay(
+            refund_id=1, payer_id=9, role="admin", filename="proof.pdf", content=b"x"
+        )
+
+
+# Deferred minor: the lost-race 422 and the pre-write "not approved" 422 need
+# distinct messages so logs can tell "never approved" from "lost the race to
+# another admin" when auditing an orphaned file.
+@pytest.mark.asyncio
+async def test_the_lost_race_message_differs_from_the_not_approved_message(approved_refund):
+    unit_of_work = build_unit_of_work(affected=0)
+    repository = build_repository(approved_refund)
+    storage = MagicMock()
+    storage.save = MagicMock(return_value="stored.pdf")
+    storage.delete = MagicMock()
+    controller = RefundPayerController(unit_of_work, repository, storage)
+
+    with pytest.raises(HttpUnprocessableEntityError) as exc_info:
+        await controller.pay(
+            refund_id=1, payer_id=9, role="admin", filename="proof.pdf", content=b"x"
+        )
+
+    assert exc_info.value.message != "Only an approved refund can be paid"

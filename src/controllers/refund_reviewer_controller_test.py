@@ -173,3 +173,21 @@ async def test_the_transaction_is_not_committed_when_the_review_insert_fails(pen
     # triggers the rollback proven in unit_of_work_test.py.
     unit_of_work.commit.assert_not_awaited()
     assert unit_of_work.__aexit__.await_args[0][0] is RuntimeError
+
+
+# I1: payment_filename joined the refunds table this cycle, and this
+# controller spreads the raw select_for_update row (**refund) instead of
+# going through serialize_refund. Without an explicit exclusion, the new
+# column would leak into a response UC-007 documents as diverging in exactly
+# three points from the shared shape — silently making it four.
+@pytest.mark.asyncio
+async def test_payment_filename_is_not_exposed_in_the_response(pending_refund):
+    refund = {**pending_refund, "payment_filename": None}
+    unit_of_work = build_unit_of_work(refund=refund)
+    controller = RefundReviewerController(unit_of_work)
+
+    response = await controller.review(
+        refund_id=1, reviewer_id=9, role="admin", status="approved", reason=None
+    )
+
+    assert "payment_filename" not in response["attributes"]

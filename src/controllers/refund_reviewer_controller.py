@@ -73,11 +73,18 @@ class RefundReviewerController(RefundReviewerControllerInterface):
 
     def __format_response(self, refund: dict, status: str) -> dict:
         created_at = refund.get("created_at")
+        # This is the one refund response that bypasses serialize_refund (see
+        # the module comment above) and spreads the flat repository row
+        # instead, so it has to drop repository-only fields by hand.
+        # payment_filename joined the refunds table this cycle; without this
+        # exclusion it would leak into a response UC-007 documents as
+        # diverging in exactly three points.
+        attributes = {key: value for key, value in refund.items() if key != "payment_filename"}
         return {
             "type": "Refund",
             "count": 1,
             "attributes": {
-                **refund,
+                **attributes,
                 "status": status,
                 "created_at": created_at.isoformat() if created_at else None,
             },

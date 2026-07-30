@@ -28,8 +28,8 @@ nome, por `status`, e ordenada pelo campo escolhido.
 5. A API ordena os resultados pelo campo de `sort` (`created_at` por padrão) na
    direção de `order` (`desc` por padrão) e aplica limite e deslocamento da
    página.
-6. A API devolve os itens — cada um com seu `status` (`pending`, `approved` ou
-   `rejected`) e o objeto `user` (`id`, `name`, `has_avatar`) do solicitante,
+6. A API devolve os itens — cada um com seu `status` (`pending`, `approved`,
+   `paid` ou `rejected`) e o objeto `user` (`id`, `name`, `has_avatar`) do solicitante,
    sem `user_id` no topo e sem o nome do arquivo de comprovante — e os
    metadados `count`, `total`, `sum_amount_in_cents`, `page`, `per_page` e
    `total_pages`; o frontend apresenta a lista e os controles de paginação.
@@ -37,7 +37,7 @@ nome, por `status`, e ordenada pelo campo escolhido.
    `GET /refunds/{refund_id}/receipt`; a foto do solicitante, quando
    `has_avatar` é verdadeiro, em `GET /users/{user_id}/avatar`.
 
-`status` aceita `pending`, `approved` ou `rejected`. `sort` aceita
+`status` aceita `pending`, `approved`, `paid` ou `rejected`. `sort` aceita
 `created_at`, `amount_in_cents`, `name` ou `status`. `order` aceita `asc` ou
 `desc`.
 
@@ -61,7 +61,8 @@ itens da página atual — ambos mudam conforme `status` restringe o conjunto.
 - Se o JWT estiver ausente, inválido ou expirado, a API responde `401`.
 - Se `page` for menor que 1, ou `per_page` estiver fora do intervalo de 1 a
   100, a validação da rota rejeita a requisição.
-- Se `status` não for `pending`, `approved` ou `rejected`, a API responde `422`.
+- Se `status` não for `pending`, `approved`, `paid` ou `rejected`, a API
+  responde `422`.
 - Se `sort` não for `created_at`, `amount_in_cents`, `name` ou `status`, a API
   responde `422`.
 - Se `order` não for `asc` ou `desc`, a API responde `422`.

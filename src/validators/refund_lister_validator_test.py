@@ -15,7 +15,7 @@ def test_no_optional_parameter_is_valid():
     refund_lister_validator(HttpRequest(query=query()))
 
 
-@pytest.mark.parametrize("status", ["pending", "approved", "rejected"])
+@pytest.mark.parametrize("status", ["pending", "approved", "rejected", "paid"])
 def test_every_allowed_status_is_valid(status):
     refund_lister_validator(HttpRequest(query=query(status=status)))
 

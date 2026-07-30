@@ -14,6 +14,7 @@ Crie um `.env` na raiz do projeto:
 DATABASE_URL=postgresql+asyncpg://usuario:senha@host/database?ssl=require
 UPLOAD_DIR=uploads/receipts
 AVATAR_DIR=uploads/avatars
+PAYMENT_DIR=uploads/payment_receipts
 JWT_SECRET=uma-chave-secreta-aleatoria
 JWT_ALGORITHM=HS256
 JWT_EXPIRATION_HOURS=8
@@ -69,9 +70,11 @@ src/
 ```
 
 Os arquivos de recibo enviados ficam em `uploads/receipts/`; as fotos de
-perfil ficam em `uploads/avatars/`. Nenhum dos dois diretórios é servido
-estaticamente — ambos exigem um JWT válido e são obtidos, respectivamente,
-por `GET /refunds/{refund_id}/receipt` e `GET /users/{user_id}/avatar`.
+perfil ficam em `uploads/avatars/`; os comprovantes de pagamento ficam em
+`uploads/payment_receipts/`. Nenhum dos três diretórios é servido
+estaticamente — todos exigem um JWT válido e são obtidos, respectivamente,
+por `GET /refunds/{refund_id}/receipt`, `GET /users/{user_id}/avatar` e
+`GET /refunds/{refund_id}/payment-receipt`.
 
 ## Autenticação
 

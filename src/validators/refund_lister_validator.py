@@ -1,7 +1,7 @@
 from src.errors.types.http_unprocessable_entity_error import HttpUnprocessableEntityError
 from src.views.http_types.http_request import HttpRequest
 
-ALLOWED_STATUS_FILTERS = {"pending", "approved", "rejected"}
+ALLOWED_STATUS_FILTERS = {"pending", "approved", "rejected", "paid"}
 # These names are keys into RefundsRepository.SORTABLE_COLUMNS, never text
 # interpolated into SQL. Refusing anything outside the set here is the first of
 # two barriers; the dictionary lookup is the second.

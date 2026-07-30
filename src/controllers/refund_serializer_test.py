@@ -9,6 +9,7 @@ def repository_row(**overrides) -> dict:
         "category": "transport",
         "amount_in_cents": 4500,
         "filename": "606771d4-abc.jpg",
+        "payment_filename": None,
         "status": "approved",
         "created_at": datetime(2026, 7, 28, 17, 0, 25),
         "user": {"id": 13, "name": "Validacao Visual", "avatar_filename": "foto.png"},
@@ -18,9 +19,14 @@ def repository_row(**overrides) -> dict:
 
 
 # The stored filename is internal: the client fetches the file from
-# GET /refunds/{id}/receipt and has no use for the storage name.
+# GET /refunds/{id}/receipt and has no use for the storage name. Same for
+# payment_filename, added to the refunds table this cycle (UC-012) — it names
+# an internal payment receipt file, never something the client reads directly.
 def test_the_storage_filename_is_not_exposed():
-    assert "filename" not in serialize_refund(repository_row())
+    serialized = serialize_refund(repository_row())
+
+    assert "filename" not in serialized
+    assert "payment_filename" not in serialized
 
 
 def test_avatar_filename_becomes_a_boolean():

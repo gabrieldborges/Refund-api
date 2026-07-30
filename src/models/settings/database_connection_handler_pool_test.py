@@ -21,3 +21,18 @@ def test_dead_connections_are_discarded_before_use():
     # characteristic: the first request after an idle period fails, the next
     # one works.
     assert engine.pool._pre_ping is True  # pylint: disable=protected-access
+
+
+def test_idle_connections_are_recycled_before_neon_drops_them():
+    # This is the Neon idle-connection fix: recycling a pooled connection
+    # after 300s keeps it from going stale under Neon's own idle timeout. A
+    # revert of this value would not show up as a test failure anywhere else
+    # — only as an intermittent 500 under production concurrency, months
+    # later. That is exactly what this revert-net exists to catch instead.
+    assert engine.pool._recycle == 300  # pylint: disable=protected-access
+
+
+def test_a_connection_wait_gives_up_instead_of_blocking_forever():
+    # How long a caller waits for a pooled connection before failing, once
+    # pool_size + max_overflow are all checked out.
+    assert engine.pool._timeout == 10  # pylint: disable=protected-access
