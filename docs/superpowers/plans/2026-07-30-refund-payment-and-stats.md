@@ -1489,11 +1489,15 @@ def refund():
 
 @pytest.fixture
 def review_rows():
+    # A rejection with a real reason, not a fixture of all-nulls. `reason` is
+    # the field this endpoint exists to expose — it was write-only until this
+    # cycle — and a null-only fixture cannot tell "passed through correctly"
+    # from "dropped and defaulted to None".
     return [
         {
             "from_status": "pending",
-            "to_status": "approved",
-            "reason": None,
+            "to_status": "rejected",
+            "reason": "Comprovante ilegível",
             "created_at": datetime(2026, 7, 30, 10, 0, 0),
             "reviewer_id": 1,
             "reviewer_name": "Gabriel",
@@ -1510,8 +1514,16 @@ async def test_owner_reads_their_own_history(refund, review_rows):
     response = await controller.list(refund_id=1, user_id=7, role="standard")
 
     assert response["count"] == 1
-    assert response["attributes"][0]["reviewer"] == {"id": 1, "name": "Gabriel"}
-    assert response["attributes"][0]["created_at"] == "2026-07-30T10:00:00"
+    # Assert the WHOLE serialized entry, not selected keys. Checking only
+    # reviewer and created_at would let a serializer that swapped from_status
+    # with to_status — or dropped `reason` altogether — pass the suite.
+    assert response["attributes"][0] == {
+        "from_status": "pending",
+        "to_status": "rejected",
+        "reason": "Comprovante ilegível",
+        "reviewer": {"id": 1, "name": "Gabriel"},
+        "created_at": "2026-07-30T10:00:00",
+    }
 
 
 @pytest.mark.asyncio
