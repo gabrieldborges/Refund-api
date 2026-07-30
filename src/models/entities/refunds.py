@@ -15,5 +15,10 @@ Refunds = Table(
     # the migration backfill the rows that already exist without violating the
     # NOT NULL constraint.
     Column("status", String, nullable=False, server_default="pending"),
+    # Nullable on purpose: only a paid refund has one. BR-022 makes the file
+    # mandatory to REACH "paid", which is what gives the invariant
+    # status == "paid" <=> this column is filled. Nothing in the database
+    # enforces that pairing — it lives in RefundPayerController.
+    Column("payment_filename", String, nullable=True),
     Column("created_at", DateTime, server_default=func.now()),  # pylint: disable=not-callable
 )
