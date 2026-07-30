@@ -688,12 +688,19 @@ async def test_unknown_refund_is_not_found():
 async def test_admin_cannot_pay_their_own_refund(approved_refund):
     unit_of_work = build_unit_of_work()
     repository = build_repository(approved_refund)
-    controller = RefundPayerController(unit_of_work, repository, MagicMock())
+    storage = MagicMock()
+    controller = RefundPayerController(unit_of_work, repository, storage)
 
     with pytest.raises(HttpForbiddenError):
         await controller.pay(
             refund_id=1, payer_id=7, role="admin", filename="proof.pdf", content=b"x"
         )
+
+    # The raised exception alone would not catch a guard that ran AFTER the file
+    # was written: the call would still fail with 403 while leaving an orphaned
+    # file on disk every time an admin tried to pay their own refund. Guard
+    # ordering is a security property, so every guard test pins its side effect.
+    storage.save.assert_not_called()
 
 
 # Only an approved refund can be paid: pending has not been decided and
@@ -732,6 +739,10 @@ async def test_a_lost_race_deletes_the_file_it_had_written(approved_refund):
 
     storage.delete.assert_called_once_with("stored.pdf")
     unit_of_work.commit.assert_not_awaited()
+    # Pins the ordering too: the log row must not be written for a payment that
+    # did not happen. The UnitOfWork would roll it back anyway, but relying on
+    # that leaves the ordering unasserted.
+    unit_of_work.reviews.insert_review.assert_not_awaited()
 ```
 
 - [ ] **Step 3: Rodar e ver falhar**
