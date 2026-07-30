@@ -27,3 +27,16 @@ class RefundStatusRepository(RefundStatusRepositoryInterface):
     async def update_status(self, refund_id: int, status: str) -> None:
         query = update(Refunds).where(Refunds.c.id == refund_id).values(status=status)
         await self.__session.execute(query)
+
+    async def mark_as_paid(self, refund_id: int, payment_filename: str) -> int:
+        # Conditional on the current status: if a concurrent request already
+        # paid this refund, the WHERE matches nothing and rowcount is 0. That
+        # closes the race WITHOUT taking a lock, unlike select_for_update above
+        # — a lock would hold a pool connection while waiting.
+        query = (
+            update(Refunds)
+            .where(Refunds.c.id == refund_id, Refunds.c.status == "approved")
+            .values(status="paid", payment_filename=payment_filename)
+        )
+        result = await self.__session.execute(query)
+        return result.rowcount

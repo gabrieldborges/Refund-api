@@ -11,3 +11,7 @@ class RefundStatusRepositoryInterface(ABC):
     @abstractmethod
     async def update_status(self, refund_id: int, status: str) -> None:
         pass
+
+    @abstractmethod
+    async def mark_as_paid(self, refund_id: int, payment_filename: str) -> int:
+        pass

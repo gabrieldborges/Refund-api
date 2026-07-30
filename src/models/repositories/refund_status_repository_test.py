@@ -48,3 +48,42 @@ async def test_update_status_executes_without_committing(mock_session):
 
     mock_session.execute.assert_awaited_once()
     mock_session.commit.assert_not_awaited()
+
+
+# Fixture: a fake db object exposing a mocked session, matching the shape the
+# mark_as_paid tests below expect (mock_db.session), distinct from mock_session
+# used by the tests above (which pass the session directly to the repository).
+@pytest.fixture
+def mock_db():
+    db = MagicMock()
+    db.session.execute = AsyncMock()
+    db.session.commit = AsyncMock()
+    return db
+
+
+# The UPDATE is conditional on status='approved' so the database itself refuses
+# a second concurrent payment. This is deliberately NOT select_for_update: a
+# lock would hold a pool connection while waiting, which is the documented
+# pendency this cycle avoids making worse.
+@pytest.mark.asyncio
+async def test_mark_as_paid_only_touches_a_refund_still_approved(mock_db):
+    mock_db.session.execute = AsyncMock(return_value=MagicMock(rowcount=1))
+    repository = RefundStatusRepository(mock_db.session)
+
+    affected = await repository.mark_as_paid(1, "receipt.pdf")
+
+    assert affected == 1
+    mock_db.session.execute.assert_awaited_once()
+
+
+# Zero rows means someone else paid first between our guard check and this
+# UPDATE. The controller turns that into a 422 and deletes the file it had
+# already written.
+@pytest.mark.asyncio
+async def test_mark_as_paid_reports_zero_when_the_status_already_changed(mock_db):
+    mock_db.session.execute = AsyncMock(return_value=MagicMock(rowcount=0))
+    repository = RefundStatusRepository(mock_db.session)
+
+    affected = await repository.mark_as_paid(1, "receipt.pdf")
+
+    assert affected == 0
