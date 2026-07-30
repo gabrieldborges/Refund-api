@@ -311,29 +311,41 @@ git commit -m "fix: size the connection pool and discard dead connections"
 
 Acrescente a `src/models/repositories/refund_status_repository_test.py`:
 
+Use a fixture `mock_session` que **já existe** neste arquivo — esta classe recebe
+uma `AsyncSession` direto no construtor, então não há `.connect()` a simular.
+Não replique o `mock_db` dos testes de `RefundsRepository`/`UsersRepository`:
+aquelas classes recebem uma conexão e abrem a sessão sozinhas, e é só por isso
+que precisam do `mock_connection` do `conftest.py`.
+
 ```python
 # The UPDATE is conditional on status='approved' so the database itself refuses
 # a second concurrent payment. This is deliberately NOT select_for_update: a
 # lock would hold a pool connection while waiting, which is the documented
 # pendency this cycle avoids making worse.
 @pytest.mark.asyncio
-async def test_mark_as_paid_only_touches_a_refund_still_approved(mock_db):
-    mock_db.session.execute = AsyncMock(return_value=MagicMock(rowcount=1))
-    repository = RefundStatusRepository(mock_db.session)
+async def test_mark_as_paid_only_touches_a_refund_still_approved(mock_session):
+    mock_session.execute = AsyncMock(return_value=MagicMock(rowcount=1))
+    repository = RefundStatusRepository(mock_session)
 
     affected = await repository.mark_as_paid(1, "receipt.pdf")
 
     assert affected == 1
-    mock_db.session.execute.assert_awaited_once()
+    # Asserting on the emitted statement, not just on the returned rowcount:
+    # with a mocked session the rowcount is whatever we told it to be, so a
+    # WHERE clause that lost the status condition would pass a rowcount-only
+    # test while silently reopening the double-payment race. Same idiom as
+    # refunds_repository_test.py::test_delete_refund_filters_on_pending_status.
+    statement = str(mock_session.execute.call_args[0][0])
+    assert "status" in statement
 
 
 # Zero rows means someone else paid first between our guard check and this
 # UPDATE. The controller turns that into a 422 and deletes the file it had
 # already written.
 @pytest.mark.asyncio
-async def test_mark_as_paid_reports_zero_when_the_status_already_changed(mock_db):
-    mock_db.session.execute = AsyncMock(return_value=MagicMock(rowcount=0))
-    repository = RefundStatusRepository(mock_db.session)
+async def test_mark_as_paid_reports_zero_when_the_status_already_changed(mock_session):
+    mock_session.execute = AsyncMock(return_value=MagicMock(rowcount=0))
+    repository = RefundStatusRepository(mock_session)
 
     affected = await repository.mark_as_paid(1, "receipt.pdf")
 
@@ -346,6 +358,11 @@ Se `AsyncMock`, `MagicMock` ou `pytest` ainda não estiverem importados no arqui
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 ```
+
+**Prove que a asserção do statement pode falhar** antes de commitar: remova
+`Refunds.c.status == "approved"` do `WHERE`, rode o teste, veja vermelho,
+recoloque e veja verde. Uma guarda que ninguém viu falhar ainda não é uma
+guarda.
 
 - [ ] **Step 2: Rodar e ver falhar**
 
