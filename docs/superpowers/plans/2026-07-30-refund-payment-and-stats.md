@@ -901,9 +901,15 @@ async def test_invalid_file_short_circuits_before_the_controller():
         token_info={"user_id": 9, "role": "admin"},
     )
 
-    with pytest.raises(Exception):
+    # Assert the SPECIFIC error, not a bare Exception. A loose
+    # `pytest.raises(Exception)` is satisfied by any failure from any cause, so
+    # a typo like body["filenam"] inside the validator would keep this test
+    # green while the endpoint started answering 500 where it owes 422. Follow
+    # refund_reviewer_view_test.py, which asserts the status code.
+    with pytest.raises(HTTPException) as exception_info:
         await view.handle(request)
 
+    assert exception_info.value.status_code == 422
     controller.pay.assert_not_awaited()
 
 
@@ -921,10 +927,25 @@ async def test_a_valid_upload_reaches_the_controller():
     response = await view.handle(request)
 
     assert response.status_code == 200
+    # Also assert the body: without this, a view that discarded the
+    # controller's return value and answered an empty 200 would pass.
+    assert response.body == {"type": "Refund", "count": 1, "attributes": {}}
     controller.pay.assert_awaited_once_with(
         refund_id=1, payer_id=9, role="admin", filename="proof.pdf", content=b"x"
     )
 ```
+
+O teste importa `from fastapi import HTTPException` — o `error_handler` converte
+os erros do projeto nele.
+
+**Sobre a ordem da rota:** o plano pede declarar `POST /{refund_id}/payment`
+antes de `GET /{refund_id}` seguindo a convenção do arquivo, e isso é boa
+prática — mas vale a precisão: **as duas rotas não colidiriam de qualquer
+forma.** `/refunds/{refund_id}` compila para um regex ancorado de exatamente um
+segmento e `/refunds/{refund_id}/payment` exige dois, além de os métodos
+diferirem. A ordem importa de verdade quando duas rotas têm o mesmo número de
+segmentos e o mesmo método (um `/refunds/me` contra `/refunds/{refund_id}`, por
+exemplo).
 
 - [ ] **Step 2: Rodar e ver falhar**
 
