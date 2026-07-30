@@ -23,7 +23,10 @@ transição de status.
    banco.
 3. A API busca a solicitação pelo ID; se existir, verifica se ela pertence a
    outro usuário que não o revisor.
-4. A API verifica se o status atual da solicitação é diferente do status alvo.
+4. A API verifica, nesta ordem: se o status atual da solicitação já é `paid`
+   (terminal, recusado com `422`) e, em seguida, se o status atual é
+   diferente do status alvo (repetir a decisão vigente também é recusado
+   com `422`).
 5. A API atualiza `Refund.status` para o valor informado e insere uma linha em
    `RefundReview` com `refund_id`, `reviewer_id`, `from_status`, `to_status` e
    `reason`, tudo em uma única transação.
@@ -59,11 +62,12 @@ anterior passou:
    1. **`paid` é terminal (BR-017 emendada).** Se o status atual já é
       `paid`, a revisão é recusada com `422` e a mensagem `Refund is
       already paid and cannot be reviewed` — o dinheiro já se moveu, então
-      nenhuma revisão pode tirar a solicitação desse estado. Esta checagem
-      roda **antes** da seguinte de propósito: se rodasse depois, uma
-      solicitação paga nunca a alcançaria, porque o alvo (`status`) está
-      sempre em `{approved, rejected}` — nunca igual a `paid` — então a
-      checagem de repetição, sozinha, nunca capturaria esse caso.
+      nenhuma revisão pode tirar a solicitação desse estado. Esta checagem é
+      independente da seguinte, não uma dependência de ordem: como o
+      validator já restringe o alvo a `{approved, rejected}`, as duas
+      condições nunca são verdadeiras ao mesmo tempo — `paid` nunca é um
+      alvo válido de revisão. Ela vem primeiro só porque produz a mensagem
+      mais clara para uma solicitação paga.
    2. **Repetir a decisão vigente** (`current_status == status`) é recusado
       com `422` e a mensagem `Refund is already {status}`, porque não há
       mudança de estado a registrar. As duas checagens têm mensagens

@@ -48,9 +48,11 @@ class RefundReviewerController(RefundReviewerControllerInterface):
             # money already moved, so no review may leave it, regardless of the
             # target. That is a different rule from "no change to record", which
             # is why it gets its own error instead of folding into the check
-            # below. Order matters too — a paid refund with status == "paid"
-            # would otherwise never reach it, since the target is always
-            # {approved, rejected} and can never equal "paid".
+            # below. The two guards are independent, not order-dependent: the
+            # validator already keeps the target in {approved, rejected}, so
+            # "paid" can never equal status and the two conditions never both
+            # hold. Checking it first just picks the clearer message for a
+            # paid refund.
             if current_status == "paid":
                 raise HttpUnprocessableEntityError("Refund is already paid and cannot be reviewed")
 

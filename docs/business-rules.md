@@ -165,15 +165,21 @@ solicitação já decidida pode ter a decisão trocada (`approved` ↔ `rejected
 mas nunca retorna a `pending`. Repetir a decisão vigente é recusado, porque não
 há mudança de estado a registrar. `paid` — alcançado apenas por
 `POST /refunds/{refund_id}/payment` (UC-012), nunca por
-`PATCH /refunds/{refund_id}/status` — é **terminal** por decisão: o
-pagamento é um fato consumado, não uma decisão a ser revista, então nenhuma
-solicitação paga deveria retornar a `approved` ou `rejected`.
+`PATCH /refunds/{refund_id}/status` — é **terminal**: o pagamento é um fato
+consumado, não uma decisão a ser revista, então nenhuma solicitação paga
+retorna a `approved` ou `rejected` — `PATCH /refunds/{refund_id}/status`
+sobre uma solicitação paga responde `422`.
 
-A regra é aplicada por **duas** checagens no controller, nesta ordem, e elas
-significam coisas diferentes: "`paid` é terminal" é sobre um fato consumado
-(o dinheiro já se moveu), enquanto "repetir a decisão vigente" é sobre um
-não-evento (nenhuma mudança a registrar) — por isso cada uma recusa com sua
-própria mensagem, em vez de caírem no mesmo `422` genérico.
+A regra é aplicada por **duas** checagens no controller, e elas significam
+coisas diferentes: "`paid` é terminal" é sobre um fato consumado (o dinheiro
+já se moveu), enquanto "repetir a decisão vigente" é sobre um não-evento
+(nenhuma mudança a registrar) — por isso cada uma recusa com sua própria
+mensagem, em vez de caírem no mesmo `422` genérico. As duas checagens são
+independentes, não uma dependência de ordem: como o validator já restringe
+o alvo a `{approved, rejected}`, as duas condições nunca são verdadeiras ao
+mesmo tempo. A checagem de `paid` roda primeiro só porque produz a mensagem
+mais clara para uma solicitação paga, não porque a ordem seja necessária
+para proteger contra a reversão.
 
 **Nota para quem for adicionar um quinto status:** o raciocínio que antes
 tornava uma única checagem suficiente era *baseado em conjuntos*, e quebrou
