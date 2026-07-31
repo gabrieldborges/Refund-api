@@ -563,9 +563,10 @@ completo e obrigatório está em
     menores** acumulados no ledger foram triados como legitimamente
     pós-merge — são lacunas de cobertura ou arestas de UX, nenhuma afeta
     correção, segurança ou integridade de dados.
-  - **Nada deste ciclo foi validado em navegador contra a API real** — ver
-    pendências. É a única evidência que a suíte não substitui: ela roda inteira
-    contra o MSW, ou seja, contra o payload que nós mesmos escrevemos.
+  - **Validado visualmente em navegador pelo Gabriel em 2026-07-30** — a única
+    evidência que a suíte não substitui, já que ela roda inteira contra o MSW,
+    ou seja, contra o payload que nós mesmos escrevemos. Ver pendências para o
+    alcance registrado dessa validação.
   - Detalhes completos, incluindo os achados adiados task a task, em
     nas mensagens de commit da branch
     e no [diário](../learning-path-progress.md).
@@ -586,9 +587,9 @@ O ciclo de 2026-07-29 (`feat/frontend-contract-and-receipt`) absorveu o contrato
 novo, o comprovante autenticado, o badge de status e os ajustes pequenos, e **já
 está mesclado na `main`** — a `main` do `Refund-FrontEnd` consome a API atual.
 O ciclo de 2026-07-30 (workflow de aprovação, ver acima) entregou a rota de
-revisão, aprovar/rejeitar, pagamento e histórico, mas **ainda não está
-mesclado**; depende de implantar o backend correspondente junto (ver
-pendências).
+revisão, aprovar/rejeitar, pagamento, histórico, comprovante de pagamento e o
+painel do solicitante, **está mesclado na `main` e foi validado visualmente pelo
+Gabriel**. Falta implantá-lo junto do backend correspondente (ver pendências).
 
 O que resta, em ciclos próprios (um por vez, na ordem do roadmap):
 
@@ -691,12 +692,16 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   completa, achado a achado, está no ledger de execução
   (registrados nas mensagens de commit da branch),
   não reproduzida aqui.
-- **Nada do ciclo de revisão (2026-07-30) foi validado em navegador contra a
-  API real.** Toda a suíte (157 testes) roda contra MSW, que por definição
-  devolve o payload que o próprio ciclo escreveu — o mesmo aviso já registrado
-  para os ciclos anteriores antes da validação manual do Gabriel. Essa
-  validação é dele, e é a única coisa que nenhuma quantidade de teste verde
-  substitui.
+- ~~**Nada do ciclo de revisão (2026-07-30) foi validado em navegador contra a
+  API real.**~~ RESOLVIDO em 2026-07-30: o Gabriel validou visualmente o ciclo
+  no navegador. **Registrado com menos granularidade que os ciclos anteriores**
+  — o do restyle e o do contrato novo têm, cada um, a lista do que passou e do
+  que ficou aberto, enquanto aqui há a confirmação sem checklist item a item.
+  Quem for reabrir isto não deve inferir que cada tela do ciclo (rota de
+  revisão, aprovar/rejeitar, marcar como pago, linha do tempo do histórico,
+  comprovante de pagamento, painel do solicitante, os dois cards da Home) foi
+  percorrida individualmente; sabe-se que a validação aconteceu, não o alcance
+  dela.
 - **Efeito colateral esperado do deploy do frontend: todo usuário logado é
   deslogado uma vez.** O `AuthContext` passou a validar a sessão do
   `localStorage` com `storedUserSchema`, que exige `id` — campo que as sessões
