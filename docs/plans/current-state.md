@@ -432,10 +432,14 @@ completo e obrigatório está em
     Sem ressalvas. Detalhes no [diário](../learning-path-progress.md).
 
 - **Ciclo de feature — Pagamento, histórico de revisões e estatísticas
-  (backend): CONCLUÍDO, ainda não mesclado na `main`.** Sétimo ciclo, o
-  segundo inteiramente de backend, na branch `feat/refund-payment-and-stats`
-  do `Refund-api` (`23c6675..1381241`, 28 commits, 12 tasks com revisão por
-  task). Artefatos em `.superpowers/sdd/2026-07-30-refund-payment-and-stats/`.
+  (backend): CONCLUÍDO e MESCLADO na `main`** por fast-forward
+  (`23c6675..30b6f88`, 30 commits), **ainda não empurrado para o
+  `origin/main`**, que segue em `23c6675`. Sétimo ciclo, o segundo inteiramente
+  de backend, na branch `feat/refund-payment-and-stats` do `Refund-api`,
+  executado em 12 tasks com revisão por task, mais uma revisão da branch
+  inteira. Artefatos em `.superpowers/sdd/2026-07-30-refund-payment-and-stats/`
+  — **esse diretório foi removido no fechamento**, conforme o fluxo; o registro
+  agora é o histórico do Git.
   Fecha `UC-012`/`UC-013`/`UC-014` e acrescenta um quarto status (`paid`) ao
   ciclo de vida de `refunds.status`. O que mudou:
   - **`POST /refunds/{id}/payment`** — só admin, nunca a própria solicitação,
@@ -468,20 +472,34 @@ completo e obrigatório está em
     já pago. Corrigido numa correção retroativa (Task 11.5, commit `5f78777`)
     com uma guarda dedicada. Achado só na verificação ponta a ponta, invisível
     à suíte mockada. Detalhes no [diário](../learning-path-progress.md).
-  - Verificação: `pytest` (**226 verdes**, partiu de 178), `pylint src`
-    (**10.00/10**), **26/26 cenários ponta a ponta** contra a API real (a
-    tabela original do plano tinha 25; o 26º veio do achado do `paid`), `ls
-    uploads/payment_receipts/` antes/depois provando que os cenários de guarda
-    e de duplicata não deixam arquivo órfão, e três `PATCH` concorrentes na
-    mesma solicitação completando em ~1,5s, sem `500` nem espera longa.
-    Detalhes completos em
-    `.superpowers/sdd/2026-07-30-refund-payment-and-stats/task-12-report.md`.
+  - Verificação das 12 tasks: `pytest` (**226 verdes**, partiu de 178),
+    `pylint src` (**10.00/10**), **26/26 cenários ponta a ponta** contra a API
+    real (a tabela original do plano tinha 25; o 26º veio do achado do `paid`),
+    `ls uploads/payment_receipts/` antes/depois provando que os cenários de
+    guarda e de duplicata não deixam arquivo órfão, e três `PATCH` concorrentes
+    na mesma solicitação completando em ~1,5s, sem `500` nem espera longa.
+  - **A revisão da branch inteira achou três interações entre tasks** que a
+    revisão por task não podia ver, todas corrigidas em `c242ed7`:
+    `payment_filename` vazando pelo `PATCH /status` — o único caminho de
+    resposta que não passa pelo serializador compartilhado; uma falha dentro da
+    transação de pagamento deixando o arquivo órfão e devolvendo `500` em vez de
+    `422`, alcançável só porque o `lock_timeout` global (task 2) e a ordem
+    arquivo→transação (task 5) existiam juntos; e `paid` ausente da lista branca
+    do filtro `status`, de modo que a listagem exibia um status que não sabia
+    filtrar.
+  - **A correção dessa segunda interação introduziu uma janela de perda de
+    dados, pega pela re-revisão** e corrigida em `30b6f88`: o `try/except`
+    envolvia o `async with` inteiro, inclusive o fechamento de sessão que roda
+    **depois** do commit — então uma falha ali apagava o comprovante de um
+    pagamento já durável. A compensação passou a ser condicionada a `committed`.
+  - Números finais na `main`: `pytest` **235 verdes**, `pylint src`
+    **10.00/10**.
 
-- **Ciclo de feature — Workflow de aprovação na UI (frontend): CONCLUÍDO,
-  ainda não mesclado na `main`.** Oitavo ciclo de feature, o segundo
+- **Ciclo de feature — Workflow de aprovação na UI (frontend): CONCLUÍDO e
+  REVISADO, ainda não mesclado na `main`.** Oitavo ciclo de feature, o segundo
   consecutivo inteiramente de frontend, na branch `feat/refund-review-ui` do
   `Refund-FrontEnd` (`39e0683..485cecb`, 15 commits, 9 tasks com revisão por
-  task, mais esta Task 10 de fechamento). Artefatos em
+  task, mais a Task 10 de fechamento e a revisão da branch inteira). Artefatos em
   `Refund-FrontEnd/docs/superpowers/`
   ([spec](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-30-refund-review-ui-design.md)),
   ledger de execução em
@@ -519,8 +537,19 @@ completo e obrigatório está em
     warnings**), `npm run build` (ok; bundle **506,00 → 518,36 kB**,
     +12,36 kB — o aviso de chunk > 500 kB é **pré-existente**, já estava
     presente no ponto de partida deste ciclo, não foi introduzido por ele).
+  - **A revisão da branch inteira passou sem nenhum achado Critical ou
+    Important.** Ela conferiu por busca — não por leitura de intenção — que
+    nenhum ponto do código ainda assume três status, que a regra de destino do
+    clique existe numa função só (`lib/getRefundHref.ts`) sem cópia inline
+    sobrevivente, e que nenhuma chave de cache colide: os dois tipos de
+    comprovante são subárvores distintas, e a lista por usuário não colide com
+    a da Home porque o `userId` ausente some do hash da chave. Os **11 achados
+    menores** acumulados no ledger foram triados como legitimamente
+    pós-merge — são lacunas de cobertura ou arestas de UX, nenhuma afeta
+    correção, segurança ou integridade de dados.
   - **Nada deste ciclo foi validado em navegador contra a API real** — ver
-    pendências.
+    pendências. É a única evidência que a suíte não substitui: ela roda inteira
+    contra o MSW, ou seja, contra o payload que nós mesmos escrevemos.
   - Detalhes completos, incluindo os achados adiados task a task, em
     `Refund-FrontEnd/.superpowers/sdd/2026-07-30-refund-review-ui/progress.md`
     e no [diário](../learning-path-progress.md).
@@ -955,13 +984,22 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   correções finais do ciclo de 2026-07-29 (3 rodadas completas na ponta da
   branch não reproduziram) e **observado de novo durante a Task 4 do ciclo de
   2026-07-30** (workflow de aprovação), de novo numa **rodada de suíte
-  completa** e de novo **não reproduzível isoladamente**. Duas ocorrências
-  independentes, ambas só em conjunto com o resto da suíte, tornam a hipótese
-  de coincidência menos plausível — mas a causa continua desconhecida; nenhuma
-  investigação isolou a interação real entre arquivos de teste. Se aparecer de
-  novo, o caminho segue sendo um polyfill guardado em `src/test/setup.ts`, no
-  mesmo padrão dos que já existem, mas só depois de entender a ordem que o
-  dispara.
+  completa** e de novo **não reproduzível isoladamente**. Há ainda uma
+  **terceira ocorrência provável, e ela é a menos confiável das três**: o
+  primeiro agente de revisão da branch inteira relatou "a suíte completa acabou
+  de falhar na primeira execução" e foi cortado por erro de API antes de
+  detalhar qual teste — a saída se perdeu. Quatro rodadas completas depois
+  (três minhas, uma do agente que refez a revisão) deram 157/157. O sintoma
+  bate com este flake, mas **isso é inferência, não observação**: ninguém viu a
+  falha. Registrado assim de propósito, para não virar "confirmado três vezes"
+  na próxima leitura.
+
+  Três ocorrências prováveis, todas só em conjunto com o resto da suíte,
+  tornam a hipótese de coincidência pouco plausível — mas a causa continua
+  desconhecida; nenhuma investigação isolou a interação real entre arquivos de
+  teste. Se aparecer de novo, o caminho segue sendo um polyfill guardado em
+  `src/test/setup.ts`, no mesmo padrão dos que já existem, mas só depois de
+  entender a ordem que o dispara.
 - **`per_page: 10` é literal escrito à mão em `src/test/msw/handlers.ts`.** Não
   deriva de `REFUNDS_PER_PAGE`, então pode voltar a divergir num ajuste futuro —
   a mesma classe de problema que o ciclo acabou de fechar no código de produção.
