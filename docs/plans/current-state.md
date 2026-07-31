@@ -17,44 +17,33 @@ Atualizado em: 2026-07-31.
 
 O produto é um sistema de **reembolso de despesas com comprovante**. São dois
 repositórios Git irmãos e independentes, cada um com seu remote. O
-**Os dois repositórios estão na `main`, sem branch de trabalho pendente.** Os
-dois ciclos de 2026-07-30 — pagamento/histórico/estatísticas no backend e o
-workflow de aprovação na UI no frontend — foram mesclados por fast-forward,
-cada um depois de revisão por task e revisão da branch inteira. Último commit de
-código: `30b6f88` no `Refund-api`, `485cecb` no `Refund-FrontEnd`.
+## Estado dos repositórios em 2026-07-31
 
-**Os dois foram empurrados para os respectivos remotes em 2026-07-30.** O
-`origin/main` do `Refund-FrontEnd` está em `485cecb`, idêntico ao local; o do
-`Refund-api` contém todo o código do ciclo, ficando atrás apenas de commits de
-documentação posteriores ao push.
+**Os dois estão na `main`, sem branch de trabalho pendente, e ambos foram
+empurrados.** Verificado por `git ls-remote`, não por `git status`:
 
-**Isso encerra uma proteção acidental que existia até aqui.** Enquanto nada
-estava empurrado, os dois remotes guardavam o par de contratos anterior, que era
-coerente entre si — nenhum lado conseguia subir sozinho porque nenhum lado
-existia lá. Agora os dois contratos novos estão publicados, e a única coisa que
-impede um deploy pela metade é quem aperta o botão. Ver a pendência de deploy
-conjunto: ela deixou de ser teórica.
+| | `main` local | `origin/main` |
+|---|---|---|
+| `Refund-api` | `7aac636` | `7aac636` |
+| `Refund-FrontEnd` | `6c63ff5` | `6c63ff5` |
 
-**Ao ler este bloco numa sessão futura, confira-o contra o `git` antes de
-confiar nele.** Esta seção já esteve errada duas vezes: uma afirmando que uma
-branch não tinha sido mesclada quando já estava, outra fixando um SHA que os
-próprios commits de documentação ultrapassaram no mesmo dia. Um SHA de código
-envelhece bem; "a `main` está em X" envelhece a cada commit.
+Sobra uma branch local `feat/refund-review-ui` no `Refund-FrontEnd`, já
+totalmente mesclada — resíduo, removível com `git branch -d`.
 
-**Errada uma terceira vez, corrigida em 2026-07-31.** O parágrafo acima ("sem
-branch de trabalho pendente", `485cecb` como último commit do
-`Refund-FrontEnd`) ficou defasado assim que o ciclo seguinte (navegação na
-revisão e tabela de reembolsos) foi mesclado por fast-forward na `main` local
-do `Refund-FrontEnd` — sem que o fechamento daquele ciclo atualizasse este
-bloco. Estado real neste momento: a `main` local do `Refund-FrontEnd` está em
-`6cd8e41` (inclui o ciclo de navegação/tabela e dois commits de revisão da
-branch inteira posteriores a ele), mas **não foi empurrada** — o
-`origin/main` continua em `485cecb`. E **existe, de novo, uma branch de
-trabalho pendente**: `feat/loading-feedback-and-ui-fixes` (10 tasks,
-`b65bf33..5e1af46`, ver o progresso abaixo), verificada e documentada mas
-**não mesclada** — falta a validação em navegador do checklist que a Task 10
-deixou para o Gabriel. O `Refund-api` segue como descrito acima (`main` local
-à frente do remote só por commits de documentação).
+**Este bloco envelhece a cada commit; confira-o contra o `git` antes de
+confiar nele.** Ele já esteve errado quatro vezes: afirmando que uma branch não
+tinha sido mesclada quando já estava; fixando um SHA que commits de
+documentação ultrapassaram no mesmo dia; e duas vezes por um ciclo ter sido
+mesclado sem que o fechamento atualizasse aqui. O padrão é sempre o mesmo — a
+frase "a `main` está em X" nasce verdadeira e morre em silêncio. Um SHA de
+código citado *dentro de um ciclo* envelhece bem; este quadro, não.
+
+**Não há mais proteção acidental contra um deploy pela metade.** Enquanto nada
+estava empurrado, os remotes guardavam um par de contratos coerente entre si e
+nenhum lado conseguia subir sozinho. Hoje os dois lados estão publicados, com
+dois ciclos de mudança de contrato acumulados, e a única coisa entre o estado
+atual e uma quebra em produção é a decisão de implantar — ver a pendência de
+deploy conjunto, que deixou de ser teórica.
 
 O contrato novo
 (`user` aninhado), de dois ciclos atrás, segue mesclado dos dois lados; o que
@@ -668,11 +657,16 @@ completo e obrigatório está em
     (`Refund-FrontEnd/.superpowers/sdd/2026-07-31-review-navigation-and-refund-table/task-13-report.md`).
 
 - **Ciclo de feature — Feedback de carregamento e ajustes de UI (frontend):
-  CONCLUÍDO, ainda NÃO MESCLADO.** Décimo ciclo de feature (quarto do
-  `Refund-FrontEnd`), na branch `feat/loading-feedback-and-ui-fixes`
-  (`b65bf33..5e1af46`, 15 commits — 2 de spec/plano, 13 de implementação em 9
-  tasks com revisão por task, mais a Task 10 de fechamento). Artefatos em
-  `Refund-FrontEnd/.superpowers/sdd/2026-07-31-loading-feedback-and-ui-fixes/`.
+  CONCLUÍDO, MESCLADO por fast-forward e EMPURRADO.** Décimo ciclo de feature
+  (quarto do `Refund-FrontEnd`), na branch `feat/loading-feedback-and-ui-fixes`
+  (`b65bf33..6c63ff5`, 16 commits — 2 de spec/plano, 13 de implementação em 9
+  tasks com revisão por task, a Task 10 de fechamento, e um commit final com os
+  achados da revisão da branch inteira). Números finais na `main`: **246 testes
+  em 44 arquivos** (partiu de 215), `tsc` exit 0, lint 0/0, bundle 559,51 →
+  560,88 kB. A spec e o plano ficam em
+  `Refund-FrontEnd/docs/superpowers/`; o ledger de execução ficava em
+  `.superpowers/sdd/2026-07-31-loading-feedback-and-ui-fixes/` e **foi removido
+  no fechamento**, conforme o fluxo — o registro agora é o histórico do Git.
   Nasceu de seis problemas relatados pelo Gabriel usando o app, dois deles com
   a mesma causa raiz. O que mudou:
   - **O estado de carregamento terminava antes do trabalho.** Os quatro hooks
@@ -773,16 +767,65 @@ completo e obrigatório está em
     fechar-diálogo↔navegar não seria pega.
   - **Não validado em navegador nesta sessão.** A Task 10 rodou sem
     navegador disponível; a suíte inteira segue contra o MSW. Um checklist
-    de 15 pontos, derivado da spec, foi deixado para o Gabriel rodar contra o
-    backend real — ver o relatório da Task 10
-    (`Refund-FrontEnd/.superpowers/sdd/2026-07-31-loading-feedback-and-ui-fixes/task-10-report.md`).
+    de 16 pontos, derivado da spec, foi deixado para o Gabriel rodar contra o
+    backend real. **O ledger de execução foi removido no fechamento**, conforme
+    o fluxo — o registro agora é o histórico do Git, e os itens do checklist
+    que importam estão resumidos abaixo.
+  - **A revisão da branch inteira achou quatro coisas que nenhuma revisão por
+    task podia ver**, todas corrigidas em `6c63ff5`:
+    - **A correção do sidebar era uma regressão disfarçada.** O `pl-2` que
+      substituiu o `translate-x-2` **duplica** o `p-2` que o
+      `SidebarMenuButton` já traz da base do shadcn — o `twMerge` mantém os
+      dois e o CSS gerado dá a ambos os mesmos 8px. O deslocamento era 8+8=16px
+      e virou 8px, desalinhando os itens habilitados do item "em breve" e do
+      avatar do cabeçalho, que seguiram em 16px. Corrigido para `pl-4`. O
+      revisor chegou nisso compilando a saída real do Tailwind, não raciocinando
+      sobre as classes no abstrato.
+    - **A regra de "resetar ao fechar" foi aplicada a dois dos TRÊS diálogos.**
+      O `PayRefundDialog` continuava resetando só no sucesso, e é montado
+      incondicionalmente — depois de um pagamento que falha, reabrir mostrava o
+      erro anterior e o arquivo já escolhido.
+    - **Um erro podia ser escrito depois de ser limpo.** Fechar o
+      `RefundFormDialog` com a criação em voo e ela falhar depois gravava
+      `submitError` *após* a limpeza do fechamento, e nada limpava na abertura —
+      então o botão "Nova solicitação" da tela de sucesso, criado neste mesmo
+      ciclo, abriria um formulário em branco com um banner velho.
+    - **Um rótulo declarava metade do próprio escopo.** "Solicitações (Pago)"
+      cobria o filtro de status mas não a busca por nome, embora o `total` seja
+      estreitado pelos dois.
+  - **Nota de implementação:** a regra de lint `set-state-in-effect` bloqueou o
+    `useEffect` óbvio para limpar o erro na abertura dos diálogos. A saída foi o
+    padrão documentado do React de ajustar estado durante o render comparando
+    com o valor anterior (`wasOpen`) — que tem a vantagem de a limpeza entrar no
+    mesmo commit, sem um quadro de banner velho visível, coisa que um efeito
+    pós-paint não garantiria.
 
-- **Próximo — validar em navegador o ciclo de feedback de carregamento
-  (acima), depois mesclar os dois ciclos pendentes do `Refund-FrontEnd`
-  (navegação/tabela e feedback de carregamento) e empurrar. Só então — foto
-  de perfil (upload e exibição).** Único item novo restante do backlog do
-  frontend (ver seção abaixo). Depende de implantar o backend e o frontend do
-  ciclo de revisão juntos primeiro — ver pendências.
+- **Próximo — validar em navegador os dois últimos ciclos, que foram mesclados
+  e empurrados sem essa passada.** Nem o ciclo de navegação/tabela nem o de
+  feedback de carregamento foram abertos num navegador. Isso não é
+  formalidade: a suíte roda inteira contra o MSW, ou seja, contra o payload que
+  nós mesmos escrevemos, e **três mudanças do último ciclo são invisíveis para
+  ela** — o alinhamento do sidebar (nenhum agente conseguiu renderizar; só
+  geometria de caixa a partir do CSS gerado, e duas rodadas dessa aritmética se
+  contradisseram antes de convergir) e os dois fluxos de diálogo cujo caminho
+  real de usuário o jsdom não exercita.
+
+  Os itens que falhariam em silêncio, se falharem:
+
+  - aprovar mantém o spinner até o histórico aparecer atualizado (o pedido que
+    originou o ciclo);
+  - filtrar por status **não** muda o card de pendentes — se mudar, alguém o
+    ligou na listagem;
+  - no modo trilho, o ícone de um item habilitado e o do item "em breve" ficam
+    centralizados e alinhados **entre si**;
+  - "Nova solicitação" na tela de sucesso reabre o diálogo zerado sem sair da
+    página;
+  - nenhum spinner demora a ponto de incomodar — esperar a invalidação inteira
+    inclui queries inativas em cache, e a spec registra o refinamento caso
+    incomode.
+
+- **Depois — foto de perfil (upload e exibição).** Único item novo restante do
+  backlog do frontend (ver seção abaixo).
 
 ## Backlog do frontend — o que ainda falta
 
@@ -872,6 +915,22 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   continua sendo uma versão de transição do backend devolvendo `user_id` **e**
   `user`, e tolerando um frontend que ainda não conhece `paid` — o que exigiria
   não pagar nenhum reembolso até o frontend subir.
+
+  **Atualização em 2026-07-31:** desde então mais dois ciclos de frontend foram
+  mesclados e empurrados (navegação/tabela e feedback de carregamento). Nenhum
+  deles muda o contrato com a API — são consumo e UI —, então o risco não mudou
+  de natureza, só de volume: há mais código publicado dependendo do mesmo par de
+  contratos que ainda não foi implantado junto.
+- **O cliente HTTP não tem timeout nem `AbortController` em lugar nenhum de
+  `src/`.** Descoberto no ciclo de 2026-07-31, ao revisar um "gate" que impedia
+  fechar o diálogo de pagamento enquanto a mutation estivesse em voo. O gate foi
+  **revertido** justamente por isso: sem timeout, uma requisição travada
+  deixaria um modal permanentemente sem saída, e o gate não comprava nada —
+  os diálogos são montados incondicionalmente e a mutation continua viva com o
+  diálogo fechado. Não morde hoje porque nada mais bloqueia a interface
+  esperando resposta, mas é o tipo de ausência que só aparece quando alguém
+  escreve o código que depende dela. Candidato a item de backlog: um `timeout`
+  no `api` do Axios e/ou `AbortController` nos fluxos longos.
 - **Nenhum endpoint produz um agregado por status cruzando usuários.** No card
   "Total" da Home, para o admin (visão de todos os reembolsos), a UI mostra o
   total **solicitado** — rótulo honesto, não `approved + paid` — porque
