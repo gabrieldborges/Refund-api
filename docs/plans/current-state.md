@@ -18,12 +18,21 @@ Atualizado em: 2026-07-30.
 O produto é um sistema de **reembolso de despesas com comprovante**. São dois
 repositórios Git irmãos e independentes, cada um com seu remote. O
 `Refund-FrontEnd` tem uma branch de trabalho aberta, `feat/refund-review-ui`
-(`39e0683..485cecb`, 15 commits), **concluída e verificada, ainda não mesclada
-nem implantada** — ver o ciclo do workflow de aprovação na UI abaixo. O
-`Refund-api` está na `main`, em `30b6f88`, com a branch
-`feat/refund-payment-and-stats` já **mesclada nela por fast-forward
-localmente** (ainda não empurrada para `origin/main`, que segue em `23c6675`)
-— ver o ciclo de pagamento, histórico e estatísticas abaixo. O contrato novo
+(`39e0683..485cecb`, 15 commits), **concluída, verificada e revisada, ainda não
+mesclada nem implantada** — a `main` dele segue em `39e0683`. Ver o ciclo do
+workflow de aprovação na UI abaixo. O `Refund-api` está na `main`, com a branch
+`feat/refund-payment-and-stats` **mesclada nela por fast-forward localmente**
+(último commit de código: `30b6f88`; a `main` avança depois disso só com
+documentação de fechamento) e **ainda não empurrada** para o `origin/main`, que
+segue em `23c6675`. Ver o ciclo de pagamento, histórico e estatísticas abaixo.
+
+**Ao ler este bloco numa sessão futura, confira-o contra o `git` antes de
+confiar nele.** Esta seção já esteve errada duas vezes: uma afirmando que uma
+branch não tinha sido mesclada quando já estava, outra fixando um SHA que os
+próprios commits de documentação ultrapassaram no mesmo dia. Um SHA de código
+envelhece bem; "a `main` está em X" envelhece a cada commit.
+
+O contrato novo
 (`user` aninhado), de dois ciclos atrás, segue mesclado dos dois lados; o que
 resta ali — e agora também no contrato `paid` deste ciclo — é **deploy**, e
 ele tem de ser conjunto (ver pendências):
