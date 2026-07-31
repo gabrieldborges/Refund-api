@@ -1248,6 +1248,20 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   artificialmente a taxa aparente do flake com uma amostra mal capturada, e
   para lembrar: da próxima vez que aparecer, salvar a saída em arquivo **antes**
   de olhar para ela, não depois.
+
+  **E a lição não pegou na mesma sessão.** Na verificação final da branch,
+  depois da onda de correção, uma rodada deu `1 failed | 245 passed (246)` —
+  e o comando seguinte, um `grep` sobre uma nova execução, veio vazio, o que
+  já era a rodada seguinte, verde. **Qual teste falhou não foi capturado.**
+  Quatro rodadas depois (uma implícita no grep, três explícitas) deram
+  246/246. O sintoma é compatível com este flake — falha isolada, não
+  reproduzível, só em suíte completa — mas **isso é inferência, não
+  observação**: ninguém viu o nome do teste nem o erro. Registrado assim de
+  propósito, do mesmo jeito que a terceira ocorrência do ciclo de 2026-07-30
+  ficou registrada como "provável", para que a próxima leitura não conte esta
+  como confirmada. A regra prática que falhou duas vezes na mesma sessão:
+  **redirecionar a saída para arquivo em toda rodada de verificação**, não só
+  quando se espera um problema.
 - **Ruído de jsdom `Not implemented: navigation to another Document` —
   pré-existente, confirmado por checkout destacado.** Aparece na saída de
   `npx vitest run` desde antes deste ciclo. A confirmação foi feita rodando a
