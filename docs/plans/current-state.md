@@ -17,14 +17,17 @@ Atualizado em: 2026-07-30.
 
 O produto é um sistema de **reembolso de despesas com comprovante**. São dois
 repositórios Git irmãos e independentes, cada um com seu remote. O
-`Refund-FrontEnd` tem uma branch de trabalho aberta, `feat/refund-review-ui`
-(`39e0683..485cecb`, 15 commits), **concluída, verificada e revisada, ainda não
-mesclada nem implantada** — a `main` dele segue em `39e0683`. Ver o ciclo do
-workflow de aprovação na UI abaixo. O `Refund-api` está na `main`, com a branch
-`feat/refund-payment-and-stats` **mesclada nela por fast-forward localmente**
-(último commit de código: `30b6f88`; a `main` avança depois disso só com
-documentação de fechamento) e **ainda não empurrada** para o `origin/main`, que
-segue em `23c6675`. Ver o ciclo de pagamento, histórico e estatísticas abaixo.
+**Os dois repositórios estão na `main`, sem branch de trabalho pendente.** Os
+dois ciclos de 2026-07-30 — pagamento/histórico/estatísticas no backend e o
+workflow de aprovação na UI no frontend — foram mesclados por fast-forward,
+cada um depois de revisão por task e revisão da branch inteira. Último commit de
+código: `30b6f88` no `Refund-api`, `485cecb` no `Refund-FrontEnd`.
+
+**Nenhum dos dois foi empurrado para o respectivo remote.** O `origin/main` do
+`Refund-api` segue em `23c6675` e o do `Refund-FrontEnd` em `39e0683` — ou seja,
+os dois remotes ainda contêm o par de contratos anterior, que é coerente entre
+si. Isso é conveniente: enquanto ninguém empurrar, não há como um dos lados
+subir sozinho.
 
 **Ao ler este bloco numa sessão futura, confira-o contra o `git` antes de
 confiar nele.** Esta seção já esteve errada duas vezes: uma afirmando que uma
@@ -446,7 +449,7 @@ completo e obrigatório está em
   `origin/main`**, que segue em `23c6675`. Sétimo ciclo, o segundo inteiramente
   de backend, na branch `feat/refund-payment-and-stats` do `Refund-api`,
   executado em 12 tasks com revisão por task, mais uma revisão da branch
-  inteira. Artefatos em `.superpowers/sdd/2026-07-30-refund-payment-and-stats/`
+  inteira. O ledger de execução ficava em `.superpowers/sdd/2026-07-30-refund-payment-and-stats/`
   — **esse diretório foi removido no fechamento**, conforme o fluxo; o registro
   agora é o histórico do Git.
   Fecha `UC-012`/`UC-013`/`UC-014` e acrescenta um quarto status (`paid`) ao
@@ -505,14 +508,18 @@ completo e obrigatório está em
     **10.00/10**.
 
 - **Ciclo de feature — Workflow de aprovação na UI (frontend): CONCLUÍDO e
-  REVISADO, ainda não mesclado na `main`.** Oitavo ciclo de feature, o segundo
-  consecutivo inteiramente de frontend, na branch `feat/refund-review-ui` do
-  `Refund-FrontEnd` (`39e0683..485cecb`, 15 commits, 9 tasks com revisão por
-  task, mais a Task 10 de fechamento e a revisão da branch inteira). Artefatos em
+  MESCLADO na `main`** por fast-forward (`39e0683..485cecb`, 15 commits),
+  **ainda não empurrado** para o `origin/main`, que segue em `39e0683`. Oitavo
+  ciclo de feature, o segundo consecutivo inteiramente de frontend, na branch
+  `feat/refund-review-ui` do `Refund-FrontEnd`, executado em 9 tasks com revisão
+  por task, mais a Task 10 de fechamento e a revisão da branch inteira.
+  Verificação repetida depois do merge: 157 testes, `tsc` exit 0, lint 0/0,
+  bundle 518,36 kB. Artefatos em
   `Refund-FrontEnd/docs/superpowers/`
   ([spec](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-30-refund-review-ui-design.md)),
-  ledger de execução em
-  `Refund-FrontEnd/.superpowers/sdd/2026-07-30-refund-review-ui/progress.md`.
+  o ledger de execução ficava em
+  `Refund-FrontEnd/.superpowers/sdd/2026-07-30-refund-review-ui/`, **removido no
+  fechamento** conforme o fluxo — o registro agora é o histórico do Git.
   Consome o ciclo de backend anterior (pagamento, histórico e estatísticas) e
   **conserta uma quebra ativa**: `refundStatusSchema` só conhecia três status,
   e o backend já respondia `"paid"` — o primeiro reembolso pago derrubaria a
@@ -560,7 +567,7 @@ completo e obrigatório está em
     pendências. É a única evidência que a suíte não substitui: ela roda inteira
     contra o MSW, ou seja, contra o payload que nós mesmos escrevemos.
   - Detalhes completos, incluindo os achados adiados task a task, em
-    `Refund-FrontEnd/.superpowers/sdd/2026-07-30-refund-review-ui/progress.md`
+    nas mensagens de commit da branch
     e no [diário](../learning-path-progress.md).
 
 - **Próximo — lista de reembolsos com TanStack Table (Item 13), no
@@ -682,7 +689,7 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   um link de PDF genérico entre dois tipos de comprovante, guardas
   redundantes) e não sobre comportamento incorreto em produção. A lista
   completa, achado a achado, está no ledger de execução
-  (`Refund-FrontEnd/.superpowers/sdd/2026-07-30-refund-review-ui/progress.md`),
+  (registrados nas mensagens de commit da branch),
   não reproduzida aqui.
 - **Nada do ciclo de revisão (2026-07-30) foi validado em navegador contra a
   API real.** Toda a suíte (157 testes) roda contra MSW, que por definição
@@ -767,8 +774,6 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   criados sob esses ids: 65–73 (nove reembolsos, cobrindo os quatro status,
   incluindo dois pagos e um com o arquivo do comprovante apagado do disco de
   propósito para testar o quarto caminho de 404 do comprovante de pagamento).
-  Detalhes completos em
-  `.superpowers/sdd/2026-07-30-refund-payment-and-stats/task-12-report.md`.
   Somam-se a `admin.validacao@example.com`, `validacao.visual@example.com` e
   `task1-verify@example.com`; todos descartáveis, nenhum removível sem acesso
   direto ao banco (não existe endpoint de exclusão de usuário).
