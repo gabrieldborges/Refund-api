@@ -637,10 +637,11 @@ completo e obrigatório está em
     branca de `refundSortSchema` — `category` e `user` não têm `accessorFn`
     e têm `enableSorting: false` de propósito, então nunca viram botão.
   - **Achado que vale registrar:** `ResizeObserver is not defined` foi
-    reproduzido pela primeira vez na `main` **sem modificação nenhuma** (1
-    falha em 5 rodadas) — ver a pendência atualizada abaixo. Até aqui toda
-    ocorrência tinha sido dentro de um ciclo, o que deixava em aberto se a
-    causa era nossa. Agora há evidência direta de que não é.
+    reproduzido, pela primeira vez, com as mudanças da task **guardadas no
+    stash** — ou seja, numa árvore sem elas (1 falha em 9 rodadas completas,
+    contra 2 falhas em 4 rodadas com as mudanças aplicadas). Ver a pendência
+    atualizada abaixo. Até aqui toda ocorrência tinha sido dentro de um
+    ciclo, o que deixava em aberto se a causa era nossa.
   - **Não validado em navegador contra a API real nesta sessão.** A
     verificação da Task 13 rodou inteira contra a suíte automatizada (MSW) e
     as ferramentas de build; não havia navegador disponível na sessão que a
@@ -1078,15 +1079,24 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   ciclo de 2026-07-30** (workflow de aprovação), de novo numa rodada de suíte
   completa e de novo não reproduzível isoladamente; uma terceira ocorrência
   provável, essa menos confiável, ficou registrada sem rastro (saída perdida
-  por um corte de API). **A diferença desta vez: durante a Task 13 do ciclo de
-  2026-07-31 (navegação na revisão e tabela de reembolsos), o flake foi
-  reproduzido na `main` sem nenhuma modificação** — 1 falha em 5 rodadas
-  completas na base, antes de qualquer commit da branch. Todas as ocorrências
-  anteriores foram dentro de um ciclo, o que deixava em aberto se as próprias
-  mudanças causavam o sintoma; esta é a primeira evidência direta de que **não
-  causam** — o flake é pré-existente e independente do que qualquer ciclo faz.
-  As três rodadas completas rodadas na Task 13 do mesmo ciclo (`npx vitest
-  run` × 3, ponta da branch) deram 209/209 nas três, sem o flake aparecer.
+  por um corte de API). **A diferença desta vez: durante a Task 12 do ciclo de
+  2026-07-31 (navegação na revisão e tabela de reembolsos), o flake apareceu
+  numa árvore SEM as mudanças da task**, com elas guardadas no stash. Os
+  números exatos, porque a imprecisão aqui já custou caro antes:
+
+  - 3 rodadas completas na base (mudanças no stash): 3/3 verdes;
+  - 4 rodadas com as mudanças aplicadas: 2 verdes, 2 com o flake;
+  - mais 6 rodadas na base, de novo sem as mudanças: 1 falha, com o erro
+    idêntico no mesmo teste.
+
+  Ou seja **1 falha em 9 rodadas sem as mudanças, contra 2 em 4 com elas**.
+  Duas ressalvas que impedem conclusão mais forte: a "base" aqui é a ponta da
+  Task 11 desta mesma branch, **não a `main`** — nenhuma rodada foi feita na
+  `main` limpa; e a taxa maior com as mudanças aplicadas pode ser ruído de
+  amostra pequena ou pode não ser, ninguém mediu o suficiente para dizer. O
+  que esta observação estabelece é mais estreito do que "o ciclo não causa":
+  estabelece que **o flake ocorre sem as mudanças da Task 12**. As três
+  rodadas completas da Task 13 (ponta da branch) deram 209/209 sem o flake.
 
   Múltiplas ocorrências, todas só em conjunto com o resto da suíte, tornam a
   hipótese de coincidência pouco plausível — mas a causa continua desconhecida;
@@ -1095,10 +1105,11 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   polyfill guardado em `src/test/setup.ts`, no mesmo padrão dos que já
   existem, mas só depois de entender a ordem que o dispara.
 - **Ruído de jsdom `Not implemented: navigation to another Document` —
-  pré-existente, confirmado na `main` sem modificação.** Aparece na saída de
-  `npx vitest run` desde antes deste ciclo; a Task 13 do ciclo de 2026-07-31
-  confirmou que ele já sai igual rodando a suíte na base, sem nenhuma mudança
-  da branch. Não falha nenhum teste — é aviso do jsdom sobre navegação real
+  pré-existente, confirmado por checkout destacado.** Aparece na saída de
+  `npx vitest run` desde antes deste ciclo. A confirmação foi feita rodando a
+  suíte em `f3c4234`, o commit base da branch de 2026-07-31 — que difere da
+  `main` apenas por documentação, ou seja, com o código idêntico ao dela. O
+  aviso sai igual ali. Não falha nenhum teste — é aviso do jsdom sobre navegação real
   não implementada (algum fluxo dispara `location.href =` ou similar em vez de
   um mock) — mas polui a saída e vale saber que não é novo.
 - ~~**`per_page: 10` é literal escrito à mão em `src/test/msw/handlers.ts`.**~~
