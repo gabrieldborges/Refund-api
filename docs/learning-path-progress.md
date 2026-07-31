@@ -3259,3 +3259,186 @@ não substituível por nenhum número acima. Detalhes completos, task a task,
 em `Refund-FrontEnd/.superpowers/sdd/2026-07-30-refund-review-ui/progress.md`
 e nos relatórios individuais (`task-1-report.md` a `task-9-report.md`) na
 mesma pasta.
+
+## Item 13 — TanStack Table (2026-07-31)
+
+**Status:** concluído em 2026-07-31, dentro do ciclo de feature "Navegação na
+revisão e tabela de reembolsos", branch `feat/review-navigation-and-refund-table`
+do `Refund-FrontEnd` (`485cecb..722371b`). Fecha o Item 13 do
+`learning_path.md`. Ledger de execução em
+`Refund-FrontEnd/.superpowers/sdd/2026-07-31-review-navigation-and-refund-table/`.
+
+### Por que estudar
+
+A Home listava reembolsos numa `<ul>` desde sempre. TanStack Table é uma
+biblioteca *headless* — não desenha nada sozinha; devolve funções
+(`getHeaderGroups`, `getRowModel`, `getCanSort`, …) que o componente chama
+para montar `<table>`/`<tr>`/`<td>` do jeito que quiser. O ganho não é visual,
+é estrutural: colunas viram uma lista de configuração
+(`ColumnDef<Refund>[]`) em vez de JSX repetido, e a biblioteca sabe como
+mostrar/ocultar coluna, ordenar cabeçalho e paginar — desde que alguém diga
+**quem manda** nesses três comportamentos. É exatamente esse "quem manda" que
+motiva a primeira lição.
+
+### Lição 1 — `manualSorting`/`manualFiltering`: por que a ordenação não podia viver dentro do TanStack
+
+TanStack Table sabe ordenar, filtrar e paginar sozinho — mas faz isso sobre o
+array `data` que recebeu, e a `RefundsTable` só recebe **uma página** (10 de
+N reembolsos). Deixar a ordenação embutida ligada teria feito exatamente o
+erro que já existe registrado neste diário como origem de um ciclo de backend
+inteiro (a consulta da listagem): um "ordenar" que na verdade só reordena as
+10 linhas que já chegaram, parecendo funcionar em qualquer teste manual
+superficial e mentindo sobre o restante das N-10 linhas que o usuário nunca
+vê reordenadas de verdade.
+
+A configuração que evita isso:
+
+```ts
+const table = useReactTable({
+  data: refunds,
+  columns,
+  getCoreRowModel: getCoreRowModel(),
+  state: { columnVisibility },
+  // O cliente tem 10 de N linhas. Ordenar, filtrar ou paginar aqui
+  // trabalharia sobre a página, não sobre o conjunto — o erro que originou
+  // o ciclo de backend da consulta da listagem.
+  manualSorting: true,
+  manualFiltering: true,
+  manualPagination: true,
+});
+```
+
+As três flags `manual*` dizem ao TanStack "eu, chamador, já entreguei os
+dados ordenados/filtrados/paginados do jeito certo — não recalcule nada."
+Sem `getSortedRowModel()`/`getFilteredRowModel()`/`getPaginationRowModel()`
+plugados, a tabela nem teria como ordenar sozinha mesmo que quisesse; as
+flags são a declaração explícita da intenção, não só a ausência acidental de
+um plugin.
+
+**Por que `sort`/`order` moram na URL, e não no estado interno do TanStack.**
+O estado de ordenação do TanStack (`table.getState().sorting`, um array de
+`{id, desc}`) é memória de componente: existe enquanto a página está montada
+e some no reload. Este projeto já tinha decidido, desde o Item 3
+(React Router data APIs), que `page`/`name` vivem na URL — pesquisável,
+copiável, sobrevive a um F5, funciona com voltar/avançar do navegador. `sort`
+e `order` são a mesma classe de estado (um filtro de visualização da
+listagem) que `page`/`name`, então a decisão coerente é usar o mesmo lugar,
+não abrir uma segunda fonte de verdade. Concretamente, `RefundsTable` **nunca
+lê nem escreve** `table.getState().sorting` — o cabeçalho ativo é decidido
+comparando a prop `sort` recebida com o `id` da coluna:
+
+```ts
+const isSorted = header.column.id === sort;
+const SortIcon = !isSorted ? ChevronsUpDown : order === "asc" ? ArrowUp : ArrowDown;
+```
+
+Se o estado do TanStack também guardasse uma ordenação, existiriam **duas**
+fontes que precisariam ser mantidas sincronizadas manualmente — a URL (fonte
+real, validada por Zod, normalizada pelo loader) e o estado interno da
+tabela (decorativo, nunca lido por ninguém). Divergir seria trivial: um
+reload trocaria a URL sem tocar o estado do TanStack, ou um clique atualizaria
+o TanStack sem escrever a URL, e o cabeçalho mostraria uma seta que não bate
+com o que a API realmente devolveu. Eliminar a segunda fonte inteira —
+não sincronizá-la — é o que fecha essa classe de bug antes de ela poder
+existir.
+
+### Lição 2 — `getCanSort()` devolve `false` em silêncio sem um `accessorFn`
+
+A Task 5 seguiu a receita usual — renderizar um botão sempre que
+`header.column.getCanSort()` for `true` — e nenhum cabeçalho virou botão,
+nem os que deveriam ser ordenáveis. A causa estava na própria implementação
+do TanStack (`@tanstack/table-core`, `getCanSort`):
+
+```js
+column.getCanSort = () => {
+  return (column.columnDef.enableSorting ?? true)
+    && (table.options.enableSorting ?? true)
+    && !!column.accessorFn;
+};
+```
+
+O terceiro termo é a pegadinha: `getCanSort()` só é `true` se a coluna tiver
+um `accessorFn` (ou `accessorKey`, que gera um por baixo) — **mesmo que
+`enableSorting` nunca tenha sido definido como `false`**. Nenhuma coluna de
+`RefundsTable` tinha accessor: as Tasks 3–4 as montaram só com `id` e um
+`cell` customizado, porque o valor de cada célula (ícone, badge, link) nunca
+precisou de um "acessador" de dado bruto — e a ordenação em si acontece no
+servidor, então parecia razoável não ter um. TanStack discorda: para ele,
+"esta coluna tem um jeito de ler o valor bruto do dado" é o próprio critério
+de "esta coluna pode ser ordenada", não uma decisão independente.
+
+O sintoma foi pego pelo ciclo RED→GREEN do TDD, não por inspeção de código:
+depois de ligar o cabeçalho exatamente como planejado, os testes de
+ordenação continuaram falhando **da mesma forma** que antes de qualquer
+mudança — sinal de que o problema não estava no que foi escrito, estava numa
+pré-condição não satisfeita antes daquele código rodar. O conserto foi um
+`accessorFn` trivial nas quatro colunas ordenáveis:
+
+```ts
+{
+  id: "name",
+  header: "Título",
+  // TanStack only considers a column sortable when it has an accessor
+  // (getCanSort checks `!!column.accessorFn`); the value itself is
+  // unused, sorting happens on the server, but the accessor is what
+  // turns the header into a clickable button below.
+  accessorFn: (refund) => refund.name,
+  cell: ({ row }) => (/* ... */),
+},
+```
+
+O valor que o `accessorFn` devolve nunca é lido para ordenar nada — quem
+ordena é a API, via `sort`/`order` na URL. A função existe só para satisfazer
+o teste de veracidade (`!!column.accessorFn`) e destravar `getCanSort()`.
+`category` e `user`, que continuam **não** ordenáveis (a API não aceita esses
+dois valores em `sort`), mantêm `enableSorting: false` e nenhum `accessorFn`
+— redundante à primeira vista (qualquer um dos dois já bastaria), mas
+documentado assim de propósito: se um dia ganhassem um `accessorFn` por
+outro motivo (por exemplo, para exibição), o `enableSorting: false` explícito
+continua barrando o botão sem depender de ninguém lembrar da regra implícita
+do `accessorFn`.
+
+### O que lembrar
+
+- **Uma biblioteca headless delega comportamento, não só renderização — e
+  "delegar" tem um oposto que precisa ser dito explicitamente.** `manualSorting`/
+  `manualFiltering`/`manualPagination` não são flags de configuração
+  incidentais; são a diferença entre "o TanStack decide" e "eu decido, o
+  TanStack só desenha o que eu mandei". Confiar no padrão (`false`, deixando
+  o TanStack tentar ordenar sozinho) sobre uma tabela paginada no servidor
+  reproduziria, silenciosamente, um bug de classe já conhecida neste projeto.
+- **Duas fontes de verdade para o mesmo estado não é redundância segura —
+  é uma obrigação constante de mantê-las iguais, que qualquer mudança
+  futura pode esquecer.** A URL já era a fonte de `page`/`name` desde o
+  Item 3; estender a mesma regra para `sort`/`order`, e nunca escrever no
+  estado interno do TanStack, elimina a sincronização em vez de prometer
+  fazê-la sempre.
+- **Uma API pública headless pode ter pré-condições implícitas que só
+  aparecem lendo a implementação, não a assinatura.** `getCanSort()` parece
+  perguntar "esta coluna pode ordenar?", mas na prática pergunta "esta coluna
+  tem um jeito de ler um valor?" — duas perguntas que só coincidem por
+  construção da própria biblioteca. O `enableSorting: false` sozinho parecia
+  suficiente para desligar ordenação; o `accessorFn` ausente já fazia esse
+  trabalho por um motivo diferente, e só a leitura do código-fonte (não da
+  documentação da API) revelou a sobreposição.
+- **Um teste que falha da mesma forma depois de uma mudança é informação,
+  não ruído.** A falha idêntica antes e depois da Task 5 ligar o cabeçalho
+  por completo foi o sinal de que a causa não estava no código novo — estava
+  numa pré-condição que o código novo dependia e não sabia que faltava.
+
+### Verificação (Task 13, fechamento do ciclo)
+
+| Comando | Resultado |
+|---|---|
+| `npx vitest run` (×3) | **209 testes em 41 arquivos** nas três rodadas, todos verdes; flake do `ResizeObserver` não apareceu em nenhuma |
+| `npx tsc -b --noEmit` | exit 0 |
+| `npm run lint` | 0 erros, 0 warnings |
+| `npm run build` | ok; bundle **518,36 → 559,51 kB** (+41,15 kB, atribuível ao `@tanstack/react-table` + código novo); aviso de chunk > 500 kB pré-existente |
+
+**Nada deste ciclo foi validado em navegador contra a API real na sessão de
+fechamento** — a Task 13 rodou sem navegador disponível; a suíte inteira
+segue sendo contra MSW. Um checklist de 16 pontos, derivado da spec, foi
+deixado para o Gabriel rodar contra o backend real. Detalhes completos, task
+a task, em
+`Refund-FrontEnd/.superpowers/sdd/2026-07-31-review-navigation-and-refund-table/`
+(`task-1-report.md` a `task-13-report.md`).

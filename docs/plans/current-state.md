@@ -11,7 +11,7 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-07-30.
+Atualizado em: 2026-07-31.
 
 ## Visão geral
 
@@ -577,15 +577,84 @@ completo e obrigatório está em
     nas mensagens de commit da branch
     e no [diário](../learning-path-progress.md).
 
-- **Próximo — lista de reembolsos com TanStack Table (Item 13), no
-  `Refund-FrontEnd`.** A API já tem `status`, `sort`, `order` **e** `user_id`
-  disponíveis no servidor (os dois primeiros desde o ciclo de consulta da
-  listagem; `user_id` desde o ciclo de pagamento/estatísticas — e o ciclo de
-  revisão acima já o consome, mas só numa consulta fixa por reembolso, no
-  painel do solicitante). Depois dele, o ciclo da foto de perfil (upload,
-  `has_avatar`, exibição no Sidebar e na lista). Os dois dependem de implantar
-  o backend e o frontend do ciclo de revisão juntos primeiro — ver
-  pendências. O backlog remanescente está na seção abaixo.
+- **Ciclo de feature — Navegação na revisão e tabela de reembolsos
+  (frontend): CONCLUÍDO.** Nono ciclo de feature (terceiro do
+  `Refund-FrontEnd`), na branch `feat/review-navigation-and-refund-table`
+  (`485cecb..722371b`, 16 commits — 4 de planejamento/spec, 12 de
+  implementação com revisão por task, mais a Task 13 de fechamento e a
+  revisão da branch inteira). Artefatos em `Refund-FrontEnd/docs/superpowers/`
+  ([spec](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-31-review-navigation-and-refund-table-design.md)),
+  o ledger de execução em
+  `Refund-FrontEnd/.superpowers/sdd/2026-07-31-review-navigation-and-refund-table/`.
+  **Fecha o Item 13** da trilha (TanStack Table) e, na mesma branch, resolve
+  três lacunas de navegação deixadas pelo ciclo de revisão anterior. O que
+  mudou:
+  - **Tasks 1–7 — a Home.** `status`, `sort` e `order` passam a ser aceitos
+    como search params, validados por Zod com fallback e normalizados pelo
+    loader da rota — uma URL com `?sort=inexistente` cai no valor padrão em
+    vez de quebrar a tela. A `<ul>` da Home virou uma tabela (TanStack Table)
+    com seis colunas (categoria, título, solicitante, data, status, valor); a
+    coluna de solicitante some para quem não é admin via `columnVisibility`
+    do próprio TanStack, e três colunas colapsam abaixo de `sm` por CSS
+    (`meta.className`, não JS medindo viewport). Ordenação é **server-side**:
+    os cabeçalhos clicáveis escrevem `sort`/`order` na URL
+    (`manualSorting: true`, nunca `getSortedRowModel`); uma toolbar filtra
+    por `status`; e o rótulo do card de dinheiro do admin acompanha o filtro
+    ativo.
+  - **Tasks 8–12 — a tela de revisão.** O comprovante da despesa passa a
+    aparecer (antes um admin decidia sem ver o documento que justifica o
+    pedido); o painel do solicitante ganhou um contador "Total"; a
+    solicitação aberta é destacada no painel (`bg-accent` +
+    `aria-current="page"`); setas anterior/próxima andam entre as
+    solicitações do mesmo solicitante; e um botão "Próxima pendente" pula
+    para a pendente mais antiga que não seja do próprio admin.
+  - **Três limpezas triviais de tasks anteriores**, feitas na Task 13: o
+    alias de teste redundante (`renderReviewPage`) removido de
+    `PageRefundReview.test.tsx`, com os call sites usando
+    `renderPageRefundReview` direto; `isLoading: isAdmin && isLoading` em
+    `useNextPendingRefund.ts` virou só `isLoading` (uma query desabilitada já
+    reporta `isLoading: false` no TanStack Query v5 — mesmo idioma de
+    `useRefund.ts`/`useRefundStats.ts`); indentação corrigida em
+    `PageRefundReview.tsx` (a `<div className="flex justify-end">` estava um
+    nível abaixo do `{refund && (` que a envolve).
+  - Verificação (Task 13): `npx vitest run` rodado **três vezes**, sempre
+    **209 testes em 41 arquivos**, todos verdes — o flake conhecido do
+    `ResizeObserver` (ver pendências) **não apareceu em nenhuma das três**.
+    `npx tsc -b --noEmit` (exit 0), `npm run lint` (0 erros, 0 warnings),
+    `npm run build` (ok; bundle **518,36 → 559,51 kB**, +41,15 kB —
+    atribuível ao `@tanstack/react-table` mais o código novo; o aviso de
+    chunk > 500 kB segue **pré-existente**).
+  - **A revisão da branch inteira** (Task 13) conferiu por busca, não por
+    leitura de intenção: nenhum ponto do código ordena ou filtra reembolsos
+    no cliente (`grep -rn "\.sort(\|\.filter(" src/features/refunds
+    src/pages`, vazio); `getRefundHref` continua com um único ponto de regra
+    (`RefundsTable` e `RequesterPanel` consomem a mesma função, sem cópia
+    inline de `role === "admin" && …`); nenhuma chave de cache colide
+    (`refundKeys.list` hasheia o objeto de parâmetros inteiro, e a fila de
+    pendentes de `useNextPendingRefund` usa `status`/`sort`/`order` fixos,
+    distintos dos da Home); e os ids das colunas ordenáveis (`name`,
+    `created_at`, `status`, `amount_in_cents`) batem exatamente com a lista
+    branca de `refundSortSchema` — `category` e `user` não têm `accessorFn`
+    e têm `enableSorting: false` de propósito, então nunca viram botão.
+  - **Achado que vale registrar:** `ResizeObserver is not defined` foi
+    reproduzido pela primeira vez na `main` **sem modificação nenhuma** (1
+    falha em 5 rodadas) — ver a pendência atualizada abaixo. Até aqui toda
+    ocorrência tinha sido dentro de um ciclo, o que deixava em aberto se a
+    causa era nossa. Agora há evidência direta de que não é.
+  - **Não validado em navegador contra a API real nesta sessão.** A
+    verificação da Task 13 rodou inteira contra a suíte automatizada (MSW) e
+    as ferramentas de build; não havia navegador disponível na sessão que a
+    executou. Um checklist de 16 pontos, derivado da spec, fica registrado
+    para o Gabriel rodar contra o backend real — o mesmo padrão de
+    granularidade que o ciclo anterior deixou como lacuna. Detalhes
+    completos, task a task, no [diário](../learning-path-progress.md) e no
+    relatório da Task 13
+    (`Refund-FrontEnd/.superpowers/sdd/2026-07-31-review-navigation-and-refund-table/task-13-report.md`).
+
+- **Próximo — foto de perfil (upload e exibição), no `Refund-FrontEnd`.**
+  Único item restante do backlog do frontend (ver seção abaixo). Depende de
+  implantar o backend e o frontend do ciclo de revisão juntos primeiro — ver
+  pendências.
 
 ## Backlog do frontend — o que ainda falta
 
@@ -596,20 +665,15 @@ O ciclo de 2026-07-30 (workflow de aprovação, ver acima) entregou a rota de
 revisão, aprovar/rejeitar, pagamento, histórico, comprovante de pagamento e o
 painel do solicitante, **está mesclado na `main` e foi validado visualmente pelo
 Gabriel**. Falta implantá-lo junto do backend correspondente (ver pendências).
+O ciclo de 2026-07-31 (navegação na revisão e tabela de reembolsos, ver acima)
+**fecha o Item 13** — a Home já filtra e ordena `status`/`sort`/`order`
+server-side através de uma `RefundsTable`; escopo por `user_id` para o admin
+continua fora de escopo desse item (não pedido pela spec) e não aparece no
+backlog abaixo.
 
 O que resta, em ciclos próprios (um por vez, na ordem do roadmap):
 
-### 1. Lista de reembolsos com TanStack Table (Item 13)
-
-Toolbar com filtro por `status` e ordenação por `sort`/`order` **server-side**,
-mais escopo por `user_id` para o admin. Os três primeiros parâmetros existem
-desde o ciclo de consulta da listagem; `user_id` desde o ciclo de pagamento/
-estatísticas. O ciclo de revisão já consome `user_id`, mas só numa consulta
-fixa por reembolso (o painel do solicitante) — a listagem principal da Home
-continua sem toolbar nenhum. **Sem isso, um toolbar client-side filtraria só
-as linhas da página** — o erro que originou o ciclo de consulta da listagem.
-
-### 2. Foto de perfil (upload e exibição)
+### 1. Foto de perfil (upload e exibição)
 
 `POST`/`DELETE /users/me/avatar`, gradiente como padrão, `has_avatar` decidindo
 entre foto e gradiente, e exibição no Sidebar e na lista. Os schemas já absorvem
@@ -1006,34 +1070,69 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   de "não encontrado" já levanta `HttpNotFoundError` → 404. Os 500 vistos no log
   vinham do bug de concorrência (agora corrigido), não do caminho de not-found.
 
-- **`ResizeObserver is not defined` em `Sidebar.test.tsx` — observado de novo,
-  dependente da ordem de execução, ainda sem explicação.** Deixa de ser
-  suspeita não confirmada: relatado pela primeira vez durante a onda de
-  correções finais do ciclo de 2026-07-29 (3 rodadas completas na ponta da
-  branch não reproduziram) e **observado de novo durante a Task 4 do ciclo de
-  2026-07-30** (workflow de aprovação), de novo numa **rodada de suíte
-  completa** e de novo **não reproduzível isoladamente**. Há ainda uma
-  **terceira ocorrência provável, e ela é a menos confiável das três**: o
-  primeiro agente de revisão da branch inteira relatou "a suíte completa acabou
-  de falhar na primeira execução" e foi cortado por erro de API antes de
-  detalhar qual teste — a saída se perdeu. Quatro rodadas completas depois
-  (três minhas, uma do agente que refez a revisão) deram 157/157. O sintoma
-  bate com este flake, mas **isso é inferência, não observação**: ninguém viu a
-  falha. Registrado assim de propósito, para não virar "confirmado três vezes"
-  na próxima leitura.
+- **`ResizeObserver is not defined` em `Sidebar.test.tsx` — CONFIRMADO
+  pré-existente e independente deste projeto de mudanças, ainda dependente da
+  ordem de execução e sem causa isolada.** Relatado pela primeira vez durante
+  a onda de correções finais do ciclo de 2026-07-29 (3 rodadas completas na
+  ponta da branch não reproduziram); **observado de novo durante a Task 4 do
+  ciclo de 2026-07-30** (workflow de aprovação), de novo numa rodada de suíte
+  completa e de novo não reproduzível isoladamente; uma terceira ocorrência
+  provável, essa menos confiável, ficou registrada sem rastro (saída perdida
+  por um corte de API). **A diferença desta vez: durante a Task 13 do ciclo de
+  2026-07-31 (navegação na revisão e tabela de reembolsos), o flake foi
+  reproduzido na `main` sem nenhuma modificação** — 1 falha em 5 rodadas
+  completas na base, antes de qualquer commit da branch. Todas as ocorrências
+  anteriores foram dentro de um ciclo, o que deixava em aberto se as próprias
+  mudanças causavam o sintoma; esta é a primeira evidência direta de que **não
+  causam** — o flake é pré-existente e independente do que qualquer ciclo faz.
+  As três rodadas completas rodadas na Task 13 do mesmo ciclo (`npx vitest
+  run` × 3, ponta da branch) deram 209/209 nas três, sem o flake aparecer.
 
-  Três ocorrências prováveis, todas só em conjunto com o resto da suíte,
-  tornam a hipótese de coincidência pouco plausível — mas a causa continua
-  desconhecida; nenhuma investigação isolou a interação real entre arquivos de
-  teste. Se aparecer de novo, o caminho segue sendo um polyfill guardado em
-  `src/test/setup.ts`, no mesmo padrão dos que já existem, mas só depois de
-  entender a ordem que o dispara.
-- **`per_page: 10` é literal escrito à mão em `src/test/msw/handlers.ts`.** Não
-  deriva de `REFUNDS_PER_PAGE`, então pode voltar a divergir num ajuste futuro —
-  a mesma classe de problema que o ciclo acabou de fechar no código de produção.
-  Parente disso: o loader stub em `src/pages/PageHome.a11y.test.tsx` ainda
-  devolve `perPage: 6`; é inerte (nada o assere), mas está obsoleto contra o
-  próprio comentário.
+  Múltiplas ocorrências, todas só em conjunto com o resto da suíte, tornam a
+  hipótese de coincidência pouco plausível — mas a causa continua desconhecida;
+  nenhuma investigação isolou a interação real entre arquivos de teste. Se
+  aparecer de novo **com a saída completa capturada**, o caminho segue sendo um
+  polyfill guardado em `src/test/setup.ts`, no mesmo padrão dos que já
+  existem, mas só depois de entender a ordem que o dispara.
+- **Ruído de jsdom `Not implemented: navigation to another Document` —
+  pré-existente, confirmado na `main` sem modificação.** Aparece na saída de
+  `npx vitest run` desde antes deste ciclo; a Task 13 do ciclo de 2026-07-31
+  confirmou que ele já sai igual rodando a suíte na base, sem nenhuma mudança
+  da branch. Não falha nenhum teste — é aviso do jsdom sobre navegação real
+  não implementada (algum fluxo dispara `location.href =` ou similar em vez de
+  um mock) — mas polui a saída e vale saber que não é novo.
+- ~~**`per_page: 10` é literal escrito à mão em `src/test/msw/handlers.ts`.**~~
+  RESOLVIDO no ciclo de 2026-07-31 (navegação na revisão e tabela de
+  reembolsos): `src/test/msw/handlers.ts` e o loader stub de
+  `src/pages/PageHome.a11y.test.tsx` passaram a importar `REFUNDS_PER_PAGE` da
+  fachada da feature em vez de repetir o número — a mesma classe de problema
+  que o ciclo de consulta da listagem havia fechado no código de produção,
+  agora fechada também nos testes.
+- **Quatro limitações conscientes do ciclo de 2026-07-31 (navegação na
+  revisão e tabela de reembolsos), todas decisões documentadas em comentário
+  no próprio código, não bugs:**
+  - **"Próxima pendente" só enxerga a primeira página da fila.**
+    `useNextPendingRefund` consulta `GET /refunds?status=pending&sort=created_at&order=asc`
+    só com `page: 1`. Se as 10 pendentes mais antigas forem todas do próprio
+    admin, o botão desabilita mesmo havendo outras mais adiante nas páginas
+    seguintes. Varrer páginas até achar uma elegível custaria mais do que o
+    caso raro vale — decisão registrada em `useNextPendingRefund.ts`.
+  - **As setas do painel do solicitante ficam inertes quando a solicitação
+    aberta não está entre as 10 carregadas.** O painel busca só a primeira
+    página das solicitações do solicitante (`GET /refunds?user_id=`); andar
+    para uma solicitação fora dessa janela exigiria paginar o painel, fora do
+    escopo deste ciclo.
+  - **Solicitante e data ficam ocultos no mobile.** Abaixo de `sm`, a
+    `RefundsTable` colapsa as colunas `user` e `created_at` (mais `category`)
+    por CSS (`meta.className`), a mesma técnica do restyle — não é perda de
+    dado, é economia de largura numa tela de 390px; o admin ainda acessa data
+    e solicitante no detalhe/revisão de cada linha.
+  - **`category` e `user` não são ordenáveis.** A API não aceita esses dois
+    valores em `sort` (a lista branca é
+    `created_at`/`amount_in_cents`/`name`/`status`, ver `refundSortSchema`);
+    as duas colunas têm `enableSorting: false` e nenhum `accessorFn` de
+    propósito, então `column.getCanSort()` nunca as transforma em botão.
+    Ordenação por essas duas dimensões exigiria um ciclo de backend antes.
 - **`ReceiptPreview` com `refundId=""` renderiza Skeleton para sempre.** O
   `useReceipt` desabilita a query, e uma query desabilitada do TanStack reporta
   `isPending: true` indefinidamente. A prop é `string` obrigatória e hoje só a
