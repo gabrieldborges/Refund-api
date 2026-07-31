@@ -3442,3 +3442,169 @@ deixado para o Gabriel rodar contra o backend real. Detalhes completos, task
 a task, em
 `Refund-FrontEnd/.superpowers/sdd/2026-07-31-review-navigation-and-refund-table/`
 (`task-1-report.md` a `task-13-report.md`).
+
+## Ciclo de feature — Feedback de carregamento e ajustes de UI (2026-07-31)
+
+Décimo ciclo de feature, o quarto do `Refund-FrontEnd`, na branch
+`feat/loading-feedback-and-ui-fixes` (`b65bf33..5e1af46`, 15 commits — 2 de
+spec/plano, 13 de implementação em 9 tasks com revisão por task, mais a
+Task 10 de fechamento). Artefatos em
+`Refund-FrontEnd/.superpowers/sdd/2026-07-31-loading-feedback-and-ui-fixes/`.
+
+### Por que agora
+
+Não veio do roadmap: veio do Gabriel usando o próprio app e relatando seis
+problemas — spinners que paravam cedo demais em cinco ações diferentes, um
+card de pendentes que faltava no admin, rótulos de card ambíguos, diálogos
+que reabriam sujos, uma tela de sucesso sem saída e um hover de sidebar com
+falha visual. Os dois primeiros (spinner parando cedo em botões de decisão e
+em botões que navegam) tinham o mesmo sintoma — "o botão volta ao normal
+antes da tela terminar de atualizar" — por **duas causas mecânicas
+diferentes**, e essa distinção é a lição central do ciclo.
+
+### Lição 1 — devolver a promise de um callback de mutation estende `isPending`; descartá-la a encurta
+
+**O estado que quebrava.** Os quatro hooks de mutação da feature
+(`useCreateRefund`, `useDeleteRefund`, `usePayRefund`, `useReviewRefund`, em
+`src/features/refunds/hooks/`) chamavam a invalidação do cache dentro do
+`onSuccess` como uma instrução solta, sem `return`:
+
+```ts
+onSuccess: () => {
+  queryClient.invalidateQueries({ queryKey: refundKeys.lists(), refetchType: "all" });
+},
+```
+
+O React Query aceita um `onSuccess` **síncrono ou assíncrono**. Quando ele é
+uma função `async`/retorna uma `Promise`, a mutation continua em `isPending`
+até essa promise resolver. Quando ele **não** devolve nada — como acima, uma
+chamada disparada e ignorada — a função retorna `undefined` no mesmo
+instante em que é chamada, e o React Query considera o `onSuccess`
+concluído ali mesmo, **mesmo que a invalidação (e o refetch que ela
+dispara) ainda estejam em voo**. `isPending` cai assim que o `mutationFn`
+(a chamada HTTP) termina, não quando os dados que a tela mostra terminam de
+se atualizar. Resultado observável: o botão de "Aprovar" voltava ao estado
+normal com o histórico de revisões ainda mostrando a versão antiga — a UI
+mentia que o trabalho tinha acabado.
+
+**O conserto** foi trocar a instrução solta por uma expressão — só a
+pontuação mudou, nada do alvo ou da lógica de invalidação:
+
+```ts
+// A promise é DEVOLVIDA de propósito: o React Query mantém a mutation em
+// `isPending` até um callback assíncrono resolver. Sem isso o botão volta
+// ao normal quando o HTTP termina, com a tela ainda mostrando o estado
+// anterior.
+onSuccess: () =>
+  queryClient.invalidateQueries({ queryKey: refundKeys.lists(), refetchType: "all" }),
+```
+
+`{ ...; }` com `;` é um **corpo de bloco**: qualquer `return` dentro dele
+precisa ser escrito explicitamente, e sem ele a função sempre devolve
+`undefined`. `() => expressão` sem chaves é um **corpo de expressão**: o
+valor da expressão **é** o retorno, automaticamente. A troca de `{ chamada;
+}` para `chamada` (sem chaves, sem `;`) é a diferença inteira entre "o
+React Query não sabe que ainda há trabalho pendente" e "o React Query
+espera o trabalho terminar". A Task 10 confirmou por `git diff` que essa foi
+a única mudança nos quatro hooks — nenhum `queryKey` nem `refetchType` foi
+alterado junto, então a correção não trocou **o que** é invalidado, só
+**quando** o React Query considera a invalidação concluída.
+
+### Lição 2 — esperar dados (React Query) não é o mesmo que esperar a rota (React Router)
+
+Corrigir os quatro hooks resolveu aprovar, rejeitar e marcar como pago — as
+três ações que **terminam na mesma tela**, com uma query para o React Query
+observar. Login, excluir e criar têm o mesmo sintoma (botão volta ao normal
+cedo demais) por uma causa **diferente**: as três terminam em **navegação**
+(para `/`, para a tela de sucesso), e não existe uma query cujo `isPending`
+descreva "a rota já assentou". `isPending` de uma mutation só sabe sobre a
+**mutation**; ele nunca soube, e não tem como saber, que o componente que a
+disparou está prestes a ser desmontado por uma troca de rota.
+
+`useNavigation()`, do modo Data do React Router, resolve isso porque
+observa uma coisa diferente: o **estado da navegação em si**, não o estado
+de uma requisição.
+
+```ts
+const navigation = useNavigation();
+const isBusy = isDeleting || navigation.state !== "idle";
+```
+
+`navigation.state` vale `"idle"` quando nenhuma navegação está em
+andamento, e `"loading"`/`"submitting"` enquanto o router está executando
+loaders/actions da rota de destino antes de trocar a tela. Combinar os
+dois estados (`isDeleting` do hook de mutation **e** `navigation.state`) é
+o que faz o botão continuar ocupado do clique até a Home realmente
+aparecer — cobre tanto a chamada HTTP quanto o tempo entre "a chamada
+terminou" e "a rota nova está pronta para ser mostrada". Usado nos três
+lugares que navegam de verdade: `PageLogin.tsx` (login → Home),
+`PageRefundDetails.tsx` (excluir → Home) e `RefundFormDialog.tsx` (criar →
+tela de sucesso) — e só neles; a Task 10 conferiu por busca que nenhum
+outro componente importa `useNavigation` sem ter uma navegação real para
+observar.
+
+**O que lembrar dos dois juntos:** "esperar" não é uma operação genérica.
+React Query sabe esperar **dados** (uma query, uma mutation); React Router
+sabe esperar **a rota**. Uma ação que só atualiza dados na mesma tela
+precisa da Lição 1; uma ação que também troca de tela precisa das duas —
+a Lição 1 para os dados, a Lição 2 para a rota. Confundir os dois leva a
+tentar consertar um problema de navegação mexendo em `invalidateQueries`
+(não adianta: a query pode estar perfeitamente sincronizada e o botão
+ainda voltar cedo, porque quem não assentou foi a rota), ou a tentar
+consertar um problema de dados com `useNavigation` (também não adianta: não
+há navegação nenhuma para observar em aprovar/rejeitar/pagar).
+
+### O que mais mudou, mais rápido
+
+- **Card de pendentes do admin** (`usePendingCount`, novo): uma consulta
+  dedicada e deliberadamente **global** (`?status=pending&per_page=1`, só
+  `total`), que ignora o filtro/busca/página da lista — ao custo de uma
+  requisição HTTP a mais por carga da Home do admin.
+- **Rótulos de card com escopo declarado**: `"Solicitações (Pago)"` quando
+  há filtro de status ativo, porque dois dos três cards da Home seguem o
+  filtro e um (pendentes) não — a ambiguidade era justamente não dizer qual
+  regra vale para qual card.
+- **Diálogos resetam ao fechar, não só ao ter sucesso**, com a limpeza de
+  erro **escopada por ação** (`pendingAction`/`errorSource`) para que
+  cancelar uma ação não apague o erro de outra ainda relevante na mesma
+  tela.
+- **Histórico de revisões com `toReversed()`, nunca `.reverse()`**: o array
+  vem do cache do React Query, e `.reverse()` muta o array original **no
+  lugar** — inverteria a ordem de uma referência que outras partes da UI
+  ainda podem estar lendo. `toReversed()` (ES2023) devolve uma cópia
+  invertida, deixando o original intacto.
+- **Sidebar: `translate-x-2` deslocava a pintura, não a caixa.**
+  `translate` é uma transformação visual — desenha o conteúdo deslocado sem
+  mover a caixa de layout; o `hover:bg-*`, que pinta a **caixa**, ficava
+  para trás, deixando uma faixa sem destaque. `pl-2` (padding, parte do box
+  model) move a caixa de verdade. No modo trilho colapsado, a correção
+  precisou de uma segunda rodada — a primeira tentativa centralizava o
+  ícone dentro do próprio botão (que já não tinha folga nenhuma para
+  redistribuir); a aritmética certa era que o `translate-x-2` original
+  centralizava o **botão inteiro** dentro do trilho mais largo
+  (`(48-32)/2 = 8`). Nenhuma das duas rodadas foi confirmada olhando a tela
+  — só matemática de caixa contra o CSS gerado (ver pendências no
+  [estado atual do projeto](plans/current-state.md)).
+
+### Verificação (Task 10, fechamento do ciclo)
+
+| Comando | Resultado |
+|---|---|
+| `npx vitest run` (×3, saída completa salva em arquivo) | **240 testes em 44 arquivos** nas três rodadas, todos verdes; flake do `ResizeObserver` ausente nas três |
+| `npx tsc -b --noEmit` | exit 0 |
+| `npm run lint` | 0 erros, 0 warnings |
+| `npm run build` | ok; bundle **559,51 → 560,74 kB** (+1,23 kB); aviso de chunk > 500 kB pré-existente |
+
+Uma rodada anterior às três formais (sem salvar a saída completa em arquivo)
+apresentou o flake do `ResizeObserver`; ficou registrada como evidência
+parcial, não como uma quarta rodada limpa — ver a pendência atualizada no
+[estado atual do projeto](plans/current-state.md).
+
+**Nada deste ciclo foi validado em navegador contra a API real** — não havia
+navegador disponível na sessão de fechamento. Um checklist de 15 pontos,
+derivado da spec, foi deixado para o Gabriel rodar contra o backend real,
+com atenção especial ao item do sidebar (o único, dos seis problemas
+originais, que a suíte automatizada não consegue confirmar nem refutar).
+Detalhes completos, task a task, em
+`Refund-FrontEnd/.superpowers/sdd/2026-07-31-loading-feedback-and-ui-fixes/`
+(`task-1-report.md` a `task-10-report.md`).

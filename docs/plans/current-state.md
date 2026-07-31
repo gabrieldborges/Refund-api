@@ -41,6 +41,21 @@ branch não tinha sido mesclada quando já estava, outra fixando um SHA que os
 próprios commits de documentação ultrapassaram no mesmo dia. Um SHA de código
 envelhece bem; "a `main` está em X" envelhece a cada commit.
 
+**Errada uma terceira vez, corrigida em 2026-07-31.** O parágrafo acima ("sem
+branch de trabalho pendente", `485cecb` como último commit do
+`Refund-FrontEnd`) ficou defasado assim que o ciclo seguinte (navegação na
+revisão e tabela de reembolsos) foi mesclado por fast-forward na `main` local
+do `Refund-FrontEnd` — sem que o fechamento daquele ciclo atualizasse este
+bloco. Estado real neste momento: a `main` local do `Refund-FrontEnd` está em
+`6cd8e41` (inclui o ciclo de navegação/tabela e dois commits de revisão da
+branch inteira posteriores a ele), mas **não foi empurrada** — o
+`origin/main` continua em `485cecb`. E **existe, de novo, uma branch de
+trabalho pendente**: `feat/loading-feedback-and-ui-fixes` (10 tasks,
+`b65bf33..5e1af46`, ver o progresso abaixo), verificada e documentada mas
+**não mesclada** — falta a validação em navegador do checklist que a Task 10
+deixou para o Gabriel. O `Refund-api` segue como descrito acima (`main` local
+à frente do remote só por commits de documentação).
+
 O contrato novo
 (`user` aninhado), de dois ciclos atrás, segue mesclado dos dois lados; o que
 resta ali — e agora também no contrato `paid` deste ciclo — é **deploy**, e
@@ -652,10 +667,122 @@ completo e obrigatório está em
     relatório da Task 13
     (`Refund-FrontEnd/.superpowers/sdd/2026-07-31-review-navigation-and-refund-table/task-13-report.md`).
 
-- **Próximo — foto de perfil (upload e exibição), no `Refund-FrontEnd`.**
-  Único item restante do backlog do frontend (ver seção abaixo). Depende de
-  implantar o backend e o frontend do ciclo de revisão juntos primeiro — ver
-  pendências.
+- **Ciclo de feature — Feedback de carregamento e ajustes de UI (frontend):
+  CONCLUÍDO, ainda NÃO MESCLADO.** Décimo ciclo de feature (quarto do
+  `Refund-FrontEnd`), na branch `feat/loading-feedback-and-ui-fixes`
+  (`b65bf33..5e1af46`, 15 commits — 2 de spec/plano, 13 de implementação em 9
+  tasks com revisão por task, mais a Task 10 de fechamento). Artefatos em
+  `Refund-FrontEnd/.superpowers/sdd/2026-07-31-loading-feedback-and-ui-fixes/`.
+  Nasceu de seis problemas relatados pelo Gabriel usando o app, dois deles com
+  a mesma causa raiz. O que mudou:
+  - **O estado de carregamento terminava antes do trabalho.** Os quatro hooks
+    de mutação (`useCreateRefund`, `useDeleteRefund`, `usePayRefund`,
+    `useReviewRefund`, em `src/features/refunds/hooks/`) descartavam a
+    *promise* devolvida por `queryClient.invalidateQueries` dentro do
+    `onSuccess` — uma instrução solta em vez de um `return`. O React Query só
+    mantém `isPending` até o `onSuccess` **resolver**; sem o `return`, ele
+    resolve no mesmo instante (a chamada nem foi aguardada), então
+    `isPending` cai assim que o HTTP termina, não quando a invalidação (e o
+    refetch que ela dispara) termina. Resultado: o botão voltava ao normal
+    com a tela ainda mostrando o estado anterior (histórico desatualizado,
+    lista antiga). A correção foi devolver a promise nos quatro hooks — só a
+    vírgula/`return` mudou, **nenhum alvo de invalidação foi alterado**
+    (conferido por `git diff` na Task 10: os quatro `queryKey`/`refetchType`
+    são byte a byte iguais ao início do ciclo). Todo botão que dispara uma
+    mutação agora mostra spinner, rótulo próprio de ocupado
+    (`"Aprovando…"`/`"Rejeitando…"`/`"Marcando como pago…"`/`"Excluindo…"`/
+    `"Enviando…"`) e `aria-busy`.
+  - **Login, excluir e criar tinham o mesmo sintoma por uma causa diferente.**
+    Esses três terminam em **navegação** (`/`, tela de sucesso), não em uma
+    query que o React Query saiba esperar. `useNavigation()` do modo Data do
+    React Router (`state !== "idle"`) mantém o botão ocupado até a **rota**
+    assentar, não até os dados chegarem — usado em `PageLogin.tsx`,
+    `PageRefundDetails.tsx` (exclusão) e `RefundFormDialog.tsx` (criação), e
+    só onde há navegação de verdade (conferido por grep na Task 10).
+  - **Card de pendentes do admin.** `usePendingCount(enabled)`
+    (`src/features/refunds/hooks/usePendingCount.ts`, novo) faz uma consulta
+    dedicada — `GET /refunds?status=pending&per_page=1`, lendo só `total` —
+    deliberadamente **global**: ignora o filtro de status, a busca e a página
+    ativos na lista da Home. **Consequência registrada:** isso é **uma
+    requisição HTTP a mais por carregamento da Home do admin**, só para esse
+    card (o usuário comum não paga esse custo — o dele já vem de
+    `GET /users/{id}/refund-stats`, que também é global por construção). Não
+    é uma solução para o agregado de valores cruzando usuários (pendência já
+    registrada abaixo, "Nenhum endpoint produz um agregado por status
+    cruzando usuários") — cobre só a **contagem** de pendentes, com um
+    endpoint que já existia.
+  - **Rótulos do card de solicitações declaram o escopo.** Com filtro de
+    status ativo, o card vira `"Solicitações (Pago)"` etc., porque dois dos
+    três cards da Home seguem o filtro e um (o de pendentes) não.
+  - **Os dois diálogos resetam ao fechar, não só ao ter sucesso** — cancelar
+    um rascunho não deixa mais o formulário sujo para a próxima abertura. Os
+    banners de erro são limpos com o mesmo cuidado, e escopados por ação
+    (`pendingAction`/`errorSource`), para que cancelar uma rejeição não apague
+    um erro de aprovação ainda relevante na mesma tela.
+  - **Tela de sucesso com dois botões.** "Nova solicitação" reabre o mesmo
+    diálogo (zerado, pelo ponto acima) sem sair da página; "Voltar para a
+    Home" navega. O gatilho trafega via `useOutletContext`
+    (`MainLayoutOutletContext`, definido em `MainLayout.tsx`) em vez de subir
+    o estado do diálogo para um store global ou um search param — os dois
+    reabririam o diálogo sozinhos depois de um refresh.
+  - **Histórico de revisões em ordem decrescente.** `ReviewTimeline.tsx` usa
+    `data.attributes.toReversed()` (não `.reverse()` — o array vive no cache
+    do React Query; mutar o cache diretamente seria um bug clássico de
+    referência compartilhada) para mostrar a decisão mais recente primeiro.
+  - **Alinhamento do sidebar.** `translate-x-2` deslocava o **conteúdo**
+    pintado do botão, não a caixa em si — o `hover:bg-*`, que pinta a caixa,
+    deixava uma faixa sem destaque à esquerda da linha. Trocado por `pl-2`
+    (padding real, parte do box model) no modo expandido. No modo trilho
+    (`collapsible=icon`), a correção precisou de uma segunda rodada: a
+    primeira tentativa centralizava o ícone **dentro** do próprio botão de
+    32px (que já se autocentra, sem folga, com o `p-2!` do variant), quando o
+    `translate-x-2` original na verdade centralizava o **botão inteiro**
+    dentro do trilho de 48px — `(48-32)/2 = 8`, o valor exato do
+    `translate-x-2`. A correção certa foi mover `justify-center` para o
+    `<li>` pai (`SidebarMenuItem`). **Sem verificação visual em nenhuma das
+    duas rodadas** — só aritmética de box model contra o CSS gerado, e as
+    duas rodadas dessa aritmética **discordaram entre si** antes de
+    convergir (ver pendências).
+  - Verificação (Task 10, três rodadas): `npx vitest run` ×3 — **240 testes
+    em 44 arquivos**, todos verdes nas três rodadas oficiais, flake do
+    `ResizeObserver` (ver pendências) ausente nas três; `npx tsc -b --noEmit`
+    (exit 0); `npm run lint` (0 erros, 0 warnings); `npm run build` (ok;
+    bundle **559,51 → 560,74 kB**, +1,23 kB — aviso de chunk > 500 kB
+    pré-existente).
+  - **Achado maior que o ciclo, registrado como pendência:** o cliente HTTP
+    do frontend (`src/lib/api.ts`) não tem timeout configurado, e não existe
+    `AbortController` em lugar nenhum de `src/`. Apareceu porque a Task 2
+    chegou a propor um "gate" que impedia fechar o diálogo de pagamento
+    enquanto a mutação estava pendente — e esse gate foi **revertido** ao se
+    perceber que, sem timeout nem cancelamento, uma requisição travada
+    deixaria o modal permanentemente sem fechar. Hoje isso não morde (nada
+    bloqueia a UI esperando resposta), mas é a mesma lacuna que tornou o gate
+    perigoso. Ver pendências.
+  - **A fixture compartilhada do histórico de revisões não era cronológica**
+    enquanto mockava um contrato (UC-013) que diz que é. Reordenada em
+    `src/test/msw/handlers.ts`, com um comentário amarrando a ordem ao
+    UC-013.
+  - **Dois fluxos de diálogo (excluir, criar) sem cobertura automatizada do
+    caminho real do usuário** ("clicar → diálogo fecha → botão continua
+    ocupado até a rota assentar"). O jsdom desmonta o `Presence` do Radix
+    Dialog de forma síncrona (sem engine de CSS para a animação de saída),
+    então o estado ocupado desaparece antes de qualquer polling conseguir
+    observá-lo. Os testes desses dois fluxos dirigem o router diretamente
+    (`router.navigate()`) em vez de simular o clique real, e dizem isso no
+    nome/comentário do teste — uma regressão futura só na interação
+    fechar-diálogo↔navegar não seria pega.
+  - **Não validado em navegador nesta sessão.** A Task 10 rodou sem
+    navegador disponível; a suíte inteira segue contra o MSW. Um checklist
+    de 15 pontos, derivado da spec, foi deixado para o Gabriel rodar contra o
+    backend real — ver o relatório da Task 10
+    (`Refund-FrontEnd/.superpowers/sdd/2026-07-31-loading-feedback-and-ui-fixes/task-10-report.md`).
+
+- **Próximo — validar em navegador o ciclo de feedback de carregamento
+  (acima), depois mesclar os dois ciclos pendentes do `Refund-FrontEnd`
+  (navegação/tabela e feedback de carregamento) e empurrar. Só então — foto
+  de perfil (upload e exibição).** Único item novo restante do backlog do
+  frontend (ver seção abaixo). Depende de implantar o backend e o frontend do
+  ciclo de revisão juntos primeiro — ver pendências.
 
 ## Backlog do frontend — o que ainda falta
 
@@ -1104,6 +1231,23 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   aparecer de novo **com a saída completa capturada**, o caminho segue sendo um
   polyfill guardado em `src/test/setup.ts`, no mesmo padrão dos que já
   existem, mas só depois de entender a ordem que o dispara.
+
+  **Nova ocorrência na Task 10 do ciclo de 2026-07-31 (feedback de
+  carregamento), com uma ressalva sobre a qualidade da captura.** A primeira
+  rodada de `npx vitest run` da sessão apresentou o flake (mesmo teste,
+  `Sidebar.test.tsx`, mesmo `ReferenceError: ResizeObserver is not defined`),
+  mas a saída completa **não** foi salva em arquivo naquela tentativa — só o
+  final (as últimas ~40 linhas, que incluem o stack trace do erro) ficou
+  capturado; o começo da saída (quais testes rodaram antes) não. As **três
+  rodadas formais seguintes**, essas com a saída completa salva em arquivo,
+  deram **240 testes em 44 arquivos, verdes, sem o flake, nas três**. Ou
+  seja: 1 ocorrência (captura parcial) em 4 rodadas totais da sessão, 0 em 3
+  quando a captura era completa. Não é a "melhor evidência até agora" que se
+  esperava — é uma evidência pior que a de tentativas anteriores, porque
+  faltou justamente o começo da saída. Fica registrado para não inflar
+  artificialmente a taxa aparente do flake com uma amostra mal capturada, e
+  para lembrar: da próxima vez que aparecer, salvar a saída em arquivo **antes**
+  de olhar para ela, não depois.
 - **Ruído de jsdom `Not implemented: navigation to another Document` —
   pré-existente, confirmado por checkout destacado.** Aparece na saída de
   `npx vitest run` desde antes deste ciclo. A confirmação foi feita rodando a
@@ -1144,6 +1288,43 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
     as duas colunas têm `enableSorting: false` e nenhum `accessorFn` de
     propósito, então `column.getCanSort()` nunca as transforma em botão.
     Ordenação por essas duas dimensões exigiria um ciclo de backend antes.
+- **O cliente HTTP do frontend não tem timeout nem `AbortController` em
+  lugar nenhum de `src/`, candidato a item de backlog.** Achado do ciclo de
+  2026-07-31 (feedback de carregamento): `src/lib/api.ts` (instância do
+  Axios) não configura `timeout`, e nenhum fluxo de `src/` cria ou consome um
+  `AbortController` — o `AbortSignal` que o TanStack Query encaminha ao Axios
+  (Item 1) cobre só o cancelamento de **queries** ao trocar de tela, não uma
+  requisição travada. Isso apareceu porque a Task 2 chegou a propor um "gate"
+  no `PayRefundDialog` que impedia fechar o diálogo enquanto a mutação de
+  pagamento estivesse pendente — e o gate foi **revertido** ao se notar que,
+  sem timeout nem cancelamento, uma requisição que nunca respondesse deixaria
+  esse modal **permanentemente sem fechar**. Hoje isso não morde: nada na UI
+  bloqueia à espera de uma resposta (a mutation fica em `isPending`, mas o
+  usuário sempre pode navegar para outro lugar), então é uma lacuna latente,
+  não um bug ativo — mas foi exatamente essa lacuna que tornou o gate
+  perigoso, e o mesmo padrão (algo que espera uma mutation antes de permitir
+  fechar/navegar) reintroduziria o risco se implementado de novo sem primeiro
+  resolver isto.
+- **Duas rodadas de aritmética de box model no sidebar discordaram entre si
+  antes de convergir, e nenhuma das duas foi confirmada por observação.** No
+  ciclo de 2026-07-31 (feedback de carregamento), a Task 9 corrigiu o hover
+  do item de navegação (`translate-x-2` deslocava só o conteúdo pintado, não
+  a caixa que o `hover:bg-*` preenche) trocando por `pl-2`. A primeira
+  rodada, no modo trilho colapsado, tentou centralizar o ícone **dentro** do
+  botão de 32px — mas esse botão já se autocentra com `p-2!` simétrico, sem
+  folga nenhuma para redistribuir; a correção não fazia nada de errado, só
+  nada de útil. A revisão dessa task recalculou a partir do zero e achou que
+  o `translate-x-2` original centralizava o **botão inteiro** dentro do
+  trilho de 48px (`(48-32)/2 = 8`, exatamente o valor do `translate-x-2`), e
+  a correção certa foi mover `justify-center` para o `<li>` pai
+  (`SidebarMenuItem`), não para o botão. **Nenhuma das duas rodadas foi
+  vista rodando** — as duas são geometria de caixa derivada do CSS gerado
+  pelo Tailwind, não uma captura de tela nem uma inspeção no DevTools. Fica
+  como o item mais preciso do checklist de navegador desta sessão (ver o
+  relatório da Task 10) exatamente porque é o único, dos seis problemas do
+  ciclo, que a suíte automatizada não consegue provar nem errado nem certo —
+  o jsdom não tem engine de layout que resolva `translate`/`padding`/
+  `justify-content` em pixels reais.
 - **`ReceiptPreview` com `refundId=""` renderiza Skeleton para sempre.** O
   `useReceipt` desabilita a query, e uma query desabilitada do TanStack reporta
   `isPending: true` indefinidamente. A prop é `string` obrigatória e hoje só a
