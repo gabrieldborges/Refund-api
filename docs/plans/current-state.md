@@ -17,14 +17,16 @@ Atualizado em: 2026-07-30.
 
 O produto é um sistema de **reembolso de despesas com comprovante**. São dois
 repositórios Git irmãos e independentes, cada um com seu remote. O
-`Refund-FrontEnd` está na `main`, sem branch de trabalho aberta e com a árvore
-limpa, em `39e0683`, igual ao `origin/main`. O `Refund-api` tem uma branch de
-trabalho aberta, `feat/refund-payment-and-stats` (`23c6675..1381241`, 28
-commits), **concluída e verificada ponta a ponta, ainda não mesclada nem
-implantada** — ver o ciclo de pagamento, histórico e estatísticas abaixo. O
-contrato novo (`user` aninhado), do ciclo anterior, segue mesclado dos dois
-lados; o que resta ali é **deploy**, e ele tem de ser conjunto (ver
-pendências):
+`Refund-FrontEnd` tem uma branch de trabalho aberta, `feat/refund-review-ui`
+(`39e0683..485cecb`, 15 commits), **concluída e verificada, ainda não mesclada
+nem implantada** — ver o ciclo do workflow de aprovação na UI abaixo. O
+`Refund-api` está na `main`, em `30b6f88`, com a branch
+`feat/refund-payment-and-stats` já **mesclada nela por fast-forward
+localmente** (ainda não empurrada para `origin/main`, que segue em `23c6675`)
+— ver o ciclo de pagamento, histórico e estatísticas abaixo. O contrato novo
+(`user` aninhado), de dois ciclos atrás, segue mesclado dos dois lados; o que
+resta ali — e agora também no contrato `paid` deste ciclo — é **deploy**, e
+ele tem de ser conjunto (ver pendências):
 
 - **`Refund-api`** — backend Python + FastAPI, Clean Architecture pragmática.
 - **`Refund-FrontEnd`** — frontend React 19 + TypeScript + Vite.
@@ -475,38 +477,87 @@ completo e obrigatório está em
     Detalhes completos em
     `.superpowers/sdd/2026-07-30-refund-payment-and-stats/task-12-report.md`.
 
-- **Próximo — o workflow de aprovação na UI, no `Refund-FrontEnd`.** Depende de
-  mesclar e implantar o ciclo acima primeiro: a tela vai consumir `paid`, o
-  comprovante de pagamento e o histórico de revisões, nenhum dos quais existe
-  no backend em produção ainda. O badge de status hoje cobre só três variantes
-  (`pending`/`approved`/`rejected`); vai precisar de uma quarta para `paid` —
-  ver pendências. O backlog remanescente está na seção abaixo.
+- **Ciclo de feature — Workflow de aprovação na UI (frontend): CONCLUÍDO,
+  ainda não mesclado na `main`.** Oitavo ciclo de feature, o segundo
+  consecutivo inteiramente de frontend, na branch `feat/refund-review-ui` do
+  `Refund-FrontEnd` (`39e0683..485cecb`, 15 commits, 9 tasks com revisão por
+  task, mais esta Task 10 de fechamento). Artefatos em
+  `Refund-FrontEnd/docs/superpowers/`
+  ([spec](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-30-refund-review-ui-design.md)),
+  ledger de execução em
+  `Refund-FrontEnd/.superpowers/sdd/2026-07-30-refund-review-ui/progress.md`.
+  Consome o ciclo de backend anterior (pagamento, histórico e estatísticas) e
+  **conserta uma quebra ativa**: `refundStatusSchema` só conhecia três status,
+  e o backend já respondia `"paid"` — o primeiro reembolso pago derrubaria a
+  Home inteira em `isError` para todo usuário. O que mudou:
+  - **Contrato absorvido primeiro** (pré-requisito de tudo o resto).
+    `refundStatusSchema` ganhou `"paid"`; `REFUND_STATUS`, um
+    `Record<RefundStatus, …>`, ganhou a quarta entrada — o próprio TypeScript
+    barra a omissão, então a mesma classe de quebra não pode se repetir nos
+    rótulos. Dois schemas novos: `refundReviewSchema` e `refundStatsSchema`.
+  - **Card "Total" da Home corrigido.** Passou a somar só `approved` + `paid`
+    (antes somava todos os status, sem sentido depois de `paid` existir);
+    terceiro card "Pendentes" com a contagem. A fonte, para o usuário comum, é
+    `GET /users/{id}/refund-stats`; para o admin (visão de todos) não existe
+    agregado equivalente — ver pendências.
+  - **Rota de revisão `/refunds/:id/review`**, lazy, com `reviewLoader`
+    redirecionando para o detalhe quando o papel não é admin ou o reembolso é
+    do próprio admin — guarda de usabilidade, não de segurança; quem garante
+    é o 403/404 do backend.
+  - **Aprovar/rejeitar** (rejeitar exige motivo, validado por Zod, num
+    `Dialog`) e **marcar como pago** (`POST /refunds/{id}/payment`,
+    multipart, comprovante obrigatório reusando as regras de
+    `refundCreateSchema`).
+  - **Histórico de revisões** (`GET /refunds/{id}/reviews`) como linha do
+    tempo no card de detalhe e na tela de revisão; **comprovante de
+    pagamento** reusando o `ReceiptPreview` existente via um prop `kind`.
+  - **Painel do solicitante** na tela de revisão: nome, contadores por status
+    e a lista de solicitações dele (`GET /refunds?user_id=`), com a mesma
+    regra de destino de clique da Home.
+  - Verificação: `npx vitest run` (**157 verdes em 38 arquivos**, partiu de
+    103 em 31), `npx tsc -b --noEmit` (exit 0), `npm run lint` (**0 erros, 0
+    warnings**), `npm run build` (ok; bundle **506,00 → 518,36 kB**,
+    +12,36 kB — o aviso de chunk > 500 kB é **pré-existente**, já estava
+    presente no ponto de partida deste ciclo, não foi introduzido por ele).
+  - **Nada deste ciclo foi validado em navegador contra a API real** — ver
+    pendências.
+  - Detalhes completos, incluindo os achados adiados task a task, em
+    `Refund-FrontEnd/.superpowers/sdd/2026-07-30-refund-review-ui/progress.md`
+    e no [diário](../learning-path-progress.md).
+
+- **Próximo — lista de reembolsos com TanStack Table (Item 13), no
+  `Refund-FrontEnd`.** A API já tem `status`, `sort`, `order` **e** `user_id`
+  disponíveis no servidor (os dois primeiros desde o ciclo de consulta da
+  listagem; `user_id` desde o ciclo de pagamento/estatísticas — e o ciclo de
+  revisão acima já o consome, mas só numa consulta fixa por reembolso, no
+  painel do solicitante). Depois dele, o ciclo da foto de perfil (upload,
+  `has_avatar`, exibição no Sidebar e na lista). Os dois dependem de implantar
+  o backend e o frontend do ciclo de revisão juntos primeiro — ver
+  pendências. O backlog remanescente está na seção abaixo.
 
 ## Backlog do frontend — o que ainda falta
 
 O ciclo de 2026-07-29 (`feat/frontend-contract-and-receipt`) absorveu o contrato
 novo, o comprovante autenticado, o badge de status e os ajustes pequenos, e **já
 está mesclado na `main`** — a `main` do `Refund-FrontEnd` consome a API atual.
+O ciclo de 2026-07-30 (workflow de aprovação, ver acima) entregou a rota de
+revisão, aprovar/rejeitar, pagamento e histórico, mas **ainda não está
+mesclado**; depende de implantar o backend correspondente junto (ver
+pendências).
 
 O que resta, em ciclos próprios (um por vez, na ordem do roadmap):
 
-### 1. Workflow de aprovação na UI
+### 1. Lista de reembolsos com TanStack Table (Item 13)
 
-Rota de revisão **só para admin**, com o clique do admin indo para lá em vez do
-detalhe; aprovar/rejeitar com **motivo obrigatório na rejeição**; **terceiro card
-na faixa de resumo** (Pendente/Aprovado), adiado desde o restyle. O badge de
-status já existe e é somente leitura. **Decidido:** a tela **não** consome o
-corpo do `PATCH` — ela invalida a query e refaz o `GET`, porque aquela resposta
-tem forma divergente (ver `UC-007` e as pendências).
+Toolbar com filtro por `status` e ordenação por `sort`/`order` **server-side**,
+mais escopo por `user_id` para o admin. Os três primeiros parâmetros existem
+desde o ciclo de consulta da listagem; `user_id` desde o ciclo de pagamento/
+estatísticas. O ciclo de revisão já consome `user_id`, mas só numa consulta
+fixa por reembolso (o painel do solicitante) — a listagem principal da Home
+continua sem toolbar nenhum. **Sem isso, um toolbar client-side filtraria só
+as linhas da página** — o erro que originou o ciclo de consulta da listagem.
 
-### 2. Lista de reembolsos com TanStack Table (Item 13)
-
-Toolbar com filtro por `status` e ordenação por `sort`/`order` **server-side**.
-Agora é honesto: a API tem os três parâmetros. **Sem isso, um toolbar
-client-side filtraria só as linhas da página** — o erro que originou o ciclo de
-consulta da listagem.
-
-### 3. Foto de perfil (upload e exibição)
+### 2. Foto de perfil (upload e exibição)
 
 `POST`/`DELETE /users/me/avatar`, gradiente como padrão, `has_avatar` decidindo
 entre foto e gradiente, e exibição no Sidebar e na lista. Os schemas já absorvem
@@ -516,6 +567,8 @@ browser. O `src/hooks/useObjectUrl.ts` foi posto na camada compartilhada
 justamente para este ciclo poder reusá-lo sem esbarrar no
 `eslint-plugin-boundaries`. Aqui também se decide o
 `avatar_filename` cru nas respostas de login/upload/remoção (ver pendências).
+**Continua sem nenhum consumidor**, inclusive depois do painel do solicitante
+do ciclo de revisão: `has_avatar` é sempre `false` até este ciclo existir.
 
 As armadilhas do frontend que continuam valendo (`ui/sidebar.tsx` editado à mão,
 a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom em
@@ -559,6 +612,46 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   **Situação em 2026-07-30:** os dois já estão na `main` — backend em `23c6675`,
   frontend em `39e0683`. O merge deixou de ser o risco; o risco agora é
   **implantar um sem o outro**, em qualquer ordem.
+  **Um segundo motivo se soma a partir do ciclo de revisão (2026-07-30):
+  `paid`.** O backend de pagamento/estatísticas (`Refund-api`, já mesclado
+  localmente na `main` em `30b6f88`, ainda não implantado) responde
+  `status: "paid"` assim que o primeiro reembolso for pago. O frontend
+  **que está em produção hoje** ainda declara `refundStatusSchema` como
+  `z.enum(["pending", "approved", "rejected"])` — exatamente a quebra que
+  motivou a abertura do ciclo de revisão (ver a spec dele). Implantar o
+  backend novo antes do frontend do ciclo de revisão (`feat/refund-review-ui`,
+  ainda não mesclado) repete o mesmo incidente: o primeiro reembolso marcado
+  como pago derruba a Home para todo usuário. Nenhuma das duas quebras tem
+  lado seguro; agora são **dois** motivos independentes, e o frontend que
+  precisa ir junto do próximo deploy de backend é o do ciclo de revisão, não
+  mais o do contrato novo.
+- **Nenhum endpoint produz um agregado por status cruzando usuários.** No card
+  "Total" da Home, para o admin (visão de todos os reembolsos), a UI mostra o
+  total **solicitado** — rótulo honesto, não `approved + paid` — porque
+  `GET /users/{id}/refund-stats` é por usuário; não serve para cruzar todos.
+  Decisão registrada na spec do ciclo de revisão: não contornar com N
+  requisições (`?status=approved&per_page=1` e `?status=paid&per_page=1`).
+  Candidato a um `GET /refunds/stats` global, por status, no backlog do
+  backend.
+- **O avatar continua sem nenhum consumidor.** `has_avatar` é sempre `false`
+  até o ciclo da foto de perfil existir — nem o painel do solicitante do
+  ciclo de revisão renderiza avatar (ver o backlog do frontend, item 2, para o
+  raciocínio completo).
+- **Onze achados menores do ciclo de revisão (2026-07-30) ficaram
+  deliberadamente adiados**, a maioria sobre lacuna de teste (um estado de
+  formulário que não reseta ao cancelar, um `accept` duplicado à mão em vez de
+  derivado de uma constante, uma asserção de montagem de componente que falta,
+  um link de PDF genérico entre dois tipos de comprovante, guardas
+  redundantes) e não sobre comportamento incorreto em produção. A lista
+  completa, achado a achado, está no ledger de execução
+  (`Refund-FrontEnd/.superpowers/sdd/2026-07-30-refund-review-ui/progress.md`),
+  não reproduzida aqui.
+- **Nada do ciclo de revisão (2026-07-30) foi validado em navegador contra a
+  API real.** Toda a suíte (157 testes) roda contra MSW, que por definição
+  devolve o payload que o próprio ciclo escreveu — o mesmo aviso já registrado
+  para os ciclos anteriores antes da validação manual do Gabriel. Essa
+  validação é dele, e é a única coisa que nenhuma quantidade de teste verde
+  substitui.
 - **Efeito colateral esperado do deploy do frontend: todo usuário logado é
   deslogado uma vez.** O `AuthContext` passou a validar a sessão do
   `localStorage` com `storedUserSchema`, que exige `id` — campo que as sessões
@@ -856,13 +949,19 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   de "não encontrado" já levanta `HttpNotFoundError` → 404. Os 500 vistos no log
   vinham do bug de concorrência (agora corrigido), não do caminho de not-found.
 
-- **Suspeita não confirmada: `ResizeObserver is not defined` em
-  `Sidebar.test.tsx`.** Relatado durante a onda de correções finais do ciclo de
-  2026-07-29 como um flake **dependente da ordem de execução**, supostamente
-  reproduzível também no baseline intocado (`b86d314`). A suíte completa rodou
-  **3× na ponta da branch e não reproduziu**. Fica registrado como suspeita —
-  nem confirmado nem refutado. Se aparecer, o caminho é um polyfill guardado em
-  `src/test/setup.ts`, no mesmo padrão dos que já existem.
+- **`ResizeObserver is not defined` em `Sidebar.test.tsx` — observado de novo,
+  dependente da ordem de execução, ainda sem explicação.** Deixa de ser
+  suspeita não confirmada: relatado pela primeira vez durante a onda de
+  correções finais do ciclo de 2026-07-29 (3 rodadas completas na ponta da
+  branch não reproduziram) e **observado de novo durante a Task 4 do ciclo de
+  2026-07-30** (workflow de aprovação), de novo numa **rodada de suíte
+  completa** e de novo **não reproduzível isoladamente**. Duas ocorrências
+  independentes, ambas só em conjunto com o resto da suíte, tornam a hipótese
+  de coincidência menos plausível — mas a causa continua desconhecida; nenhuma
+  investigação isolou a interação real entre arquivos de teste. Se aparecer de
+  novo, o caminho segue sendo um polyfill guardado em `src/test/setup.ts`, no
+  mesmo padrão dos que já existem, mas só depois de entender a ordem que o
+  dispara.
 - **`per_page: 10` é literal escrito à mão em `src/test/msw/handlers.ts`.** Não
   deriva de `REFUNDS_PER_PAGE`, então pode voltar a divergir num ajuste futuro —
   a mesma classe de problema que o ciclo acabou de fechar no código de produção.

@@ -2998,3 +2998,264 @@ report.md`.
   expressável como uma asserção sobre um mock: uma precisa do Postgres real
   atrás de um proxy real; a outra precisa da combinação de quatro status
   reais que nenhum teste unitário isolado compõe sozinho.
+
+## Ciclo de feature — Workflow de aprovação na UI (2026-07-30)
+
+Oitavo ciclo de feature, o segundo consecutivo inteiramente de frontend, na
+branch `feat/refund-review-ui` do `Refund-FrontEnd` (`39e0683..485cecb`, 15
+commits, 9 tasks com revisão por task). Artefatos em
+`Refund-FrontEnd/.superpowers/sdd/2026-07-30-refund-review-ui/`
+([spec](../../Refund-FrontEnd/docs/superpowers/specs/2026-07-30-refund-review-ui-design.md)).
+Consome o ciclo de backend anterior (pagamento, histórico e estatísticas) e
+constrói a tela de revisão, aprovar/rejeitar, marcar como pago, o histórico de
+revisões e o painel do solicitante.
+
+### Por que agora
+
+Isto não era só "a próxima tela do roadmap". Havia uma incompatibilidade ativa
+entre o que a `main` do `Refund-api` já produz e o que a `main` do
+`Refund-FrontEnd` sabia ler: o backend do ciclo anterior devolve um quarto
+status, `"paid"`, e o schema do frontend só conhecia três. A Task 1 deste
+ciclo existiu para consertar isso antes de qualquer tela nova ser construída
+em cima — e o jeito como ela foi consertada é a primeira lição que vale
+preservar.
+
+### Lição 1 — um enum de três valores virou uma queda total da tela principal quando o servidor ganhou o quarto
+
+**O estado que quebrava.** `src/features/refunds/schemas/refund.ts` declarava:
+
+```ts
+export const refundStatusSchema = z.enum(["pending", "approved", "rejected"]);
+```
+
+O `.parse()` desse schema roda na fronteira de toda resposta de reembolso —
+listagem, detalhe, criação. Assim que a API (que já ganhou `paid` no ciclo de
+backend anterior) devolvesse **um único** reembolso pago, o Zod levantava, o
+`useRefunds` caía em `isError`, e a Home mostrava "Não foi possível carregar
+as solicitações" — não para quem tentasse ver aquele reembolso específico,
+para **todo usuário**, porque a lista inteira falha se um item dela não
+valida. Reproduzido antes do conserto, isolando só o schema:
+
+```
+$ npx vitest run src/features/refunds/schemas/refund.test.ts
+ ❯ refundSchema > accepts a refund whose status is paid
+ZodError: [
+  {
+    "code": "invalid_value",
+    "values": ["pending", "approved", "rejected"],
+    "path": ["status"],
+    "message": "Invalid option: expected one of \"pending\"|\"approved\"|\"rejected\""
+  }
+]
+```
+
+**A causa raiz não é "esquecer de atualizar um enum".** É que um `z.enum` na
+fronteira do cliente e o `status` que o banco aceita são **dois contratos
+distintos, mantidos em dois repositórios**, e nada os mantém sincronizados
+automaticamente — o tipo do TypeScript é tão fechado quanto a lista de
+strings que alguém escreveu à mão, e essa lista só muda quando alguém a
+lembra de mudar. Um enum de três valores no cliente não é "menos flexível que
+o quarto valor do servidor" por acidente; ele é **exatamente** tão flexível
+quanto o último ciclo que o tocou.
+
+**O conserto:**
+
+```ts
+export const refundStatusSchema = z.enum(["pending", "approved", "rejected", "paid"]);
+```
+
+Uma linha. O que evita a **próxima** versão do mesmo incidente — um quinto
+status, ou um rótulo esquecido para o quarto — não é essa linha; é o mapa de
+rótulos ao lado dela:
+
+```ts
+export const REFUND_STATUS: Record<
+  RefundStatus,
+  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+> = {
+  pending: { label: "Pendente", variant: "secondary" },
+  approved: { label: "Aprovado", variant: "default" },
+  rejected: { label: "Rejeitado", variant: "destructive" },
+  // paid: ainda não existia aqui — e o TypeScript recusou compilar até existir.
+};
+```
+
+`Record<RefundStatus, …>` é um tipo mapeado: para cada valor possível do tipo
+`RefundStatus` (derivado do `z.enum` acima via `z.output`), o TypeScript
+**exige** uma entrada correspondente no objeto. Alargar o `z.enum` sem
+acrescentar `paid` ao `REFUND_STATUS` não é um estado que compila e falha em
+runtime — é um estado que **não compila**:
+
+```
+$ npx tsc -b --noEmit
+src/features/refunds/constants/status.ts(5,14): error TS2741: Property 'paid' is
+missing in type '{ pending: {...}; approved: {...}; rejected: {...}; }' but
+required in type 'Record<"pending" | "approved" | "rejected" | "paid",
+{ label: string; variant: "default" | "destructive" | "secondary"; }>'.
+```
+
+Esse erro apareceu de propósito, antes do conserto — a Task 1 alargou o enum
+primeiro e só então rodou `tsc` para **ver** essa mensagem, em vez de
+adicionar as duas mudanças juntas e confiar que o par estava certo. Depois de
+acrescentar `paid: { label: "Pago", variant: "outline" }`, o mesmo comando
+voltou limpo:
+
+```
+$ npx tsc -b --noEmit
+EXIT: 0
+```
+
+**Por que isso importa mais do que parece.** O `z.enum` e o `Record` resolvem
+dois problemas diferentes que parecem o mesmo problema. O `z.enum` protege a
+**fronteira** — nenhum valor desconhecido entra no cache ou no render. Mas
+sozinho ele não protege o que já passou da fronteira: nada impede alguém de
+escrever um `switch` ou uma cadeia de `if` que trata só os status que existiam
+quando foi escrita, silenciosamente ignorando um quarto. É o `Record<RefundStatus,
+…>` — não o `z.enum` — que fecha esse segundo buraco, porque ele amarra a
+**lista de rótulos** ao mesmo tipo que a fronteira produz: qualquer
+divergência entre os dois vira um erro de compilação, não um badge faltando
+em produção. A revisão da Task 1 confirmou por busca que os dois únicos
+lugares que ramificam por status (`PageHome.tsx` e `PageRefundDetails.tsx`)
+passam pelo `REFUND_STATUS`, não por um `switch` próprio — então essa rede
+cobre tudo o que existe hoje. Ela **não** cobre automaticamente um quinto
+status futuro fora desse par (`z.enum` + `Record`); esse é o achado adiado da
+Task 1, registrado no ledger.
+
+### Lição 2 — as revisões pararam de achar bugs e passaram a achar testes que não podiam falhar
+
+Ao longo das nove tasks deste ciclo, o código de produção passou por revisão
+quase sempre limpo. O que as revisões encontraram, de novo e de novo, não foi
+comportamento errado — foi **cobertura ausente exatamente na linha mais
+cara de errar**. Dois exemplos concretos valem registrar, porque são o mesmo
+padrão em duas formas diferentes.
+
+**Exemplo A — a invalidação de cache sem teste nenhum, na linha cujo
+comentário documenta que esse bug já vazou uma vez neste código.**
+`useReviewRefund.ts`, o hook por trás de Aprovar/Rejeitar, tem este
+comentário sobre a própria chamada de invalidação:
+
+```ts
+// Mesmo raciocínio do useDeleteRefund, mas mirando refundKeys.all (não só
+// .lists()): a tela de revisão parte do detalhe do PRÓPRIO reembolso
+// revisado, então tanto a lista da Home quanto o detalhe (se houver alguém
+// olhando) precisam refletir o novo status — ao contrário da exclusão, o
+// item revisado continua existindo, só muda de estado. A Home fica
+// INATIVA enquanto se revisa, e o refetchType padrão ("active") deixaria
+// sua lista velha por até o staleTime; "all" força o refetch mesmo assim.
+onSuccess: () => {
+  queryClient.invalidateQueries({ queryKey: refundKeys.all, refetchType: "all" });
+},
+```
+
+"Mesmo raciocínio do `useDeleteRefund`" aponta direto para um bug real deste
+diário — a correção de runtime de 2026-07-25, quando `invalidateQueries` sem
+`refetchType: "all"` deixava a lista **inativa** (a Home, fora de tela durante
+a revisão) sem refazer o `GET`, escondendo a mudança por até o `staleTime`. O
+código novo já nasceu citando essa história — mas nasceu **sem teste algum**
+que provasse que a citação estava certa. A Task 5 foi para correção com esse
+achado como "importante": nada impedia alguém de trocar `refundKeys.all` por
+`refundKeys.detail(id)` (um refactor que parece uma limpeza razoável) e
+reintroduzir exatamente o bug que o comentário descreve, em silêncio. O
+conserto foi um teste de regressão contra um `QueryClient` real, com uma
+lista e um detalhe **inativos** propositalmente semeados, provando que os
+dois voltam a ser refetchados — o mesmo molde que `useDeleteRefund.test.tsx`
+já usava.
+
+**Exemplo B — quatro testes verdes enquanto o componente buscava o endpoint
+errado, porque duas fixtures do MSW eram byte-idênticas.** `ReceiptPreview`
+recebe um prop `kind` (`"expense"` | `"payment"`) que decide **qual** rota
+chamar e **qual** rótulo mostrar. Os handlers de mock para as duas rotas
+serviam o mesmo PNG:
+
+```ts
+http.get("*/refunds/:id/receipt", () => new HttpResponse(receiptPngBytes, {
+  headers: { "Content-Type": "image/png" },
+})),
+http.get("*/refunds/:id/payment-receipt", () => new HttpResponse(receiptPngBytes, {
+  headers: { "Content-Type": "image/png" },
+})), // mesmo PNG do handler acima
+```
+
+Um `useReceipt` que ignorasse `kind` silenciosamente e sempre chamasse
+`/receipt` continuava passando os quatro testes que exercitavam
+`kind="payment"` — porque o nome acessível vinha do **prop**, não da resposta
+de rede, e a imagem renderizada era indistinguível de qualquer forma. O teste
+provava que a etiqueta estava certa; não provava que a busca estava certa.
+
+**O conserto não acrescentou nenhum teste novo.** Deu às duas fixtures **tipos
+de mídia diferentes** — a de pagamento virou um PDF (`%PDF`, `application/pdf`)
+em vez de outro PNG:
+
+```ts
+// O %PDF. Deliberadamente um FORMATO diferente da fixture de despesa acima,
+// não só bytes diferentes do mesmo tipo: ReceiptPreview ramifica seu markup
+// por blob.type (<img> vs. <object> + fallback <a>), então um teste consegue
+// distinguir "o endpoint de pagamento foi realmente chamado" de "o endpoint
+// de despesa foi chamado e o resultado só foi rotulado como pagamento" — a
+// segunda opção ainda produziria um PNG idêntico se o useReceipt ignorasse
+// `kind` em silêncio, mas não consegue produzir um DOM em formato de PDF.
+const paymentReceiptPdfBytes = new Uint8Array([37, 80, 68, 70]);
+```
+
+Como `ReceiptPreview` renderiza `<img>` para imagem e `<object>` + link de
+fallback para PDF, os **testes já escritos** — que checavam o rótulo — agora
+só passam se o componente realmente tiver renderizado o ramo de PDF, o que só
+acontece se a rota certa tiver sido chamada. Nenhuma asserção nova; a
+distinção nasceu inteira da fixture.
+
+### O que lembrar
+
+- **Um enum fechado na fronteira do cliente vale exatamente o que o último
+  ciclo que o tocou lembrou de incluir.** Ele não "sincroniza" com o servidor;
+  ele descreve uma crença sobre o servidor, escrita numa data específica. Um
+  quarto valor do lado de lá não é uma mudança rara — é o próximo passo
+  esperado de qualquer máquina de estados viva.
+- **`z.enum` protege a entrada; `Record<T, …>` protege o que vem depois dela.**
+  São duas redes diferentes contra a mesma classe de erro. A primeira barra um
+  valor desconhecido na fronteira; a segunda barra esquecer de tratar um valor
+  conhecido mais adiante. Nenhuma substitui a outra, e a segunda só existe se
+  **todo** ramo por status passar por um `Record`, nunca por um `switch` ou
+  uma cadeia de `if` paralela — o que vale a pena confirmar por busca, não por
+  suposição, como a revisão da Task 1 fez.
+- **Ver o `tsc` falhar antes de corrigir não é teatro — é a prova de que a
+  rede de segurança alegada existe de verdade.** A Task 1 poderia ter feito as
+  duas mudanças (enum + rótulo) juntas e simplesmente afirmado que uma
+  protege a outra. Em vez disso, alargou uma, rodou `tsc`, leu o erro exato
+  que a documentação prometia, e só então corrigiu. A diferença entre
+  "deveria falhar" e "vi falhar" é a mesma diferença que apareceu no ciclo de
+  backend anterior com o portão do `SHOW lock_timeout`.
+- **Uma suíte 100% verde não distingue "a etiqueta está certa" de "a busca
+  está certa" — só uma fixture que force os dois caminhos a produzir DOMs
+  diferentes faz essa distinção.** Duas fixtures byte-idênticas por trás de
+  duas rotas diferentes são, do ponto de vista de qualquer asserção sobre o
+  DOM final, a mesma fixture. O teste não estava fraco por acidente; estava
+  fraco porque os dados de teste, não o código, eram indistinguíveis.
+- **Um comentário que cita um bug antigo é uma promessa, não uma prova.** O
+  `useReviewRefund.ts` "citava" corretamente a lição do `useDeleteRefund`, mas
+  citar sem testar deixa a promessa quebrável pelo primeiro refactor que
+  pareça inocente. A prova é o teste que fica vermelho quando alguém desfaz a
+  citação.
+- **Quando a revisão para de achar bugs, ela não acabou — mudou de alvo.**
+  Onze achados menores deste ciclo (registrados achado a achado no ledger de
+  execução, não reproduzidos aqui) são quase todos lacunas de cobertura, não
+  comportamento incorreto. Isso não é evidência de que o código está pronto;
+  é evidência de que **a pergunta certa mudou** de "isto funciona?" para
+  "existe alguma mudança futura, plausível e bem-intencionada, que este teste
+  deixaria passar sem avisar?".
+
+### Verificação
+
+| Comando | Resultado |
+|---|---|
+| `npx vitest run` | **157 testes em 38 arquivos**, todos verdes (partiu de 103 em 31) |
+| `npx tsc -b --noEmit` | exit 0 |
+| `npm run lint` | 0 erros, 0 warnings |
+| `npm run build` | ok; bundle **506,00 → 518,36 kB** (+12,36 kB); aviso de chunk > 500 kB **pré-existente**, presente desde o início deste ciclo |
+
+**Nada deste ciclo foi validado em navegador contra a API real** — toda a
+suíte roda contra MSW. É a mesma ressalva já registrada para os ciclos
+anteriores até a validação manual do Gabriel acontecer, e continua sendo dele,
+não substituível por nenhum número acima. Detalhes completos, task a task,
+em `Refund-FrontEnd/.superpowers/sdd/2026-07-30-refund-review-ui/progress.md`
+e nos relatórios individuais (`task-1-report.md` a `task-9-report.md`) na
+mesma pasta.
