@@ -23,11 +23,17 @@ workflow de aprovação na UI no frontend — foram mesclados por fast-forward,
 cada um depois de revisão por task e revisão da branch inteira. Último commit de
 código: `30b6f88` no `Refund-api`, `485cecb` no `Refund-FrontEnd`.
 
-**Nenhum dos dois foi empurrado para o respectivo remote.** O `origin/main` do
-`Refund-api` segue em `23c6675` e o do `Refund-FrontEnd` em `39e0683` — ou seja,
-os dois remotes ainda contêm o par de contratos anterior, que é coerente entre
-si. Isso é conveniente: enquanto ninguém empurrar, não há como um dos lados
-subir sozinho.
+**Os dois foram empurrados para os respectivos remotes em 2026-07-30.** O
+`origin/main` do `Refund-FrontEnd` está em `485cecb`, idêntico ao local; o do
+`Refund-api` contém todo o código do ciclo, ficando atrás apenas de commits de
+documentação posteriores ao push.
+
+**Isso encerra uma proteção acidental que existia até aqui.** Enquanto nada
+estava empurrado, os dois remotes guardavam o par de contratos anterior, que era
+coerente entre si — nenhum lado conseguia subir sozinho porque nenhum lado
+existia lá. Agora os dois contratos novos estão publicados, e a única coisa que
+impede um deploy pela metade é quem aperta o botão. Ver a pendência de deploy
+conjunto: ela deixou de ser teórica.
 
 **Ao ler este bloco numa sessão futura, confira-o contra o `git` antes de
 confiar nele.** Esta seção já esteve errada duas vezes: uma afirmando que uma
@@ -445,8 +451,8 @@ completo e obrigatório está em
 
 - **Ciclo de feature — Pagamento, histórico de revisões e estatísticas
   (backend): CONCLUÍDO e MESCLADO na `main`** por fast-forward
-  (`23c6675..30b6f88`, 30 commits), **ainda não empurrado para o
-  `origin/main`**, que segue em `23c6675`. Sétimo ciclo, o segundo inteiramente
+  (`23c6675..30b6f88`, 30 commits) e **publicado no `origin/main`**. Sétimo
+  ciclo, o segundo inteiramente
   de backend, na branch `feat/refund-payment-and-stats` do `Refund-api`,
   executado em 12 tasks com revisão por task, mais uma revisão da branch
   inteira. O ledger de execução ficava em `.superpowers/sdd/2026-07-30-refund-payment-and-stats/`
@@ -509,7 +515,7 @@ completo e obrigatório está em
 
 - **Ciclo de feature — Workflow de aprovação na UI (frontend): CONCLUÍDO e
   MESCLADO na `main`** por fast-forward (`39e0683..485cecb`, 15 commits),
-  **ainda não empurrado** para o `origin/main`, que segue em `39e0683`. Oitavo
+  e **publicado no `origin/main`**. Oitavo
   ciclo de feature, o segundo consecutivo inteiramente de frontend, na branch
   `feat/refund-review-ui` do `Refund-FrontEnd`, executado em 9 tasks com revisão
   por task, mais a Task 10 de fechamento e a revisão da branch inteira.
@@ -655,22 +661,25 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   não existe nenhuma**. Os dois têm de ser implantados no mesmo momento. Se isso
   não for viável, a alternativa é uma versão de transição devolvendo `user_id`
   **e** `user`, removendo `user_id` só depois.
-  **Situação em 2026-07-30:** os dois já estão na `main` — backend em `23c6675`,
-  frontend em `39e0683`. O merge deixou de ser o risco; o risco agora é
-  **implantar um sem o outro**, em qualquer ordem.
   **Um segundo motivo se soma a partir do ciclo de revisão (2026-07-30):
-  `paid`.** O backend de pagamento/estatísticas (`Refund-api`, já mesclado
-  localmente na `main` em `30b6f88`, ainda não implantado) responde
-  `status: "paid"` assim que o primeiro reembolso for pago. O frontend
-  **que está em produção hoje** ainda declara `refundStatusSchema` como
+  `paid`.** O backend de pagamento/estatísticas responde `status: "paid"` assim
+  que o primeiro reembolso for pago. O frontend **que está em produção hoje**
+  ainda declara `refundStatusSchema` como
   `z.enum(["pending", "approved", "rejected"])` — exatamente a quebra que
-  motivou a abertura do ciclo de revisão (ver a spec dele). Implantar o
-  backend novo antes do frontend do ciclo de revisão (`feat/refund-review-ui`,
-  ainda não mesclado) repete o mesmo incidente: o primeiro reembolso marcado
-  como pago derruba a Home para todo usuário. Nenhuma das duas quebras tem
-  lado seguro; agora são **dois** motivos independentes, e o frontend que
-  precisa ir junto do próximo deploy de backend é o do ciclo de revisão, não
-  mais o do contrato novo.
+  motivou a abertura do ciclo de revisão (ver a spec dele). São **dois** motivos
+  independentes agora, nenhum com lado seguro.
+
+  **Situação em 2026-07-30, depois do push:** os dois ciclos estão mesclados nas
+  respectivas `main` **e publicados nos remotes**. O merge deixou de ser o risco,
+  e a proteção acidental do "nada empurrado" acabou junto. **A única coisa entre
+  o estado atual e uma quebra em produção é a decisão de implantar** — os dois
+  lados precisam subir no mesmo momento, em qualquer ordem que não seja
+  simultânea alguém quebra. Se o deploy for automático a partir da `main` de
+  cada repositório, isso já pode ter acontecido; se for manual, o cuidado é de
+  quem dispara. Se a simultaneidade não for viável, a alternativa registrada
+  continua sendo uma versão de transição do backend devolvendo `user_id` **e**
+  `user`, e tolerando um frontend que ainda não conhece `paid` — o que exigiria
+  não pagar nenhum reembolso até o frontend subir.
 - **Nenhum endpoint produz um agregado por status cruzando usuários.** No card
   "Total" da Home, para o admin (visão de todos os reembolsos), a UI mostra o
   total **solicitado** — rótulo honesto, não `approved + paid` — porque
