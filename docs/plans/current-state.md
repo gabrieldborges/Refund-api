@@ -23,8 +23,12 @@ Verificado por `git ls-remote`, não por `git status`:
 
 | | `main` local | `origin/main` | pendente |
 |---|---|---|---|
-| `Refund-api` | `842d051` | `7aac636` | 1 commit de documentação **não empurrado** |
+| `Refund-api` | `c3e6376` | `7aac636` | 2 commits de documentação **não empurrados** |
 | `Refund-FrontEnd` | `6c63ff5` | `6c63ff5` | 1 branch **não mesclada** (ver abaixo) |
+
+Reconferido em 2026-08-03, e **o quadro já estava errado de novo**: dizia
+`842d051` e 1 commit pendente, quando o próprio commit que escreveu essa linha
+(`c3e6376`) a ultrapassou. É a quinta vez — exatamente o padrão descrito abaixo.
 
 **Existe uma branch de trabalho pendente no `Refund-FrontEnd`:**
 `feat/pagination-busy-state`, um commit (`d33fb65`), verificada mas não
@@ -42,17 +46,23 @@ mesclado sem que o fechamento atualizasse aqui. O padrão é sempre o mesmo — 
 frase "a `main` está em X" nasce verdadeira e morre em silêncio. Um SHA de
 código citado *dentro de um ciclo* envelhece bem; este quadro, não.
 
-**Não há mais proteção acidental contra um deploy pela metade.** Enquanto nada
-estava empurrado, os remotes guardavam um par de contratos coerente entre si e
-nenhum lado conseguia subir sozinho. Hoje os dois lados estão publicados, com
-dois ciclos de mudança de contrato acumulados, e a única coisa entre o estado
-atual e uma quebra em produção é a decisão de implantar — ver a pendência de
-deploy conjunto, que deixou de ser teórica.
+**NÃO EXISTE PRODUÇÃO — verificado em 2026-08-03.** Este documento passou
+semanas tratando o deploy conjunto como o risco mais grave do projeto, e
+deixava em aberto se o deploy era automático a partir da `main` ou manual.
+**Não é nenhum dos dois: não há deploy nenhum.** "Os dois lados estão
+publicados" sempre significou publicados no **GitHub**, não implantados em
+lugar algum. A premissa de que existia uma produção nunca havia sido
+verificada; foi verificada agora, e é falsa. As evidências, e o que sobra de
+verdadeiro, estão na pendência de deploy, reescrita.
 
-O contrato novo
-(`user` aninhado), de dois ciclos atrás, segue mesclado dos dois lados; o que
-resta ali — e agora também no contrato `paid` deste ciclo — é **deploy**, e
-ele tem de ser conjunto (ver pendências):
+A divergência entre os contratos é real e as duas `main` continuam sem poder
+subir em momentos diferentes — mas isso é uma **restrição da primeira
+implantação**, não algo que quebra sozinho enquanto ninguém age.
+
+O contrato novo (`user` aninhado), de dois ciclos atrás, segue mesclado dos
+dois lados; o que resta ali — e também no contrato `paid` — é **deploy**.
+
+O produto vive em dois repositórios:
 
 - **`Refund-api`** — backend Python + FastAPI, Clean Architecture pragmática.
 - **`Refund-FrontEnd`** — frontend React 19 + TypeScript + Vite.
@@ -327,6 +337,10 @@ completo e obrigatório está em
     chaves desconhecidas por padrão. O merge já aconteceu nos dois repos, então
     a restrição vale agora para o **deploy**: implantar **primeiro** o
     `Refund-api`, **depois** o `Refund-FrontEnd`.
+    **Atualização de 2026-08-03:** essa ordem nunca chegou a ser exercida e
+    ficou superada pelo ciclo seguinte, que removeu `user_id` do topo e assim
+    eliminou qualquer ordem segura. Como não existe produção, as duas `main`
+    sobem juntas na primeira implantação e a questão de ordem desaparece.
 
 - **Ciclo de feature — Workflow de aprovação (backend): CONCLUÍDO.**
   Terceiro ciclo de feature e o primeiro inteiramente de backend, na branch
@@ -381,7 +395,9 @@ completo e obrigatório está em
   - Verificação: `pytest` (**154 verdes**, partiu de 105), `pylint src`
     (**10.00/10**), ciclo `upgrade`/`downgrade` real, e **19/19 cenários ponta a
     ponta** contra a API real. Detalhes no [diário](../learning-path-progress.md).
-  - **Backend e frontend TÊM de ir para produção juntos** — ver pendências.
+  - **Backend e frontend TÊM de ir para produção juntos** — continua valendo,
+    mas para a **primeira** implantação; não existe produção (reclassificado em
+    2026-08-03, ver pendências).
 
 - **Ciclo de feature — Servir arquivos com autenticação (backend): CONCLUÍDO.**
   Quinto ciclo, na branch `feat/authenticated-file-serving` (`55be4d4..ba51c4b`,
@@ -887,9 +903,10 @@ O que fica aberto, em ordem de quem depende de quem:
 2. **Validar em navegador** os dois ciclos mesclados e a branch de paginação.
    É a única evidência que a suíte não produz — ela roda inteira contra o MSW.
 3. **Mesclar `feat/pagination-busy-state`** depois da validação.
-4. **Decidir o deploy conjunto.** Os dois lados do contrato estão publicados
-   nos remotes e nunca foram implantados juntos. É o risco mais antigo e o
-   único que produz quebra em produção sem ninguém escrever código.
+4. ~~**Decidir o deploy conjunto.**~~ **RESOLVIDO em 2026-08-03** — por
+   verificação, não por implantação. Não existe produção: o risco era
+   contingente a um ambiente que nunca foi criado. Ver a pendência reescrita e
+   os cinco bloqueios técnicos do primeiro deploy.
 5. **Próximo ciclo: foto de perfil.**
 
 Duas coisas que esta sessão aprendeu sobre o próprio processo, e que valem
@@ -917,7 +934,9 @@ está mesclado na `main`** — a `main` do `Refund-FrontEnd` consome a API atual
 O ciclo de 2026-07-30 (workflow de aprovação, ver acima) entregou a rota de
 revisão, aprovar/rejeitar, pagamento, histórico, comprovante de pagamento e o
 painel do solicitante, **está mesclado na `main` e foi validado visualmente pelo
-Gabriel**. Falta implantá-lo junto do backend correspondente (ver pendências).
+Gabriel**. Falta implantá-lo junto do backend correspondente — o que, desde a
+verificação de 2026-08-03, significa o **primeiro** deploy do projeto, não um
+redeploy sobre algo existente (ver pendências).
 O ciclo de 2026-07-31 (navegação na revisão e tabela de reembolsos, ver acima)
 **fecha o Item 13** — a Home já filtra e ordena `status`/`sort`/`order`
 server-side através de uma `RefundsTable`; escopo por `user_id` para o admin
@@ -968,41 +987,87 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   backend. Isso mantém viva a pendência da forma divergente logo abaixo, agora
   como algo deliberado e sem consumidor.
 
-- **DEPLOY CONJUNTO OBRIGATÓRIO — esta quebra não tem lado seguro, e continua
-  valendo.** O ciclo de 2026-07-29 tirou `user_id` do topo das respostas de
-  reembolso e o moveu para `user.id`. O frontend **que está em produção** declara
-  `user_id` como **obrigatório** no Zod: implantar só o backend faz o `.parse`
-  falhar em toda listagem. E o inverso falha igual, porque o frontend da `main`
-  exige `user` e o backend em produção ainda não o envia. Diferente do
-  `sum_amount_in_cents` do ciclo anterior — que tinha uma ordem segura — **aqui
-  não existe nenhuma**. Os dois têm de ser implantados no mesmo momento. Se isso
-  não for viável, a alternativa é uma versão de transição devolvendo `user_id`
-  **e** `user`, removendo `user_id` só depois.
-  **Um segundo motivo se soma a partir do ciclo de revisão (2026-07-30):
-  `paid`.** O backend de pagamento/estatísticas responde `status: "paid"` assim
-  que o primeiro reembolso for pago. O frontend **que está em produção hoje**
-  ainda declara `refundStatusSchema` como
-  `z.enum(["pending", "approved", "rejected"])` — exatamente a quebra que
-  motivou a abertura do ciclo de revisão (ver a spec dele). São **dois** motivos
-  independentes agora, nenhum com lado seguro.
+- **DEPLOY CONJUNTO — RECLASSIFICADO em 2026-08-03: é uma restrição da
+  PRIMEIRA implantação, não um risco ativo.** Este item passou semanas descrito
+  aqui como "o risco mais antigo do projeto e o único que produz quebra em
+  produção sem ninguém escrever código". Ele repousava numa premissa que nunca
+  havia sido verificada — a de que existe uma produção. Foi verificada, e é
+  falsa.
 
-  **Situação em 2026-07-30, depois do push:** os dois ciclos estão mesclados nas
-  respectivas `main` **e publicados nos remotes**. O merge deixou de ser o risco,
-  e a proteção acidental do "nada empurrado" acabou junto. **A única coisa entre
-  o estado atual e uma quebra em produção é a decisão de implantar** — os dois
-  lados precisam subir no mesmo momento, em qualquer ordem que não seja
-  simultânea alguém quebra. Se o deploy for automático a partir da `main` de
-  cada repositório, isso já pode ter acontecido; se for manual, o cuidado é de
-  quem dispara. Se a simultaneidade não for viável, a alternativa registrada
-  continua sendo uma versão de transição do backend devolvendo `user_id` **e**
-  `user`, e tolerando um frontend que ainda não conhece `paid` — o que exigiria
-  não pagar nenhum reembolso até o frontend subir.
+  **Evidências levantadas nos dois repositórios em 2026-08-03:**
 
-  **Atualização em 2026-07-31:** desde então mais dois ciclos de frontend foram
-  mesclados e empurrados (navegação/tabela e feedback de carregamento). Nenhum
-  deles muda o contrato com a API — são consumo e UI —, então o risco não mudou
-  de natureza, só de volume: há mais código publicado dependendo do mesmo par de
-  contratos que ainda não foi implantado junto.
+  | Verificação | Resultado |
+  |---|---|
+  | `Dockerfile`, `render.yaml`, `vercel.json`, `fly.toml`, `Procfile` | nenhum |
+  | `.github/workflows` (CI) | nenhum |
+  | CORS do backend (`src/main/server/server.py:23`) | `allow_origins=["http://localhost:5173"]` |
+  | `VITE_API_URL` (`Refund-FrontEnd/.env`) | `http://localhost:3333` |
+  | URL de produção citada em docs/READMEs | nenhuma |
+  | Seção de deploy no `roadmap.md` | nenhuma |
+  | Serviço de hospedagem conectado ao GitHub | **nenhum — confirmado pelo Gabriel** |
+
+  A varredura do repositório **não bastaria sozinha**: um deploy pode ser
+  configurado inteiramente no painel do provedor (Render, Vercel, Railway
+  conectados ao GitHub), sem deixar rastro nenhum no código. Por isso a última
+  linha da tabela é uma confirmação do Gabriel, e não uma inferência a partir
+  dos arquivos. Quem reabrir este item deve refazer **as duas** perguntas.
+
+  **O CORS é a evidência que fecha o caso.** Ainda que um frontend estivesse
+  implantado em algum domínio, o navegador bloquearia **toda** requisição dele
+  antes de qualquer `.parse` do Zod rodar. A divergência de contrato nem
+  chegaria a ser o modo de falha observado.
+
+  **O que continua verdadeiro.** A divergência é real e as duas `main` não
+  podem ser implantadas em momentos diferentes: `user_id` saiu do topo das
+  respostas e virou `user.id`, e o backend responde `status: "paid"`, que o
+  `refundStatusSchema` de um frontend anterior não conhece. Nenhum dos dois
+  lados tolera a versão antiga do outro, em nenhuma ordem. Isso vale
+  integralmente para a **primeira** implantação.
+
+  **O que deixou de ser verdadeiro.** Que algo pode quebrar sozinho enquanto
+  ninguém age. Não pode: não há processo automático, não há ambiente rodando e
+  não há usuário. O custo de errar a ordem no primeiro deploy é uma tela
+  quebrada num ambiente ainda sem ninguém dentro — não uma quebra sobre algo em
+  uso. A restrição volta a ter dentes no instante em que existir um ambiente
+  implantado.
+
+  **A alternativa registrada fica descartada.** A "versão de transição"
+  devolvendo `user_id` **e** `user` existia para acomodar um cliente antigo já
+  em produção. Não há cliente antigo. Implantar os dois lados a partir das
+  `main` atuais é coerente por construção.
+
+  **Lição de processo, que vale mais que o item.** Um risco foi carregado por
+  semanas, escalando de tom a cada sessão ("deixou de ser teórica", "a única
+  coisa entre o estado atual e uma quebra"), sem que ninguém verificasse a
+  premissa que o sustentava — uma verificação de dez minutos. O mesmo padrão
+  que este documento já registra para os SHAs ("nasce verdadeira e morre em
+  silêncio") vale para riscos: **um risco herdado deve ter sua premissa
+  reverificada, não seu tom reforçado.**
+
+- **O primeiro deploy tem cinco bloqueios, e o contrato não é o principal.**
+  Levantados em 2026-08-03, ao verificar que não existe produção:
+  1. **CORS fixo em `localhost:5173`** (`src/main/server/server.py:23`) —
+     nenhum frontend implantado consegue falar com a API. É literalmente a
+     prática do **Item 17** ("ambientes local/test/production, CORS e secrets
+     sem defaults inseguros").
+  2. **Configuração por `os.getenv` sem validação** — a aplicação sobe com
+     variável obrigatória ausente e falha tarde, em vez de falhar no startup
+     com erro claro. Também **Item 17**.
+  3. **Comprovantes em disco local** (`UPLOAD_DIR`, ADR-003) — a maioria dos
+     PaaS tem filesystem efêmero, então **todo comprovante evapora a cada
+     redeploy**. É o **Item 22** (object storage e URLs assinadas). Note que
+     isto é pior que o risco de contrato: perde dado do usuário, em silêncio e
+     sem erro na tela.
+  4. **Sem `Dockerfile` nem build de produção** — **Item 30**.
+  5. **Sem CI que verifique antes de publicar** — **Item 29**. O episódio do
+     commit `2d07a8d`, que deixou a `main` do frontend quebrada em `tsc`,
+     `eslint` **e** `build` sem ninguém notar, é exatamente o que um CI teria
+     pego.
+
+  **Consequência para a trilha:** deploy e Learning Path não são assuntos
+  separados. Os Itens 17 e 22 são pré-requisitos técnicos do primeiro deploy, e
+  os Itens 29/30 são o deploy em si. Quem quiser implantar não precisa de um
+  projeto paralelo — precisa desses quatro itens da trilha.
 - **O cliente HTTP não tem timeout nem `AbortController` em lugar nenhum de
   `src/`.** Descoberto no ciclo de 2026-07-31, ao revisar um "gate" que impedia
   fechar o diálogo de pagamento enquanto a mutation estivesse em voo. O gate foi
@@ -1044,11 +1109,15 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   comprovante de pagamento, painel do solicitante, os dois cards da Home) foi
   percorrida individualmente; sabe-se que a validação aconteceu, não o alcance
   dela.
-- **Efeito colateral esperado do deploy do frontend: todo usuário logado é
-  deslogado uma vez.** O `AuthContext` passou a validar a sessão do
-  `localStorage` com `storedUserSchema`, que exige `id` — campo que as sessões
-  salvas hoje não têm. Não é bug; é a consequência correta de exigir um campo
-  novo. Vale avisar antes de implantar, para não virar chamado de suporte.
+- ~~**Efeito colateral esperado do deploy do frontend: todo usuário logado é
+  deslogado uma vez.**~~ **SEM EFEITO no primeiro deploy — reclassificado em
+  2026-08-03.** O `AuthContext` passou a validar a sessão do `localStorage` com
+  `storedUserSchema`, que exige `id`, campo que as sessões antigas não têm. O
+  aviso pressupunha uma população de usuários com sessão salva contra uma
+  versão anterior **em produção**; não existe produção, logo não existe essa
+  população. O único navegador afetado foi o do Gabriel, em desenvolvimento, e
+  isso já aconteceu em 2026-07-29. O mecanismo continua correto e o aviso volta
+  a valer em qualquer deploy **futuro** que mude a forma da sessão salva.
 - ~~**NADA DO CICLO DO CONTRATO NOVO FOI VALIDADO EM NAVEGADOR.**~~ RESOLVIDO em
   2026-07-29: o Gabriel percorreu no navegador, contra a API real, o checklist da
   Task 11 — login/listagem/detalhe/criação sem erro de parse do Zod, o logout
