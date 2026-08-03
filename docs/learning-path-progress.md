@@ -3608,3 +3608,213 @@ originais, que a suíte automatizada não consegue confirmar nem refutar).
 Detalhes completos, task a task, em
 `Refund-FrontEnd/.superpowers/sdd/2026-07-31-loading-feedback-and-ui-fixes/`
 (`task-1-report.md` a `task-10-report.md`).
+
+## Item 11 — Error boundaries e recuperação (2026-08-03)
+
+**Status:** concluído em 2026-08-03, na branch `feat/error-boundaries` do
+`Refund-FrontEnd`, partindo de `6c63ff5`. Fecha o Item 11 do `learning_path.md`.
+Retomada da trilha depois de dez ciclos de feature.
+
+### Por que estudar
+
+O item existe para separar três mecanismos de erro que o projeto tratava como
+um só. Eles não se substituem:
+
+| Mecanismo | Pega o quê | Estado antes deste item |
+|---|---|---|
+| `isError` do TanStack Query | falha **assíncrona** (HTTP, parse do Zod) — um estado, não uma exceção | usado em toda tela |
+| `ErrorBoundary` do React Router | erro de **loader/action** + erro de **render** das rotas descendentes | existia (`router.tsx`) |
+| Error boundary do React | erro de **render** em qualquer ponto da árvore, inclusive **fora** do router | **não existia** |
+
+O ponto de partida era melhor do que a trilha assumia: `router.tsx` já trazia
+`ErrorBoundary: PageRouteError` na rota raiz, com teste. O que faltava era
+mais específico — e a especificidade é o aprendizado.
+
+### O estado anterior, e as três lacunas
+
+```tsx
+// src/main.tsx                        // src/App.tsx
+<StrictMode>                           <AuthProvider>        ← fora do router
+  <QueryClientProvider client={...}>     <ThemeEffect />     ← fora do router
+    <App />                              <RouterProvider router={router} />
+```
+
+**Lacuna 1 — tela branca, com caminho real.** Tudo acima do `RouterProvider`
+renderizava sem cobertura nenhuma. E havia um gatilho concreto:
+
+```tsx
+// src/context/AuthContext.tsx:10-15 (antes)
+function loadStoredUser(): AuthUser | null {
+  const raw = localStorage.getItem(USER_STORAGE_KEY);   // ← FORA do try
+  if (!raw) return null;
+
+  try {                                                  // ← o try só começa aqui
+    const result = storedUserSchema.safeParse(JSON.parse(raw));
+```
+
+O `try` protege o `JSON.parse` e o `safeParse`, mas não o `getItem`. Acesso a
+`localStorage` **lança** quando o navegador bloqueia dados do site. Como isso
+roda no inicializador do `useState` do `AuthProvider`, a exceção acontece
+durante o render, acima do router: React desmonta a árvore inteira e o usuário
+vê uma página em branco, sem mensagem e sem rota de saída.
+
+**Lacuna 2 — o boundary único derrubava o shell.** Estando na rota raiz, acima
+de `ProtectedRoute` e `MainLayout`, qualquer erro de render numa página
+substituía **tudo** pelo `PageRouteError` (`min-h-screen`, com o próprio
+`<main>`). O usuário perdia a navegação junto com a tela que falhou.
+
+**Lacuna 3 — não havia retry.** A única ação era `<Link to="/">`. Quando o que
+falhava era a própria `/`, o botão oferecido apontava para a página que
+acabara de quebrar.
+
+### Lição 1 — um error boundary do React só pode ser uma classe
+
+`getDerivedStateFromError` e `componentDidCatch` não têm equivalente em hook.
+Não é escolha de estilo: a API não existe em componente de função. É a única
+classe do projeto, e o comentário no arquivo diz por quê.
+
+Os dois métodos têm papéis distintos, e confundi-los é o erro comum:
+
+```tsx
+// src/components/core/AppErrorBoundary.tsx
+// Fase de render — não pode ter efeito colateral; só vira o estado.
+static getDerivedStateFromError(): AppErrorBoundaryState {
+  return { hasError: true };
+}
+
+// Fase de commit — aqui efeito é permitido. É a costura onde o log
+// estruturado entra quando o Item 24 existir.
+componentDidCatch(error: Error, info: ErrorInfo) {
+  console.error("Uncaught render error:", error, info.componentStack);
+}
+```
+
+O que ele **não** pega: event handlers, `setTimeout` e código assíncrono. Só
+render, efeitos de layout e construtores. Por isso ele não substitui o
+`isError` de nenhuma query — e por isso nenhuma query mudou de comportamento
+neste item.
+
+Estando fora do `RouterProvider`, o fallback não pode usar `<Link>` nem
+`navigate`: não há router. Recarregar o documento é a única recuperação
+disponível dali, e o teste trava esse contrato.
+
+### Lição 2 — o `ErrorBoundary` do React Router renderiza NO LUGAR da rota que falhou
+
+Esta é a sutileza que decidiu o desenho do passo 4. A intenção era "erro de
+página não derruba o shell", e a leitura ingênua seria pôr o boundary na rota
+do `MainLayout`. Isso faria exatamente o contrário: o boundary substitui o
+**elemento da rota à qual está preso**, então o shell sairia junto.
+
+A correção é prender o boundary a uma rota **sem path, abaixo** do
+`MainLayout`:
+
+```tsx
+// src/router.tsx (depois)
+{
+  Component: MainLayout,
+  children: [
+    {
+      ErrorBoundary: ContentError,   // ← abaixo do shell, não sobre ele
+      children: [ /* todas as páginas */ ],
+    },
+  ],
+}
+```
+
+**A prova não foi o teste passar.** Foi mover o boundary para a rota do
+`MainLayout` de propósito e ver o teste "keeps the shell rendered when a page
+throws" falhar (1 de 5), depois restaurar e ver os 5 voltarem.
+
+### Lição 3 — a fixture que não conseguia falhar, por causa do retry automático do React
+
+A primeira sonda para "o `revalidate()` limpa um erro de **render**?" usou uma
+fixture que zerava a própria flag durante o throw:
+
+```tsx
+Component: () => {
+  if (shouldThrow) {
+    shouldThrow = false;      // ← errado
+    throw new Error("render boom");
+  }
+  return <p>conteúdo carregado</p>;
+}
+```
+
+O resultado foi um DOM com o conteúdo carregado e **o boundary nunca
+aparecendo**. A causa: quando um componente lança durante um render
+concorrente, o React **re-tenta o render** antes de acionar o boundary — e a
+segunda tentativa passava, porque a própria fixture tinha limpado a flag. A
+sonda não media o que eu achava que media.
+
+A fixture correta mantém o controle **fora** do componente, para o teste
+decidir quando parar de lançar. Vale como padrão geral: uma fixture que muda
+de estado ao falhar pode esconder o mecanismo que se quer observar.
+
+### Lição 4 — a hipótese registrada no plano estava errada, e o teste foi quem disse
+
+No plano do item ficou escrito, explicitamente, que eu **não sabia** se
+`revalidate()` limparia um erro de *render* (só tinha certeza sobre erro de
+*loader*), e que não afirmaria nada sem teste. A sonda corrigida respondeu:
+
+```
+boundaryShowed=true   recovered=true   stillErrored=false
+```
+
+**Limpa os dois.** A hipótese pessimista estava errada. Os dois casos viraram
+testes separados (`recovers from a loader failure…` e `recovers from a render
+failure…`) justamente porque são caminhos diferentes dentro do react-router e
+o botão poderia virar um no-op silencioso em um deles.
+
+### O que mais mudou
+
+`getErrorMessage` era privada do `PageRouteError`. Com o `ContentError`
+nascendo, virou o **segundo uso real** — o gatilho que o `learning_path.md`
+define para extrair. Foi para `src/lib/route-error.ts` (camada `shared`, que a
+camada `app` pode importar) como `getRouteErrorMessage`. Exportá-la do próprio
+`PageRouteError` teria disparado `react-refresh/only-export-components`, que
+está ligada fora de `components/ui`.
+
+### O que lembrar
+
+- Boundary do React ≠ `ErrorBoundary` do React Router ≠ `isError` de query.
+  O primeiro cobre render em qualquer lugar; o segundo, loader/render dentro
+  de rotas; o terceiro é estado assíncrono, não exceção.
+- Error boundary **precisa** ser classe. `getDerivedStateFromError` é fase de
+  render (sem efeitos); `componentDidCatch` é fase de commit (com efeitos) — e
+  é onde o Item 24 vai plugar.
+- Nada disso pega erro de event handler, timer ou async.
+- O `ErrorBoundary` de uma rota **substitui o elemento daquela rota**. Para
+  preservar um layout, o boundary vai numa rota filha sem path, não na rota do
+  layout.
+- Uma fixture de teste que se conserta ao falhar pode nunca chegar ao
+  mecanismo sob teste — o React re-tenta renders concorrentes que lançam.
+- `revalidate()` recupera **tanto** erro de loader quanto de render. Foi
+  medido, não deduzido.
+
+### Verificação
+
+Ponto de partida medido **antes** de abrir a branch, como a lição do ciclo
+anterior exige: 246 testes em 44 arquivos, `tsc` exit 0, lint 0/0, bundle
+560,88 kB — todos verdes na `main`.
+
+| Verificação | Antes | Depois |
+|---|---|---|
+| `npx vitest run` (3 rodadas) | 246 em 44 arquivos | **256 em 46 arquivos**, verdes nas três |
+| `npx tsc -b --noEmit` | exit 0 | exit 0 |
+| `npm run lint` | 0 erros, 0 warnings | **0 erros, 0 warnings** |
+| `npm run build` | 560,88 kB | **562,61 kB** (+1,73 kB) |
+
+O flake do `ResizeObserver` **não apareceu em nenhuma das três rodadas**, e a
+saída de todas foi salva em arquivo *antes* de ser lida — a regra que a sessão
+anterior registrou ter falhado duas vezes.
+
+Dois testes foram validados por quebra deliberada, não só por passarem: o
+boundary global (3 de 4 falham com `getDerivedStateFromError` devolvendo
+`false`) e o aninhamento do shell (1 de 5 falha com o boundary na rota do
+`MainLayout`).
+
+**Limitação registrada — o gatilho real da Lacuna 1 não foi observado.** O
+comportamento com `localStorage` bloqueado só aparece num navegador com essa
+configuração ligada; o jsdom não a reproduz. A suíte prova que *um filho que
+lança* produz o fallback, não que *este* filho lança naquele cenário. Fica
+como item de checklist de navegador, não como validado.

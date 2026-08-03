@@ -879,6 +879,43 @@ completo e obrigatório está em
   que o ciclo anterior corrigiu na fixture de reviews, e não foi corrigida aqui
   porque ela é consumida por muitos testes.
 
+- **Fase 3, Item 11 — Error boundaries e recuperação: CONCLUÍDO.**
+  Primeiro item da trilha depois de dez ciclos de feature, na branch
+  `feat/error-boundaries` do `Refund-FrontEnd`, partindo de `6c63ff5`.
+  **Não mesclada** — aguarda autorização. Detalhes no
+  [diário](../learning-path-progress.md). O ponto de partida era melhor do que
+  a trilha assumia: `router.tsx` já tinha `ErrorBoundary: PageRouteError` na
+  rota raiz, com teste. As três lacunas reais eram outras:
+  - **Tela branca acima do router.** `QueryClientProvider`, `AuthProvider` e
+    `ThemeEffect` renderizavam sem cobertura nenhuma. Nasce
+    `src/components/core/AppErrorBoundary.tsx` (class component — a API do
+    React não tem equivalente em hook), ligado no `main.tsx` **por fora do
+    `QueryClientProvider`**, cobrindo tudo. Fallback sem `<Link>`, porque ali
+    não há router: a recuperação é recarregar o documento.
+  - **O boundary único derrubava o shell.** Nasce
+    `src/components/core/ContentError.tsx`, preso a uma rota **sem path,
+    abaixo** do `MainLayout` — porque o `ErrorBoundary` do React Router
+    renderiza **no lugar do elemento da rota à qual está preso**, e pô-lo no
+    `MainLayout` levaria sidebar e topbar junto. Agora o erro preenche só o
+    `Outlet`.
+  - **Não havia retry.** `PageRouteError` ganhou "Tentar novamente" via
+    `useRevalidator`, ao lado do link. Medido: `revalidate()` recupera
+    **tanto** erro de loader quanto de render — o plano registrava isso como
+    hipótese em aberto, e a hipótese pessimista estava errada.
+  - `getErrorMessage` virou `getRouteErrorMessage` em `src/lib/route-error.ts`
+    ao aparecer o **segundo uso real**, que é o gatilho de extração definido
+    pelo próprio `learning_path.md`.
+  - Verificação: baseline medido antes de abrir a branch (246 testes / 44
+    arquivos, `tsc` 0, lint 0/0, bundle 560,88 kB). Depois: `npx vitest run`
+    ×3 → **256 testes em 46 arquivos**, verdes nas três, saída salva em
+    arquivo antes de ser lida; `tsc` exit 0; lint **0/0**; build ok, bundle
+    **562,61 kB** (+1,73 kB). Flake do `ResizeObserver` ausente nas três.
+    Dois testes validados por **quebra deliberada**, não só por passarem.
+  - **Limitação registrada:** o gatilho real da primeira lacuna
+    (`localStorage` bloqueado) não foi observado — o jsdom não reproduz. A
+    suíte prova que um filho que lança produz o fallback, não que *aquele*
+    filho lança naquele cenário. Ver pendências.
+
 - **Próximo — validar em navegador os dois últimos ciclos, que foram mesclados
   e empurrados sem essa passada.** Nem o ciclo de navegação/tabela nem o de
   feedback de carregamento foram abertos num navegador. Isso não é
@@ -1086,6 +1123,29 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   separados. Os Itens 17 e 22 são pré-requisitos técnicos do primeiro deploy, e
   os Itens 29/30 são o deploy em si. Quem quiser implantar não precisa de um
   projeto paralelo — precisa desses quatro itens da trilha.
+- **`AuthContext.loadStoredUser` lê `localStorage` FORA do próprio `try`.**
+  Achado no Item 11 (2026-08-03) e **deliberadamente não corrigido**, para não
+  misturar uma correção de comportamento com o item em curso.
+  `src/context/AuthContext.tsx` linha 11 chama
+  `localStorage.getItem(USER_STORAGE_KEY)` **antes** do `try` que começa na
+  linha 14 — o bloco protege o `JSON.parse` e o `safeParse`, mas não o acesso
+  ao storage. Acesso a `localStorage` **lança** quando o navegador bloqueia
+  dados do site (configuração de privacidade, política corporativa), e isso
+  roda no inicializador do `useState` do `AuthProvider`, ou seja, **durante o
+  render**. Antes do Item 11 isso era uma página em branco; agora o
+  `AppErrorBoundary` captura e mostra uma tela de erro com recarregar — que é
+  o comportamento correto para uma falha inesperada, mas **não** é o
+  comportamento desejável para esta em particular: uma sessão ilegível deveria
+  derrubar a sessão, não a aplicação, exatamente como o comentário do próprio
+  arquivo já diz sobre o `safeParse`. **A correção é mover a linha 11 para
+  dentro do `try`** — uma linha. Fica como decisão do Gabriel porque é
+  mudança de comportamento, não de arquitetura.
+- **O gatilho real do `AppErrorBoundary` nunca foi observado.** O cenário que
+  motivou a lacuna 1 do Item 11 (`localStorage` bloqueado no boot) não é
+  reproduzível no jsdom. Os testes provam que *um filho que lança* produz o
+  fallback; ninguém viu *aquele* filho lançando. Para observar: DevTools →
+  configurações do site → bloquear dados/cookies → recarregar a aplicação.
+  Vale rodar junto do checklist de navegador já pendente.
 - **O cliente HTTP não tem timeout nem `AbortController` em lugar nenhum de
   `src/`.** Descoberto no ciclo de 2026-07-31, ao revisar um "gate" que impedia
   fechar o diálogo de pagamento enquanto a mutation estivesse em voo. O gate foi
