@@ -50,13 +50,14 @@ O que era verdade na última verificação (**2026-08-03**), como ponto de
 partida e não como afirmação durável:
 
 - **`Refund-api`** — `main` e `origin/main` sincronizados, nada pendente.
-- **`Refund-FrontEnd`** — `main` e `origin/main` sincronizados. Existe **uma
-  branch de trabalho não mesclada**, `feat/pagination-busy-state` (um commit,
-  `d33fb65`), verificada **e validada em navegador em 2026-08-03** — liberada
-  para merge. Existe também **`feat/error-boundaries`** (Item 11, um commit),
-  verificada pela suíte mas **não** validada em navegador. Sobram duas branches locais sem função: `feat/refund-review-ui`, já
-  totalmente mesclada (sai com `git branch -d`), e
-  `backup/claude-session-2026-07-13`.
+- **`Refund-FrontEnd`** — a `main` recebeu `feat/pagination-busy-state` por
+  fast-forward e está **à frente** do `origin/main` por um commit não
+  empurrado. Existe **uma branch de trabalho não mesclada**,
+  `feat/error-boundaries` (Item 11, um commit), verificada pela suíte mas
+  **não** validada em navegador; ela não faz mais fast-forward porque a `main`
+  andou. Sobram três branches locais sem função: `feat/refund-review-ui` e
+  `feat/pagination-busy-state`, ambas já totalmente mescladas (saem com
+  `git branch -d`), e `backup/claude-session-2026-07-13`.
 
 **Nem todo SHA envelhece igual, e a diferença é o que este bloco aprendeu.** O
 de uma branch de trabalho (`d33fb65`) se mantém enquanto ela não for mesclada,
@@ -849,8 +850,12 @@ completo e obrigatório está em
     pós-paint não garantiria.
 
 - **Incremento fora de ciclo — spinner nas setas de paginação da Home:
-  FEITO, NÃO MESCLADO.** Branch `feat/pagination-busy-state`, um commit
-  (`d33fb65`), 246 → **249 testes**, `tsc` exit 0, lint 0/0.
+  CONCLUÍDO e MESCLADO.** Branch `feat/pagination-busy-state`, um commit
+  (`d33fb65`), 246 → **249 testes**, `tsc` exit 0, lint 0/0. **Validado em
+  navegador em 2026-08-03** (a seta da direita gira sozinha ao paginar; a busca
+  não gira nenhuma das duas) e **mesclado na `main` por fast-forward**
+  (`6c63ff5..d33fb65`) no mesmo dia. Verificação repetida depois do merge:
+  249 testes em 44 arquivos, `tsc` exit 0, lint 0/0, bundle 560,88 kB.
 
   **Feito deliberadamente sem o fluxo completo** (sem brainstorming, spec,
   plano nem subagentes): é uma mudança de um par de botões, seguindo o padrão
@@ -965,10 +970,14 @@ O que fica aberto, em ordem de quem depende de quem:
 2. ~~**Validar em navegador** os dois ciclos mesclados e a branch de
    paginação.~~ **FEITO em 2026-08-03, sem ressalvas** — ver o detalhamento
    item a item acima.
-3. **Mesclar `feat/pagination-busy-state`** — liberada pela validação, ainda
-   não mesclada.
+3. ~~**Mesclar `feat/pagination-busy-state`**~~ **FEITO em 2026-08-03:**
+   fast-forward `6c63ff5..d33fb65`, com verificação repetida depois do merge.
+   Não empurrada ainda.
 3b. **Mesclar `feat/error-boundaries`** (Item 11) — verificada pela suíte,
-   **não** validada em navegador.
+   **não** validada em navegador. Como a `main` andou, ela **não** faz mais
+   fast-forward: precisa de rebase sobre `d33fb65` para preservar o histórico
+   linear que o projeto mantém. Não há conflito previsto — os arquivos tocados
+   não se sobrepõem aos da paginação.
 4. ~~**Decidir o deploy conjunto.**~~ **RESOLVIDO em 2026-08-03** — por
    verificação, não por implantação. Não existe produção: o risco era
    contingente a um ambiente que nunca foi criado. Ver a pendência reescrita e
