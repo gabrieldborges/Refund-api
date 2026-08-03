@@ -52,8 +52,9 @@ partida e não como afirmação durável:
 - **`Refund-api`** — `main` e `origin/main` sincronizados, nada pendente.
 - **`Refund-FrontEnd`** — `main` e `origin/main` sincronizados. Existe **uma
   branch de trabalho não mesclada**, `feat/pagination-busy-state` (um commit,
-  `d33fb65`), verificada mas **não validada em navegador** — ver o progresso
-  abaixo. Sobram duas branches locais sem função: `feat/refund-review-ui`, já
+  `d33fb65`), verificada **e validada em navegador em 2026-08-03** — liberada
+  para merge. Existe também **`feat/error-boundaries`** (Item 11, um commit),
+  verificada pela suíte mas **não** validada em navegador. Sobram duas branches locais sem função: `feat/refund-review-ui`, já
   totalmente mesclada (sai com `git branch -d`), e
   `backup/claude-session-2026-07-13`.
 
@@ -686,12 +687,14 @@ completo e obrigatório está em
     contra 2 falhas em 4 rodadas com as mudanças aplicadas). Ver a pendência
     atualizada abaixo. Até aqui toda ocorrência tinha sido dentro de um
     ciclo, o que deixava em aberto se a causa era nossa.
-  - **Não validado em navegador contra a API real nesta sessão.** A
-    verificação da Task 13 rodou inteira contra a suíte automatizada (MSW) e
-    as ferramentas de build; não havia navegador disponível na sessão que a
-    executou. Um checklist de 16 pontos, derivado da spec, fica registrado
-    para o Gabriel rodar contra o backend real — o mesmo padrão de
-    granularidade que o ciclo anterior deixou como lacuna. Detalhes
+  - ~~**Não validado em navegador contra a API real nesta sessão.**~~
+    **VALIDADO em 2026-08-03, sem ressalvas.** A verificação da Task 13 rodara
+    inteira contra a suíte (MSW) e as ferramentas de build, sem navegador
+    disponível; a passada no navegador aconteceu depois e cobriu Home com
+    `status`/`sort`/`order` na URL, tabela de seis colunas, ordenação
+    server-side pelos cabeçalhos, coluna de solicitante só para admin, colapso
+    abaixo de `sm`, comprovante na revisão, setas anterior/próxima e "Próxima
+    pendente". Detalhes
     completos, task a task, no [diário](../learning-path-progress.md) e no
     relatório da Task 13
     (`Refund-FrontEnd/.superpowers/sdd/2026-07-31-review-navigation-and-refund-table/task-13-report.md`).
@@ -805,10 +808,15 @@ completo e obrigatório está em
     (`router.navigate()`) em vez de simular o clique real, e dizem isso no
     nome/comentário do teste — uma regressão futura só na interação
     fechar-diálogo↔navegar não seria pega.
-  - **Não validado em navegador nesta sessão.** A Task 10 rodou sem
-    navegador disponível; a suíte inteira segue contra o MSW. Um checklist
-    de 16 pontos, derivado da spec, foi deixado para o Gabriel rodar contra o
-    backend real. **O ledger de execução foi removido no fechamento**, conforme
+  - ~~**Não validado em navegador nesta sessão.**~~ **VALIDADO em 2026-08-03,
+    sem ressalvas.** A Task 10 rodara sem navegador disponível; a passada
+    aconteceu depois e cobriu o spinner durando até o histórico atualizar (o
+    pedido que originou o ciclo), o card de pendentes **não** seguindo o filtro
+    de status, o alinhamento dos ícones no modo trilho, "Nova solicitação"
+    reabrindo o diálogo zerado e os diálogos resetando ao cancelar.
+    **Isto fecha o alinhamento do sidebar**, cujas duas rodadas de aritmética
+    de box model se contradisseram e nenhuma tinha sido observada.
+    **O ledger de execução foi removido no fechamento**, conforme
     o fluxo — o registro agora é o histórico do Git, e os itens do checklist
     que importam estão resumidos abaixo.
   - **A revisão da branch inteira achou quatro coisas que nenhuma revisão por
@@ -916,35 +924,33 @@ completo e obrigatório está em
     suíte prova que um filho que lança produz o fallback, não que *aquele*
     filho lança naquele cenário. Ver pendências.
 
-- **Próximo — validar em navegador os dois últimos ciclos, que foram mesclados
-  e empurrados sem essa passada.** Nem o ciclo de navegação/tabela nem o de
-  feedback de carregamento foram abertos num navegador. Isso não é
-  formalidade: a suíte roda inteira contra o MSW, ou seja, contra o payload que
-  nós mesmos escrevemos, e **três mudanças do último ciclo são invisíveis para
-  ela** — o alinhamento do sidebar (nenhum agente conseguiu renderizar; só
-  geometria de caixa a partir do CSS gerado, e duas rodadas dessa aritmética se
-  contradisseram antes de convergir) e os dois fluxos de diálogo cujo caminho
-  real de usuário o jsdom não exercita.
+- ~~**Próximo — validar em navegador os dois últimos ciclos, que foram
+  mesclados e empurrados sem essa passada.**~~ **RESOLVIDO em 2026-08-03:** o
+  Gabriel validou no navegador, contra a API real, **três** conjuntos, todos
+  **sem ressalvas**:
 
-  Os itens que falhariam em silêncio, se falharem:
+  1. **Ciclo de navegação e tabela** — Home com `status`/`sort`/`order` na URL,
+     tabela de seis colunas, ordenação server-side pelos cabeçalhos, coluna de
+     solicitante só para admin, colapso de colunas abaixo de `sm`, comprovante
+     na tela de revisão, setas anterior/próxima e "Próxima pendente".
+  2. **Ciclo de feedback de carregamento** — spinner durando até o histórico
+     atualizar (o pedido que originou o ciclo), card de pendentes **não**
+     seguindo o filtro de status, alinhamento dos ícones no modo trilho,
+     "Nova solicitação" reabrindo o diálogo zerado, e os diálogos resetando ao
+     cancelar.
+  3. **Branch `feat/pagination-busy-state`** — clicar "próxima página" gira só
+     a seta da direita; digitar na busca não gira nenhuma das duas.
 
-  - aprovar mantém o spinner até o histórico aparecer atualizado (o pedido que
-    originou o ciclo);
-  - filtrar por status **não** muda o card de pendentes — se mudar, alguém o
-    ligou na listagem;
-  - no modo trilho, o ícone de um item habilitado e o do item "em breve" ficam
-    centralizados e alinhados **entre si**;
-  - "Nova solicitação" na tela de sucesso reabre o diálogo zerado sem sair da
-    página;
-  - nenhum spinner demora a ponto de incomodar — esperar a invalidação inteira
-    inclui queries inativas em cache, e a spec registra o refinamento caso
-    incomode.
+  **Isto fecha o alinhamento do sidebar**, que era o item mais delicado: duas
+  rodadas de aritmética de box model se contradisseram antes de convergir e
+  **nenhuma das duas tinha sido observada**. Agora foi. Registrado com a
+  granularidade item a item de propósito — o ciclo de 2026-07-30 ficou anotado
+  sem ela e este documento já avisava que "sabe-se que a validação aconteceu,
+  não o alcance dela".
 
-  **A branch `feat/pagination-busy-state` entra na mesma passada**, já que é
-  mais um spinner na mesma tela: clicar "próxima página" gira só a seta da
-  direita, e digitar na busca não gira nenhuma das duas. Ela precisa ser
-  mesclada depois — não foi, para não empilhar mais código não validado sobre
-  o que já está.
+  **A branch `feat/error-boundaries` (Item 11) NÃO entrou nesta passada** — foi
+  escrita depois. Ver a limitação registrada no item e o checklist nas
+  pendências.
 
 - **Depois — foto de perfil (upload e exibição).** Único item novo restante do
   backlog do frontend (ver seção abaixo).
@@ -953,11 +959,16 @@ completo e obrigatório está em
 
 O que fica aberto, em ordem de quem depende de quem:
 
-1. **Empurrar o commit de documentação do `Refund-api`** (`842d051`, mais este).
-   O `origin/main` está em `7aac636`.
-2. **Validar em navegador** os dois ciclos mesclados e a branch de paginação.
-   É a única evidência que a suíte não produz — ela roda inteira contra o MSW.
-3. **Mesclar `feat/pagination-busy-state`** depois da validação.
+1. ~~**Empurrar o commit de documentação do `Refund-api`**~~ **FEITO em
+   2026-08-03:** `842d051`, `c3e6376` e `7c51a86` empurrados; `origin/main`
+   saiu de `7aac636`.
+2. ~~**Validar em navegador** os dois ciclos mesclados e a branch de
+   paginação.~~ **FEITO em 2026-08-03, sem ressalvas** — ver o detalhamento
+   item a item acima.
+3. **Mesclar `feat/pagination-busy-state`** — liberada pela validação, ainda
+   não mesclada.
+3b. **Mesclar `feat/error-boundaries`** (Item 11) — verificada pela suíte,
+   **não** validada em navegador.
 4. ~~**Decidir o deploy conjunto.**~~ **RESOLVIDO em 2026-08-03** — por
    verificação, não por implantação. Não existe produção: o risco era
    contingente a um ambiente que nunca foi criado. Ver a pendência reescrita e
@@ -1607,8 +1618,13 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   perigoso, e o mesmo padrão (algo que espera uma mutation antes de permitir
   fechar/navegar) reintroduziria o risco se implementado de novo sem primeiro
   resolver isto.
-- **Duas rodadas de aritmética de box model no sidebar discordaram entre si
-  antes de convergir, e nenhuma das duas foi confirmada por observação.** No
+- ~~**Duas rodadas de aritmética de box model no sidebar discordaram entre si
+  antes de convergir, e nenhuma das duas foi confirmada por observação.**~~
+  **OBSERVADO em 2026-08-03, e o resultado convergido está correto** — o
+  Gabriel conferiu no navegador o alinhamento dos ícones no modo trilho. O
+  relato abaixo fica preservado porque a lição de processo não expira: duas
+  contas igualmente convincentes chegaram a resultados diferentes, e só a
+  observação decidiu. No
   ciclo de 2026-07-31 (feedback de carregamento), a Task 9 corrigiu o hover
   do item de navegação (`translate-x-2` deslocava só o conteúdo pintado, não
   a caixa que o `hover:bg-*` preenche) trocando por `pl-2`. A primeira
