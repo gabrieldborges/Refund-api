@@ -16,35 +16,53 @@ Atualizado em: 2026-08-03.
 ## Visão geral
 
 O produto é um sistema de **reembolso de despesas com comprovante**. São dois
-repositórios Git irmãos e independentes, cada um com seu remote. O
-## Estado dos repositórios em 2026-08-03
+repositórios Git irmãos e independentes, cada um com seu remote.
 
-Verificado por `git ls-remote`, não por `git status`:
+## Estado dos repositórios
 
-| | `main` local | `origin/main` | pendente |
-|---|---|---|---|
-| `Refund-api` | `c3e6376` | `7aac636` | 2 commits de documentação **não empurrados** |
-| `Refund-FrontEnd` | `6c63ff5` | `6c63ff5` | 1 branch **não mesclada** (ver abaixo) |
+**Este bloco não cita mais o SHA das `main` — de propósito.** Ele já esteve
+errado seis vezes, e a sexta foi o próprio commit que corrigia a quinta: um
+quadro que fixa "a `main` está em X" é invalidado por qualquer commit,
+**inclusive o que o atualiza**. As cinco primeiras foram: afirmar que uma
+branch não tinha sido mesclada quando já estava; fixar um SHA que commits de
+documentação ultrapassaram no mesmo dia; duas vezes por um ciclo ter sido
+mesclado sem que o fechamento atualizasse aqui; e uma quinta ao anotar um SHA
+que o commit seguinte superou.
 
-Reconferido em 2026-08-03, e **o quadro já estava errado de novo**: dizia
-`842d051` e 1 commit pendente, quando o próprio commit que escreveu essa linha
-(`c3e6376`) a ultrapassou. É a quinta vez — exatamente o padrão descrito abaixo.
+A forma que não envelhece é descrever **como descobrir** o estado, não afirmar
+qual é. Em cada repositório:
 
-**Existe uma branch de trabalho pendente no `Refund-FrontEnd`:**
-`feat/pagination-busy-state`, um commit (`d33fb65`), verificada mas não
-mesclada nem validada em navegador — ver o progresso abaixo.
+```bash
+git fetch origin                      # PRIMEIRO: atualiza a cópia local do remote
+git log --oneline -1                  # onde a main local está
+git ls-remote origin main             # onde o origin/main está de verdade
+git log --oneline origin/main..main   # o que existe local e não foi empurrado
+git branch --list                     # branches vivas
+```
 
-Sobram duas branches locais no `Refund-FrontEnd` sem função:
-`feat/refund-review-ui`, já totalmente mesclada, e
-`backup/claude-session-2026-07-13`. A primeira sai com `git branch -d`.
+**O `git fetch` não é opcional.** O `git status` e o `origin/main..main`
+comparam com a cópia do remote que o seu repositório guarda, e ela pode estar
+velha sem nenhum aviso. O `git ls-remote` é a única das quatro consultas que
+fala com o servidor; as outras leem o disco. Se as duas discordarem, o
+`ls-remote` é que está certo.
 
-**Este bloco envelhece a cada commit; confira-o contra o `git` antes de
-confiar nele.** Ele já esteve errado quatro vezes: afirmando que uma branch não
-tinha sido mesclada quando já estava; fixando um SHA que commits de
-documentação ultrapassaram no mesmo dia; e duas vezes por um ciclo ter sido
-mesclado sem que o fechamento atualizasse aqui. O padrão é sempre o mesmo — a
-frase "a `main` está em X" nasce verdadeira e morre em silêncio. Um SHA de
-código citado *dentro de um ciclo* envelhece bem; este quadro, não.
+O que era verdade na última verificação (**2026-08-03**), como ponto de
+partida e não como afirmação durável:
+
+- **`Refund-api`** — `main` e `origin/main` sincronizados, nada pendente.
+- **`Refund-FrontEnd`** — `main` e `origin/main` sincronizados. Existe **uma
+  branch de trabalho não mesclada**, `feat/pagination-busy-state` (um commit,
+  `d33fb65`), verificada mas **não validada em navegador** — ver o progresso
+  abaixo. Sobram duas branches locais sem função: `feat/refund-review-ui`, já
+  totalmente mesclada (sai com `git branch -d`), e
+  `backup/claude-session-2026-07-13`.
+
+**Nem todo SHA envelhece igual, e a diferença é o que este bloco aprendeu.** O
+de uma branch de trabalho (`d33fb65`) se mantém enquanto ela não for mesclada,
+porque identifica um objeto que ninguém vai ultrapassar; o mesmo vale para um
+SHA de código citado *dentro* do relato de um ciclo. É o par
+`main`/`origin/main` que não sobrevive — ele muda toda vez que alguém trabalha,
+que é justamente quando ninguém está lendo este documento.
 
 **NÃO EXISTE PRODUÇÃO — verificado em 2026-08-03.** Este documento passou
 semanas tratando o deploy conjunto como o risco mais grave do projeto, e
