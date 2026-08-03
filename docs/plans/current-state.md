@@ -11,24 +11,28 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-07-31.
+Atualizado em: 2026-08-03.
 
 ## Visão geral
 
 O produto é um sistema de **reembolso de despesas com comprovante**. São dois
 repositórios Git irmãos e independentes, cada um com seu remote. O
-## Estado dos repositórios em 2026-07-31
+## Estado dos repositórios em 2026-08-03
 
-**Os dois estão na `main`, sem branch de trabalho pendente, e ambos foram
-empurrados.** Verificado por `git ls-remote`, não por `git status`:
+Verificado por `git ls-remote`, não por `git status`:
 
-| | `main` local | `origin/main` |
-|---|---|---|
-| `Refund-api` | `7aac636` | `7aac636` |
-| `Refund-FrontEnd` | `6c63ff5` | `6c63ff5` |
+| | `main` local | `origin/main` | pendente |
+|---|---|---|---|
+| `Refund-api` | `842d051` | `7aac636` | 1 commit de documentação **não empurrado** |
+| `Refund-FrontEnd` | `6c63ff5` | `6c63ff5` | 1 branch **não mesclada** (ver abaixo) |
 
-Sobra uma branch local `feat/refund-review-ui` no `Refund-FrontEnd`, já
-totalmente mesclada — resíduo, removível com `git branch -d`.
+**Existe uma branch de trabalho pendente no `Refund-FrontEnd`:**
+`feat/pagination-busy-state`, um commit (`d33fb65`), verificada mas não
+mesclada nem validada em navegador — ver o progresso abaixo.
+
+Sobram duas branches locais no `Refund-FrontEnd` sem função:
+`feat/refund-review-ui`, já totalmente mesclada, e
+`backup/claude-session-2026-07-13`. A primeira sai com `git branch -d`.
 
 **Este bloco envelhece a cada commit; confira-o contra o `git` antes de
 confiar nele.** Ele já esteve errado quatro vezes: afirmando que uma branch não
@@ -588,8 +592,10 @@ completo e obrigatório está em
   implementação com revisão por task, mais a Task 13 de fechamento e a
   revisão da branch inteira). Artefatos em `Refund-FrontEnd/docs/superpowers/`
   ([spec](../../../Refund-FrontEnd/docs/superpowers/specs/2026-07-31-review-navigation-and-refund-table-design.md)),
-  o ledger de execução em
-  `Refund-FrontEnd/.superpowers/sdd/2026-07-31-review-navigation-and-refund-table/`.
+  o ledger de execução ficava em
+  `Refund-FrontEnd/.superpowers/sdd/2026-07-31-review-navigation-and-refund-table/`
+  e **foi removido no fechamento**, conforme o fluxo — o registro agora é o
+  histórico do Git.
   **Fecha o Item 13** da trilha (TanStack Table) e, na mesma branch, resolve
   três lacunas de navegação deixadas pelo ciclo de revisão anterior. O que
   mudou:
@@ -800,6 +806,45 @@ completo e obrigatório está em
     mesmo commit, sem um quadro de banner velho visível, coisa que um efeito
     pós-paint não garantiria.
 
+- **Incremento fora de ciclo — spinner nas setas de paginação da Home:
+  FEITO, NÃO MESCLADO.** Branch `feat/pagination-busy-state`, um commit
+  (`d33fb65`), 246 → **249 testes**, `tsc` exit 0, lint 0/0.
+
+  **Feito deliberadamente sem o fluxo completo** (sem brainstorming, spec,
+  plano nem subagentes): é uma mudança de um par de botões, seguindo o padrão
+  de spinner que o ciclo anterior acabou de estabelecer. Fica registrado como
+  precedente — se em retrospecto tiver sido leve demais para o gosto do
+  Gabriel, é aqui que a decisão está.
+
+  O que faz: cada seta mostra spinner e `aria-busy` **só quando é ela** que
+  está carregando. Trocar de página é navegação do router (o clique reescreve
+  os search params e o loader rebusca), então o estado vem de
+  `useNavigation()`, não do React Query. A seta que gira é decidida comparando
+  a página de `navigation.location` com a página atual, **não** por
+  `navigation.state !== "idle"` — isso diz qual das duas gira e impede que uma
+  navegação que não muda de página (a busca com debounce) acenda alguma. Essa
+  segunda parte evita, por construção, a armadilha que a revisão da branch
+  anterior encontrou no `RefundFormDialog`.
+
+  **Dois defeitos que os testes pegaram, e que valem mais que a feature:**
+  - A comparação era contra `data.page` (resposta da API) em vez de `page` (do
+    loader). Os dois coincidem quando tudo funciona — o bug ficaria dormindo em
+    produção. Só o segundo é derivado da URL nos dois lados; `data` pode estar
+    servindo a página anterior durante a transição.
+  - Um dos três testes **passava pelo motivo errado**: esperava o estado do
+    router e então olhava o DOM, mas o React ainda não tinha re-renderizado, de
+    modo que a asserção via um render velho e passaria com qualquer
+    implementação. Descoberto ao quebrar a lógica de propósito e ver o teste
+    continuar verde. Ancorado no `disabled`, que muda de forma observável
+    durante qualquer navegação.
+
+  O fixture da listagem em `PageHome.test.tsx` responde `page: 1` a uma
+  requisição de página 2, contradizendo o contrato que mocka — os testes novos
+  usam um handler local que ecoa a página pedida. **O fixture original segue
+  desonesto** para os demais testes do arquivo; é a mesma classe de problema
+  que o ciclo anterior corrigiu na fixture de reviews, e não foi corrigida aqui
+  porque ela é consumida por muitos testes.
+
 - **Próximo — validar em navegador os dois últimos ciclos, que foram mesclados
   e empurrados sem essa passada.** Nem o ciclo de navegação/tabela nem o de
   feedback de carregamento foram abertos num navegador. Isso não é
@@ -824,8 +869,45 @@ completo e obrigatório está em
     inclui queries inativas em cache, e a spec registra o refinamento caso
     incomode.
 
+  **A branch `feat/pagination-busy-state` entra na mesma passada**, já que é
+  mais um spinner na mesma tela: clicar "próxima página" gira só a seta da
+  direita, e digitar na busca não gira nenhuma das duas. Ela precisa ser
+  mesclada depois — não foi, para não empilhar mais código não validado sobre
+  o que já está.
+
 - **Depois — foto de perfil (upload e exibição).** Único item novo restante do
   backlog do frontend (ver seção abaixo).
+
+## Encerramento da sessão de 2026-07-31 → 2026-08-03
+
+O que fica aberto, em ordem de quem depende de quem:
+
+1. **Empurrar o commit de documentação do `Refund-api`** (`842d051`, mais este).
+   O `origin/main` está em `7aac636`.
+2. **Validar em navegador** os dois ciclos mesclados e a branch de paginação.
+   É a única evidência que a suíte não produz — ela roda inteira contra o MSW.
+3. **Mesclar `feat/pagination-busy-state`** depois da validação.
+4. **Decidir o deploy conjunto.** Os dois lados do contrato estão publicados
+   nos remotes e nunca foram implantados juntos. É o risco mais antigo e o
+   único que produz quebra em produção sem ninguém escrever código.
+5. **Próximo ciclo: foto de perfil.**
+
+Duas coisas que esta sessão aprendeu sobre o próprio processo, e que valem
+mais que qualquer item acima:
+
+- **Três achados de revisão foram defeitos do plano, não da implementação** —
+  o plano prescrevia comentários na língua errada para o arquivo de destino, e
+  os implementadores copiavam fielmente. A regra do `AGENTS.md` é: código e
+  comentários em inglês, exceto em arquivos que **já** carregavam comentários
+  em português; um arquivo **novo** não tem o que espelhar, logo é inglês.
+  Quem escrever o próximo plano deve conferir a língua de cada arquivo de
+  destino antes de colar um snippet.
+- **"As contas batem" não é o mesmo que "está correto".** O alinhamento do
+  sidebar teve duas rodadas de aritmética de caixa que se contradisseram, e a
+  primeira parecia igualmente convincente. O mesmo padrão apareceu no spinner
+  de paginação, onde uma comparação errada só não quebrava porque dois valores
+  coincidem em produção. Quando não há como observar, o registro deve dizer
+  "não observado" em vez de "verificado".
 
 ## Backlog do frontend — o que ainda falta
 
