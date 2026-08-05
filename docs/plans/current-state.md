@@ -985,6 +985,38 @@ completo e obrigatório está em
     antes do CLDR, então a redação foi preservada de propósito, com teste
     afirmando as duas coisas. **Adotar um padrão não é neutro.**
 
+- **Fase 3, Item 15 — Motion com propósito: CONCLUÍDO.**
+  Em duas branches empilhadas do `Refund-FrontEnd`: `feat/motion` (camada de
+  reduced-motion) e `feat/motion-animations` sobre ela (as quatro animações),
+  partindo de `887cd45`. **Nenhuma das duas mesclada.** Detalhes no
+  [diário](../learning-path-progress.md).
+  - **O levantamento inverteu o enquadramento do item.** Não havia animação
+    gratuita para remover: quase todo o movimento vem do design system
+    (Radix/shadcn) e é razoável. O que faltava era a camada que respeita
+    `prefers-reduced-motion` — `grep -rn "reduced-motion" src/` não devolvia
+    nada.
+  - **Neutraliza movimento, preserva opacidade.** As keyframes do
+    `tw-animate-css` leem `--tw-*-translate/scale/rotate` com fallback (lido do
+    CSS **gerado**, não suposto), então devolvê-las à identidade remove o
+    deslocamento e mantém o fade. Spinners param: rotação contínua é a pior
+    categoria (WCAG 2.2.2) e `aria-busy` + rótulo já carregam o estado.
+  - **Quatro animações novas**, a pedido do Gabriel: timeline (item novo
+    desliza **e abre espaço**, via `grid-template-rows: 0fr → 1fr` — `height:
+    auto` não é animável), badge pulsando na mudança de status, entrada
+    escalonada da tabela só na primeira montagem, e fade nos três banners de
+    **submissão** (os de falha de carregamento ficaram de fora de propósito).
+  - **Sem biblioteca.** `framer-motion` custaria ~40 kB num bundle já acima do
+    aviso. O custo real foi **+1,93 kB de CSS e +1,02 kB de JS**.
+  - Verificação: baseline 274 testes em 48 arquivos → **287 em 51**, verdes em
+    três rodadas; `tsc` 0; lint **0/0**; build ok.
+  - `react-hooks/refs` desligada **por arquivo, pelo nome**, para
+    `src/hooks/useEnteredItems.ts`, seguindo o precedente do `eslint.config.js`.
+    Diretiva inline não serve: a regra segue o valor pelo alias local.
+  - **Validado em navegador em 2026-08-05.** Badge, timeline, tabela e banners
+    conferidos e funcionando. **Duas ressalvas registradas abaixo:** o flick da
+    Home não foi resolvido, e a emulação de `prefers-reduced-motion` não foi
+    confirmada explicitamente.
+
 - ~~**Próximo — validar em navegador os dois últimos ciclos, que foram
   mesclados e empurrados sem essa passada.**~~ **RESOLVIDO em 2026-08-03:** o
   Gabriel validou no navegador, contra a API real, **três** conjuntos, todos
@@ -1251,6 +1283,31 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   fallback; ninguém viu *aquele* filho lançando. Para observar: DevTools →
   configurações do site → bloquear dados/cookies → recarregar a aplicação.
   Vale rodar junto do checklist de navegador já pendente.
+- **O "flick" ao abrir a Home continua sem causa identificada.** Relatado pelo
+  Gabriel no Item 15: ao carregar a lista, algo desloca a página
+  horizontalmente por um instante. **Duas tentativas falharam e foram
+  removidas a pedido dele:**
+  1. `scrollbar-gutter: stable` na `div.flex-1.overflow-auto` do `MainLayout` —
+     **sem efeito nenhum.** Aquela div *parece* o contêiner de rolagem e não é:
+     o wrapper do sidebar é `min-h-svh` (altura **mínima**), então cresce com o
+     conteúdo e a div nunca transborda. **Quem rola é o documento.** Vale saber
+     antes de tentar qualquer coisa envolvendo rolagem nesta aplicação.
+  2. A mesma regra no `html`, o elemento certo. **Também não resolveu** — o que
+     descarta a barra de rolagem como causa.
+
+  Hipótese remanescente: a entrada das linhas usa `opacity` e `translateY`, e
+  **nenhuma das duas altera layout** — as linhas ocupam a altura final desde o
+  primeiro frame, então a animação sozinha não explica a página mudar de
+  tamanho. O caminho, se alguém retomar, é **medir** `scrollHeight` por frame
+  durante a carga, não tentar uma terceira correção às cegas. Duas correções
+  erradas seguidas indicam falta de observação, não de ideia.
+- **A emulação de `prefers-reduced-motion` não foi confirmada.** O Item 15
+  validou badge, timeline, tabela e banners no navegador, mas o cenário que
+  motivou metade do item — DevTools → Rendering → `Emulate CSS
+  prefers-reduced-motion: reduce`, conferindo que nada desliza, o badge não
+  pulsa e os spinners param — não foi explicitamente confirmado. A suíte não
+  alcança isso (o jsdom não tem engine de CSS), então **continua não
+  observado**.
 - **O cliente HTTP não tem timeout nem `AbortController` em lugar nenhum de
   `src/`.** Descoberto no ciclo de 2026-07-31, ao revisar um "gate" que impedia
   fechar o diálogo de pagamento enquanto a mutation estivesse em voo. O gate foi
