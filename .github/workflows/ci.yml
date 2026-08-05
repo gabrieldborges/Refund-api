@@ -38,7 +38,7 @@ jobs:
       #
       # `cache: pip` keys on requirements.txt, so an unchanged dependency set
       # is not re-downloaded on every push.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.9'
           cache: pip
