@@ -49,14 +49,16 @@ fala com o servidor; as outras leem o disco. Se as duas discordarem, o
 O que era verdade na última verificação (**2026-08-03**), como ponto de
 partida e não como afirmação durável:
 
-- **`Refund-api`** — `main` e `origin/main` sincronizados, nada pendente.
+- **`Refund-api`** — `main` e `origin/main` sincronizados.
 - **`Refund-FrontEnd`** — a `main` recebeu três merges por fast-forward em
-  2026-08-03/05 (paginação, correção do `localStorage` e o Item 11) e está
-  **à frente** do `origin/main` por três commits não empurrados. **Nenhuma
-  branch de trabalho pendente.** Sobram quatro branches locais já mescladas ou
-  sem função: `feat/refund-review-ui`, `feat/pagination-busy-state`,
-  `fix/auth-storage-access` e `feat/error-boundaries` (as quatro saem com
-  `git branch -d`), mais `backup/claude-session-2026-07-13`.
+  2026-08-03/05 (paginação, correção do `localStorage` e o Item 11) e foi
+  **empurrada**. **Nenhuma branch de trabalho pendente** — as quatro branches
+  já mescladas foram apagadas com `git branch -d` em 2026-08-05. Sobra apenas
+  `backup/claude-session-2026-07-13`, que nunca foi branch de trabalho.
+
+Os dois lados foram empurrados em 2026-08-05. Um commit de documentação
+posterior a esta linha já a deixa desatualizada de novo — é para isso que
+existem os comandos acima.
 
 **Nem todo SHA envelhece igual, e a diferença é o que este bloco aprendeu.** O
 de uma branch de trabalho (`d33fb65`) se mantém enquanto ela não for mesclada,
