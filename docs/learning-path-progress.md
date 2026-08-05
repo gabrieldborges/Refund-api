@@ -3978,3 +3978,206 @@ suíte não prova bem: o jsdom não tem pintura. Checklist para o Gabriel:
 (2) trocar o idioma e ver a tela inteira mudar sem recarregar; (3) conferir que
 data e moeda mudam de formato junto; (4) confirmar no DevTools que o chunk do
 outro catálogo só é baixado ao trocar.
+
+## Item 15 — Motion com propósito (2026-08-05)
+
+**Status:** concluído em 2026-08-05, em duas branches empilhadas do
+`Refund-FrontEnd`: `feat/motion` (a camada de reduced-motion) e
+`feat/motion-animations` em cima dela (as quatro animações). Partiu de
+`887cd45`. Fecha o Item 15 do `learning_path.md`.
+
+### Por que estudar
+
+Animação tem função: explicar **mudança de estado**, **hierarquia** ou
+**continuidade**. Sem função, é ruído. E há um lado que não é estético:
+`prefers-reduced-motion` é uma preferência de sistema operacional, ligada
+tipicamente por quem tem **distúrbio vestibular** — deslocamento na tela
+provoca náusea de verdade.
+
+O levantamento inverteu o enquadramento do item. O `learning_path.md` supunha
+"animações simples, sem estratégia"; o que havia era:
+
+| Origem | Quantidade |
+|---|---|
+| Design system (Radix/shadcn): Dialog, Sheet, Tooltip, Select, Sidebar | `animate-in/out` ×6, fade ×10, zoom ×6, slide ×12 |
+| `animate-spin` dos botões ocupados | 8 arquivos |
+| Código do app | **1** (`transition hover:bg-accent/50`) |
+
+Ou seja: **não havia animação gratuita para remover.** O problema era a
+ausência da camada que respeita a preferência — `grep -rn "reduced-motion" src/`
+não devolvia nada.
+
+### Lição 1 — neutralizar movimento sem matar a animação
+
+A saída preguiçosa seria `animation: none` em tudo sob a preferência. Isso
+remove também o fade, que **não** provoca sintoma vestibular, e deixa a
+interface trocando de estado sem nenhum sinal.
+
+A saída cirúrgica saiu de ler o CSS **gerado**, não de supor:
+
+```css
+@keyframes enter {
+  0% {
+    opacity: var(--tw-enter-opacity, 1);
+    transform: translate3d(var(--tw-enter-translate-x, 0), …)
+               scale3d(var(--tw-enter-scale, 1), …)
+               rotate(var(--tw-enter-rotate, 0));
+  }
+}
+```
+
+As keyframes leem variáveis com fallback. Então basta devolvê-las ao valor de
+identidade sob a preferência: o movimento some, o fade fica, a animação
+continua existindo.
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    --tw-enter-translate-y: 0 !important;
+    --tw-enter-scale: 1 !important;
+    /* opacity intocada de propósito */
+  }
+  .animate-spin { animation: none !important; }
+}
+```
+
+O `!important` é estrutural, não preguiça: estas regras casam em `*`
+(especificidade 0) e as utilitárias do Tailwind casam em classe (0,1,0).
+
+Os spinners param. Rotação contínua é a categoria pior (WCAG 2.2.2, "Pause,
+Stop, Hide") porque não termina sozinha — e **nada de significado se perde**,
+porque `aria-busy` e o rótulo escrito ("Aprovando…") já carregam o estado. O
+teste novo prova exatamente essa premissa, e diz o que **não** prova: o jsdom
+não tem engine de CSS, então nenhum teste aqui observa animação começando ou
+parando.
+
+### Lição 2 — o bug que só apareceria em desenvolvimento
+
+Para animar "chegou item novo" é preciso saber qual item é novo, e o React não
+conta: um re-render é idêntico se a lista cresceu ou apenas refez a busca. A
+primeira versão do hook registrava os ids vistos **durante o render**:
+
+```ts
+// ERRADO
+if (!seen.current.has(id)) {
+  entering.add(id);
+  seen.current.add(id);   // ← escrita durante o render
+}
+```
+
+Funciona em produção e **quebra sob `StrictMode`**, que renderiza duas vezes: a
+primeira passada registra o id, a segunda — a que o React mantém — encontra-o
+já conhecido e reporta "nada entrando". **A animação nunca apareceria no
+`npm run dev` enquanto funcionaria no build.** É quase a pior forma de um bug
+se comportar.
+
+A correção é separar leitura de escrita:
+
+```ts
+const seenIds = seen.current;              // lê no render
+useEffect(() => { /* escreve depois */ });
+```
+
+As duas passadas calculam a mesma resposta, e a classe ainda entra no mesmo
+commit do elemento — não há frame em que o item apareça sem animação.
+
+**Os testes novos renderizam sob `StrictMode` por causa disso**, e a prova não
+foi passarem: foi restaurar a versão antiga e ver **3 dos 6 falharem**.
+
+### Lição 3 — uma animação CSS não reinicia se a classe nunca sai
+
+Relatado pelo Gabriel usando o app: o badge pulsava de `pending` para
+`approved`, mas não de `approved` para `rejected`. A detecção estava certa; o
+problema era CSS.
+
+Uma animação toca quando a classe **aparece** num nó que não a tinha. Entre
+duas mudanças consecutivas não existe nenhum render em que `statusChanged`
+volte a ser `false` — então a classe permanecia no elemento e o navegador não
+tinha o que reiniciar.
+
+```tsx
+<Badge key={refund.status} className={cn(statusChanged && "badge-pop")}>
+```
+
+O `key` dá um nó novo a cada valor. `statusChanged` continua necessário: sem
+ele, abrir a tela animaria um estado que não mudou.
+
+### Lição 4 — `height: auto` não é animável; fração de grid é
+
+O pedido foi explícito: o item novo chega deslizando **e os de baixo se afastam
+para recebê-lo**, sem sobreposição. Isso é *layout animation*, o caso clássico
+de `framer-motion` (~40 kB num bundle já acima do aviso de 500 kB).
+
+Feito em CSS:
+
+```css
+@keyframes timeline-enter {
+  from { grid-template-rows: 0fr; opacity: 0; transform: translateX(-1.5rem); }
+  to   { grid-template-rows: 1fr; opacity: 1; transform: translateX(0); }
+}
+```
+
+O `translateX` diz "chegou"; o `grid-template-rows` de `0fr` para `1fr` é o que
+**abre espaço de verdade** — os itens abaixo são deslocados por layout, não
+cobertos por um transform. `min-height: 0` no filho é obrigatório: sem ele o
+conteúdo impõe altura mínima e a linha nunca chega a `0fr`.
+
+### O que ficou sem resolver, e por quê isso é registro e não desculpa
+
+**O "flick" ao abrir a Home continua.** Duas tentativas falharam:
+
+1. `scrollbar-gutter: stable` na `div.flex-1.overflow-auto` do `MainLayout`.
+   **Sem efeito nenhum** — aquela div parece o contêiner de rolagem e não é: o
+   wrapper do sidebar é `min-h-svh` (altura MÍNIMA), então cresce com o
+   conteúdo e a div nunca transborda. Quem rola é o documento.
+2. A mesma regra no `html`, o elemento certo. **Também não resolveu**, o que
+   descarta a barra de rolagem como causa.
+
+As duas foram removidas a pedido do Gabriel. Fica a hipótese que já incomodava
+desde o início: a entrada das linhas usa `opacity` e `translateY`, e **nenhuma
+das duas altera layout** — as linhas ocupam a altura final desde o primeiro
+frame, então a animação sozinha não explica a página crescer e encolher.
+
+**A lição:** duas correções erradas seguidas são sinal de falta de observação,
+não de falta de ideia. O próximo passo, se houver, é medir `scrollHeight` por
+frame durante a carga e olhar o número.
+
+### O que lembrar
+
+- Sob `prefers-reduced-motion`, remova **movimento** e preserve **opacidade**.
+  Matar toda animação também remove sinal.
+- Rotação contínua é a pior categoria; pare os spinners, mas só depois de
+  garantir que o estado é carregado por `aria-busy` e por texto.
+- Escrita de ref **durante o render** quebra sob `StrictMode`. Leia no render,
+  escreva no efeito. E teste sob `StrictMode`, ou o bug espera pelo `dev`.
+- Animação CSS não reinicia se a classe nunca sai do nó. `key` resolve.
+- `height: auto` não é animável; `grid-template-rows: 0fr → 1fr` é, e é assim
+  que se abre espaço sem biblioteca.
+- Leia o CSS gerado antes de escrever regra sobre ele. As variáveis do
+  tw-animate-css vieram de `grep` no bundle, não de memória.
+
+### Verificação
+
+Ponto de partida medido antes das branches: 274 testes em 48 arquivos, `tsc` 0,
+lint 0/0, CSS 59,61 kB, JS 606,92 kB.
+
+| Verificação | Antes | Depois |
+|---|---|---|
+| `npx vitest run` (3 rodadas) | 274 em 48 | **287 em 51**, verdes nas três |
+| `npx tsc -b --noEmit` | exit 0 | exit 0 |
+| `npm run lint` | 0/0 | **0/0** |
+| CSS | 59,61 kB | **61,54 kB** (+1,93 kB) |
+| JS | 606,92 kB | **607,94 kB** (+1,02 kB) |
+
+Praticamente tudo é CSS — nenhuma biblioteca de animação entrou.
+
+`react-hooks/refs` foi desligada **por arquivo, pelo nome**, para
+`src/hooks/useEnteredItems.ts`, seguindo o precedente já existente no
+`eslint.config.js`. Diretiva inline não funciona ali: a regra segue o valor
+através do alias local, então precisaria ser repetida em cada uso.
+
+**Validado em navegador pelo Gabriel em 2026-08-05**, com uma ressalva
+importante: o badge, a timeline, a tabela e os banners foram conferidos e
+**funcionam**; o flick da Home **não** foi resolvido e ficou registrado como
+pendência. A validação do `prefers-reduced-motion` em si (DevTools → Rendering
+→ Emulate) **não foi confirmada explicitamente** — ver pendências.
