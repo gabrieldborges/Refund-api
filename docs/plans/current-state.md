@@ -1143,9 +1143,21 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   separados. Os Itens 17 e 22 são pré-requisitos técnicos do primeiro deploy, e
   os Itens 29/30 são o deploy em si. Quem quiser implantar não precisa de um
   projeto paralelo — precisa desses quatro itens da trilha.
-- **`AuthContext.loadStoredUser` lê `localStorage` FORA do próprio `try`.**
-  Achado no Item 11 (2026-08-03) e **deliberadamente não corrigido**, para não
-  misturar uma correção de comportamento com o item em curso.
+- ~~**`AuthContext.loadStoredUser` lê `localStorage` FORA do próprio
+  `try`.**~~ **RESOLVIDO em 2026-08-05**, na branch `fix/auth-storage-access`
+  do `Refund-FrontEnd` (commit `d9d8b6b`, **não mesclada**): a leitura entrou
+  no bloco que já existia, e a aplicação passa a bootar anônima em vez de
+  quebrar. **A prova não foi o teste passar** — o teste novo (`boots anonymous
+  when localStorage access itself throws`, com `Storage.prototype.getItem`
+  jogando `SecurityError`) foi rodado contra o código **antigo** primeiro, onde
+  falha. Verificação: 250 testes (de 249), `tsc` 0, lint 0/0, bundle inalterado.
+  **Ficou de fora de propósito:** `login` e `logout` também tocam
+  `localStorage`, mas de dentro de um event handler e de uma função assíncrona
+  — um storage bloqueado ali vira promise rejeitada ou erro de handler, não
+  queda de render. Forma de falha diferente, correção diferente.
+  O registro original, porque o raciocínio continua útil:
+  Achado no Item 11 (2026-08-03) e **deliberadamente não corrigido na hora**,
+  para não misturar uma correção de comportamento com o item em curso.
   `src/context/AuthContext.tsx` linha 11 chama
   `localStorage.getItem(USER_STORAGE_KEY)` **antes** do `try` que começa na
   linha 14 — o bloco protege o `JSON.parse` e o `safeParse`, mas não o acesso
