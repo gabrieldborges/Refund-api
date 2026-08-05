@@ -3818,3 +3818,163 @@ comportamento com `localStorage` bloqueado só aparece num navegador com essa
 configuração ligada; o jsdom não a reproduz. A suíte prova que *um filho que
 lança* produz o fallback, não que *este* filho lança naquele cenário. Fica
 como item de checklist de navegador, não como validado.
+
+## Item 14 — i18n com bootstrap assíncrono (2026-08-05)
+
+**Status:** concluído em 2026-08-05, na branch `feat/i18n` do `Refund-FrontEnd`,
+partindo de `887cd45`. Fecha o Item 14 do `learning_path.md`. Dois catálogos
+completos (`pt-BR` e `en-US`), 97 chaves cada.
+
+### Por que estudar
+
+i18n separa **chave de mensagem** de **catálogo por locale**: o componente
+deixa de conter o texto e passa a conter uma referência a ele. O que dá nome ao
+item é o **bootstrap assíncrono** — se o catálogo carrega depois do primeiro
+render, o usuário vê um flash no idioma errado ou chaves cruas.
+
+Registrado com honestidade na apresentação: **o ganho aqui é de aprendizado,
+não de produto.** O Refund tem um usuário e um idioma. O que o item compra de
+verdade é a disciplina de separar texto de componente — e três descobertas que
+só apareceram porque o trabalho foi feito.
+
+### Lição 1 — "dado avaliado na importação" é a categoria que decide tudo
+
+Quatro módulos guardavam texto e são avaliados **uma vez, na importação**,
+antes de qualquer locale existir: `nav-items.tsx`, `constants/status.ts`,
+`constants/categories.ts` e os schemas Zod. Nenhum pode chamar `t`.
+
+A solução é sempre a mesma — guardar a **chave** e traduzir em quem renderiza:
+
+```ts
+// antes                          // depois
+{ label: "Pendente", ... }        { labelKey: "status.pending", ... }
+```
+
+E o detalhe que vale mais que a solução: **renomear `label` para `labelKey`
+transformou uma migração invisível em 14 erros de compilação.** Se o campo
+tivesse continuado `label`, cada call site esquecido renderizaria a chave crua
+na tela, em silêncio. O compilador virou a lista de tarefas.
+
+Onde a função não é componente, `t` entra por parâmetro:
+
+```ts
+// createRefundColumns é função pura, não componente
+function createRefundColumns(viewer: RefundViewer | null, t: TFunction) { … }
+const columns = useMemo(() => createRefundColumns(viewer, t), [viewer, t]);
+```
+
+Passar explicitamente também põe `t` na lista de dependências do `useMemo` —
+trocar de idioma reconstrói as colunas, que é exatamente o necessário.
+
+### Lição 2 — um ponto único de exibição vale mais que N pontos de tradução
+
+As mensagens dos schemas Zod viraram chaves. Poderiam ter sido traduzidas em
+cada formulário, mas `FormMessage` (`ui/form.tsx:140`) é **o único lugar** onde
+qualquer mensagem de validação chega à tela:
+
+```tsx
+const body = error ? t(String(error?.message ?? "")) : props.children
+```
+
+Uma linha cobre todos os formulários. Duas propriedades tornam isso seguro:
+`t()` devolve a string intacta quando ela não é uma chave, então mensagem
+literal continua funcionando; e o arquivo é vendorizado do shadcn, então a
+edição foi documentada como manual — regenerar pelo CLI perderia a mudança,
+exatamente como já acontece com `ui/sidebar.tsx`.
+
+**Como os testes provaram que as duas metades se conectam:** as asserções sobre
+a **saída do schema** falharam (agora é chave) e foram atualizadas; as
+asserções sobre o **texto renderizado** continuaram passando sem tocar em nada.
+São elas que provam que a chave vira português na tela.
+
+### Lição 3 — o plural do CLDR discordou do ternário, e no caso mais fácil de não notar
+
+O ternário antigo:
+
+```tsx
+`${total} ${total === 1 ? "solicitação" : "solicitações"}`
+```
+
+Trocado por `t("home.requestCount", { count })`, com `_one`/`_other`. O teste
+falhou em `count: 0`:
+
+```
+expected '0 solicitação' to be '0 solicitações'
+```
+
+**`Intl.PluralRules("pt-BR").select(0)` devolve `"one"`.** O CLDR classifica
+zero como singular em português. Ou seja, a migração teria mudado o texto de
+uma tela vazia — o estado mais comum de um app novo — de forma silenciosa e
+"tecnicamente correta".
+
+Medido, não deduzido: o i18next consulta um `_zero` explícito **antes** do
+CLDR, então a redação anterior foi preservada de propósito, com um teste que
+afirma as duas coisas (a classificação do CLDR e a sobreposição).
+
+A lição geral: **adotar um padrão não é neutro.** O CLDR está certo sobre a
+regra e ainda assim a mudança seria uma regressão de produto.
+
+### Lição 4 — bootstrap assíncrono em produção, síncrono em teste
+
+```ts
+// main.tsx — espera o catálogo ANTES do primeiro render
+initI18n(useUiStore.getState().locale).catch(…).finally(render)
+```
+
+O locale sai direto da store, sem hook, porque ainda não há árvore React. E o
+`.finally` é deliberado: catálogo que falha ainda renderiza, mostrando chaves
+cruas — ruim, mas diagnosticável, contra uma tela branca.
+
+Os testes fazem o oposto (`src/test/i18n.ts`): inicialização **síncrona**, com
+os dois catálogos importados estaticamente. Testes renderizam componentes
+direto, sem passar pelo bootstrap, então precisam de uma instância pronta. Como
+o `pt-BR` fica ativo e o catálogo tem as mesmas strings, **as 260 asserções
+existentes continuaram passando sem edição** — o oposto do que a apresentação
+do item previu.
+
+### O que mais mudou
+
+- `format.ts` lê o idioma ativo em vez de fixar `pt-BR` em dois lugares.
+- `ReviewTimeline` parou de formatar data inline — ele furava o `formatDate` e
+  por isso não tinha nem a guarda de data inválida nem o `timeZone: "UTC"`.
+  Inconsistência **pré-existente**, fechada de passagem.
+- `Accept-Language` em toda requisição. O backend **ignora** hoje; é preparação
+  declarada como tal no interceptor, não efeito imediato.
+- `PageComponents` ficou **deliberadamente fora**, com o motivo no topo do
+  arquivo: é vitrine do design system, com rótulo de amostra e dado fictício.
+
+### O que lembrar
+
+- Texto em módulo avaliado na importação (constantes, schemas, definições de
+  rota) **não pode** ser traduzido ali. Guarde a chave.
+- Renomeie o campo ao migrar (`label` → `labelKey`): transforma erro silencioso
+  de runtime em erro de compilação.
+- Ache o **ponto único de exibição** antes de traduzir em N lugares.
+- Moeda não é formatação: trocar símbolo sem converter valor é mentira. BRL
+  continua BRL nos dois idiomas; muda a convenção de escrita.
+- CLDR pode discordar do que o código fazia. Zero é singular em português.
+- Bootstrap assíncrono em produção, síncrono em teste — são requisitos
+  diferentes, e tentar unificá-los custaria mais que manter os dois.
+
+### Verificação
+
+Ponto de partida medido antes de abrir a branch: 260 testes em 46 arquivos,
+`tsc` 0, lint 0/0, bundle 562,61 kB.
+
+| Verificação | Antes | Depois |
+|---|---|---|
+| `npx vitest run` (3 rodadas) | 260 em 46 | **274 em 48**, verdes nas três |
+| `npx tsc -b --noEmit` | exit 0 | exit 0 |
+| `npm run lint` | 0/0 | **0/0** |
+| `npm run build` | 562,61 kB | **606,92 kB** (+44,31 kB) |
+
+O acréscimo é o runtime do i18next. **Os catálogos saem como chunks separados**
+(`pt-BR` 4,17 kB, `en-US` 3,86 kB), então quem nunca troca de idioma nunca
+baixa o outro — que é o efeito prático do carregamento sob demanda.
+
+**Não validado em navegador.** A troca de idioma sem flash é justamente o que a
+suíte não prova bem: o jsdom não tem pintura. Checklist para o Gabriel:
+(1) recarregar com `en-US` salvo e não ver flash de português nem de chave;
+(2) trocar o idioma e ver a tela inteira mudar sem recarregar; (3) conferir que
+data e moeda mudam de formato junto; (4) confirmar no DevTools que o chunk do
+outro catálogo só é baixado ao trocar.
