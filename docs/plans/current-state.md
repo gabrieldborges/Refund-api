@@ -940,6 +940,51 @@ completo e obrigatório está em
     filho lança naquele cenário. Ver pendências.~~ **Fechada pela validação
     acima** — o cenário foi observado no navegador.
 
+- **Fase 3, Item 14 — i18n com bootstrap assíncrono: CONCLUÍDO.**
+  Na branch `feat/i18n` do `Refund-FrontEnd`, partindo de `887cd45`. Fecha o
+  Item 14; dois catálogos **completos** (`pt-BR` e `en-US`), 97 chaves cada,
+  com paridade garantida por teste e não por inspeção. Detalhes no
+  [diário](../learning-path-progress.md). O que mudou:
+  - **`src/lib/i18n.ts`** carrega um catálogo por vez, sob demanda; o
+    `main.tsx` **espera** o catálogo antes do primeiro render (o bootstrap que
+    dá nome ao item). Catálogo que falha ainda renderiza, mostrando chaves
+    cruas — ruim, mas diagnosticável, contra tela branca.
+  - **`src/test/i18n.ts` faz o oposto: init síncrono**, com os dois catálogos
+    estáticos. Testes renderizam sem passar pelo bootstrap. Como o `pt-BR`
+    fica ativo e tem as mesmas strings, **as 260 asserções existentes passaram
+    sem edição** — o contrário do que a apresentação do item previu.
+  - **Locale na store `ui.ts`** (junto do tema, persistido) e alternador na
+    Topbar.
+  - **Quatro módulos avaliados na importação** (`nav-items`, `status`,
+    `categories`, schemas Zod) passaram a guardar **chave**, não texto.
+  - **`format.ts` lê o idioma ativo**; `ReviewTimeline` parou de formatar data
+    inline, fechando uma inconsistência **pré-existente** (ele furava o
+    `formatDate` e não tinha a guarda de data inválida nem o `timeZone`).
+  - **`Accept-Language`** em toda requisição — o backend **ignora** hoje; é
+    preparação declarada como tal.
+  - **`PageComponents` ficou deliberadamente fora**, com o motivo no topo do
+    arquivo: vitrine do design system, com rótulo de amostra e dado fictício.
+  - Verificação: baseline medido antes da branch (260 testes em 46 arquivos,
+    `tsc` 0, lint 0/0, bundle 562,61 kB). Depois: **274 testes em 48
+    arquivos**, verdes em três rodadas; `tsc` 0; lint **0/0**; build ok,
+    bundle **606,92 kB** (+44,31 kB, o runtime do i18next). Os catálogos saem
+    como **chunks separados** (`pt-BR` 4,17 kB, `en-US` 3,86 kB), então quem
+    não troca de idioma não baixa o outro.
+  - **VALIDADO EM NAVEGADOR em 2026-08-05**, pelo Gabriel, contra a API real e
+    **sem ressalvas**, contra um checklist de 6 pontos: ausência de flash no
+    reload, troca sem recarregar, data e moeda acompanhando o idioma, download
+    do chunk do outro catálogo só na troca, o plural em zero, e as mensagens
+    de validação traduzidas. **Registro honesto do alcance:** o Gabriel
+    confirmou o checklist como um todo ("aprovado e checado"), não item a item
+    em separado; sabe-se que os seis pontos foram apresentados e aceitos.
+  - **Achado que quase virou regressão silenciosa:**
+    `Intl.PluralRules("pt-BR").select(0)` devolve `"one"` — o CLDR classifica
+    zero como **singular** em português. Migrar o ternário para `_one`/`_other`
+    teria mudado a tela vazia de "0 solicitações" para "0 solicitação", em
+    silêncio e tecnicamente correto. O i18next consulta um `_zero` explícito
+    antes do CLDR, então a redação foi preservada de propósito, com teste
+    afirmando as duas coisas. **Adotar um padrão não é neutro.**
+
 - ~~**Próximo — validar em navegador os dois últimos ciclos, que foram
   mesclados e empurrados sem essa passada.**~~ **RESOLVIDO em 2026-08-03:** o
   Gabriel validou no navegador, contra a API real, **três** conjuntos, todos
@@ -1546,6 +1591,19 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   de "não encontrado" já levanta `HttpNotFoundError` → 404. Os 500 vistos no log
   vinham do bug de concorrência (agora corrigido), não do caminho de not-found.
 
+- ~~**`ResizeObserver is not defined` em `Sidebar.test.tsx`**~~ **RESOLVIDO em
+  2026-08-05**, depois de ser reportado desde 2026-07-29 sem causa isolada.
+  Apareceu durante a verificação do Item 14 **com a saída completa salva em
+  arquivo** — a captura que falhara duas vezes antes. O stack trace nomeou a
+  causa: o `useSize` do Radix constrói um `ResizeObserver` num layout effect, o
+  jsdom não implementa, e a exceção **não capturada** derruba qualquer teste
+  que estiver rodando — não o que montou o tooltip. Essa indireção é por que
+  nunca reproduziu isolado; o timing de hover/foco necessário para montar o
+  Popper é por que só aparecia em suíte completa. Medido: **2 ocorrências em 5
+  rodadas** antes, **8 rodadas limpas** depois do polyfill em
+  `src/test/setup.ts` (commit `a194f61`, separado do Item 14). O relato
+  original fica preservado abaixo porque a lição de captura não expira.
+  O registro anterior:
 - **`ResizeObserver is not defined` em `Sidebar.test.tsx` — CONFIRMADO
   pré-existente e independente deste projeto de mudanças, ainda dependente da
   ordem de execução e sem causa isolada.** Relatado pela primeira vez durante
