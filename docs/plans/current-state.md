@@ -50,15 +50,13 @@ O que era verdade na última verificação (**2026-08-03**), como ponto de
 partida e não como afirmação durável:
 
 - **`Refund-api`** — `main` e `origin/main` sincronizados, nada pendente.
-- **`Refund-FrontEnd`** — a `main` recebeu `feat/pagination-busy-state` por
-  fast-forward e está **à frente** do `origin/main` por um commit não
-  empurrado. Existe **uma branch de trabalho não mesclada**,
-  `feat/error-boundaries` (Item 11, um commit), verificada pela suíte **e
-  validada em navegador**; ela não faz mais fast-forward porque a `main`
-  andou. Há também `fix/auth-storage-access` (um commit), que faz
-  fast-forward. Sobram três branches locais sem função: `feat/refund-review-ui` e
-  `feat/pagination-busy-state`, ambas já totalmente mescladas (saem com
-  `git branch -d`), e `backup/claude-session-2026-07-13`.
+- **`Refund-FrontEnd`** — a `main` recebeu três merges por fast-forward em
+  2026-08-03/05 (paginação, correção do `localStorage` e o Item 11) e está
+  **à frente** do `origin/main` por três commits não empurrados. **Nenhuma
+  branch de trabalho pendente.** Sobram quatro branches locais já mescladas ou
+  sem função: `feat/refund-review-ui`, `feat/pagination-busy-state`,
+  `fix/auth-storage-access` e `feat/error-boundaries` (as quatro saem com
+  `git branch -d`), mais `backup/claude-session-2026-07-13`.
 
 **Nem todo SHA envelhece igual, e a diferença é o que este bloco aprendeu.** O
 de uma branch de trabalho (`d33fb65`) se mantém enquanto ela não for mesclada,
@@ -984,14 +982,19 @@ O que fica aberto, em ordem de quem depende de quem:
 3. ~~**Mesclar `feat/pagination-busy-state`**~~ **FEITO em 2026-08-03:**
    fast-forward `6c63ff5..d33fb65`, com verificação repetida depois do merge.
    Não empurrada ainda.
-3b. **Mesclar `feat/error-boundaries`** (Item 11) — verificada pela suíte
-   **e validada em navegador em 2026-08-05, sem ressalvas**. Como a `main`
-   andou, ela **não** faz mais fast-forward: precisa de rebase sobre `d33fb65`
-   para preservar o histórico linear que o projeto mantém. Não há conflito
-   previsto — os arquivos tocados não se sobrepõem aos da paginação.
-3c. **Mesclar `fix/auth-storage-access`** — faz fast-forward sobre a `main`
-   atual. Não validada em navegador; a mudança é de caminho de exceção e tem
-   teste que falha contra o código antigo.
+3b. ~~**Mesclar `feat/error-boundaries`** (Item 11).~~ **FEITO em 2026-08-05:**
+   rebase limpo sobre a `main` (`2334028` virou `887cd45`, sem conflito) e
+   fast-forward. A ordem foi invertida de propósito — a `fix/auth-storage-access`
+   entrou primeiro por já fazer fast-forward, o que economizou um segundo
+   rebase.
+3c. ~~**Mesclar `fix/auth-storage-access`**.~~ **FEITO em 2026-08-05:**
+   fast-forward `d33fb65..d9d8b6b`.
+
+   **A árvore combinada foi verificada antes do merge, não só depois.** Rebase
+   produz um estado que nunca existiu em teste nenhum: boundaries, correção do
+   `localStorage` e paginação juntos. Números finais na `main`: **260 testes em
+   46 arquivos**, verdes em **três rodadas**, `tsc` exit 0, lint **0/0**, build
+   ok, bundle **562,61 kB**. Flake do `ResizeObserver` ausente nas três.
 4. ~~**Decidir o deploy conjunto.**~~ **RESOLVIDO em 2026-08-03** — por
    verificação, não por implantação. Não existe produção: o risco era
    contingente a um ambiente que nunca foi criado. Ver a pendência reescrita e
