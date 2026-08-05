@@ -1,0 +1,57 @@
+# Runs the two checks AGENTS.md already requires — pytest and pylint src — on
+# a machine that cannot forget to run them.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    # WHY THESE VARIABLES EXIST, given that no test touches a real database.
+    #
+    # src/configs/__init__.py calls load_dotenv() and global_config.py reads
+    # DATABASE_URL at import time, so the async engine is built while modules
+    # are being imported — before any test runs and before any mock is in
+    # place. With the variable unset, create_async_engine(None) raises and
+    # pytest fails during COLLECTION: 7 errors, 0 tests run. Verified by
+    # temporarily hiding .env locally rather than assumed.
+    #
+    # The values are deliberately fake. Nothing connects: the suite is unit
+    # tests with mocked repositories, and the URL only has to be well-formed
+    # enough for SQLAlchemy to parse it.
+    #
+    # That this is necessary at all is a symptom, not a solution — configuration
+    # read at import time is what Item 17 (pydantic-settings) exists to fix.
+    env:
+      DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/ci
+      JWT_SECRET: ci-only-not-a-real-secret
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Python is pinned to the version used locally. A CI on a different minor
+      # would be verifying something nobody runs — and this project's local
+      # interpreter is 3.9, older than the runner default.
+      #
+      # `cache: pip` keys on requirements.txt, so an unchanged dependency set
+      # is not re-downloaded on every push.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: pip
+
+      # Python has no direct equivalent of `npm ci`. requirements.txt pins every
+      # version with `==`, which gives the same guarantee by a different route:
+      # the install is reproducible because the file leaves nothing to resolve.
+      #
+      # No virtualenv is created. The runner is disposable and nothing else
+      # lives on it, so the isolation a venv provides locally is already there.
+      # This also sidesteps the stale shebangs in the local .venv, which force
+      # `python3 -m pytest` there — on CI the plain commands work.
+      - run: pip install -r requirements.txt
+
+      - run: pytest
+      - run: pylint src
