@@ -3,7 +3,7 @@ from src.drivers.interfaces.file_storage_interface import FileStorageInterface
 from src.controllers.interfaces.refund_creator_controller_interface import (
     RefundCreatorControllerInterface,
 )
-from src.controllers.refund_serializer import serialize_refund
+from src.controllers.refund_serializer import format_refund_response
 
 
 class RefundCreatorController(RefundCreatorControllerInterface):
@@ -32,11 +32,4 @@ class RefundCreatorController(RefundCreatorControllerInterface):
         # joined requester, so this response has the same shape as GET.
         refund = await self.__refunds_repository.select_refund_by_id(refund_id)
 
-        return self.__format_response(refund)
-
-    def __format_response(self, refund: dict) -> dict:
-        return {
-            "type": "Refund",
-            "count": 1,
-            "attributes": serialize_refund(refund),
-        }
+        return format_refund_response(refund)

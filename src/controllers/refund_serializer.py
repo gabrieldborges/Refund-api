@@ -30,5 +30,21 @@ def serialize_refund(refund: dict) -> dict:
     }
 
 
+# The envelope around a SINGLE serialized refund. Three use cases — create,
+# detail and pay — return byte-identical responses, and pylint's duplicate-code
+# checker flagged them (R0801) once CI started reading exit codes instead of
+# only the score line.
+#
+# The other three refund responses deliberately do NOT use this: the listing
+# carries count/total/sum/page, the deleter answers {id, deleted}, and the
+# reviewer returns the flat shape documented as divergent in UC-007.
+def format_refund_response(refund: dict) -> dict:
+    return {
+        "type": "Refund",
+        "count": 1,
+        "attributes": serialize_refund(refund),
+    }
+
+
 def _iso(created_at) -> Optional[str]:
     return created_at.isoformat() if created_at else None

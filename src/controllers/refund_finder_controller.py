@@ -2,7 +2,7 @@ from src.models.repositories.interfaces.refunds_repository_interface import Refu
 from src.controllers.interfaces.refund_finder_controller_interface import (
     RefundFinderControllerInterface,
 )
-from src.controllers.refund_serializer import serialize_refund
+from src.controllers.refund_serializer import format_refund_response
 from src.errors.types.http_not_found_error import HttpNotFoundError
 
 
@@ -19,11 +19,4 @@ class RefundFinderController(RefundFinderControllerInterface):
         if not refund or (role != "admin" and refund["user"]["id"] != user_id):
             raise HttpNotFoundError("Refund not found")
 
-        return self.__format_response(refund)
-
-    def __format_response(self, refund: dict) -> dict:
-        return {
-            "type": "Refund",
-            "count": 1,
-            "attributes": serialize_refund(refund),
-        }
+        return format_refund_response(refund)

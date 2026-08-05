@@ -7,7 +7,7 @@ from src.drivers.interfaces.file_storage_interface import FileStorageInterface
 from src.controllers.interfaces.refund_payer_controller_interface import (
     RefundPayerControllerInterface,
 )
-from src.controllers.refund_serializer import serialize_refund
+from src.controllers.refund_serializer import format_refund_response
 from src.errors.types.http_forbidden_error import HttpForbiddenError
 from src.errors.types.http_not_found_error import HttpNotFoundError
 from src.errors.types.http_unprocessable_entity_error import HttpUnprocessableEntityError
@@ -113,11 +113,7 @@ class RefundPayerController(RefundPayerControllerInterface):
         # divergent shape documented in UC-007; a new surface starts correct.
         paid_refund = await self.__refunds_repository.select_refund_by_id(refund_id)
 
-        return {
-            "type": "Refund",
-            "count": 1,
-            "attributes": serialize_refund(paid_refund),
-        }
+        return format_refund_response(paid_refund)
 
     def __delete_orphaned_file(self, stored_filename: str) -> None:
         # Best-effort compensation. If delete() itself raises (e.g. the file
