@@ -53,9 +53,10 @@ partida e não como afirmação durável:
 - **`Refund-FrontEnd`** — a `main` recebeu `feat/pagination-busy-state` por
   fast-forward e está **à frente** do `origin/main` por um commit não
   empurrado. Existe **uma branch de trabalho não mesclada**,
-  `feat/error-boundaries` (Item 11, um commit), verificada pela suíte mas
-  **não** validada em navegador; ela não faz mais fast-forward porque a `main`
-  andou. Sobram três branches locais sem função: `feat/refund-review-ui` e
+  `feat/error-boundaries` (Item 11, um commit), verificada pela suíte **e
+  validada em navegador**; ela não faz mais fast-forward porque a `main`
+  andou. Há também `fix/auth-storage-access` (um commit), que faz
+  fast-forward. Sobram três branches locais sem função: `feat/refund-review-ui` e
   `feat/pagination-busy-state`, ambas já totalmente mescladas (saem com
   `git branch -d`), e `backup/claude-session-2026-07-13`.
 
@@ -924,10 +925,20 @@ completo e obrigatório está em
     arquivo antes de ser lida; `tsc` exit 0; lint **0/0**; build ok, bundle
     **562,61 kB** (+1,73 kB). Flake do `ResizeObserver` ausente nas três.
     Dois testes validados por **quebra deliberada**, não só por passarem.
-  - **Limitação registrada:** o gatilho real da primeira lacuna
+  - **VALIDADO EM NAVEGADOR em 2026-08-05**, pelo Gabriel, contra a API real,
+    nos três pontos e **sem ressalvas**: (1) com o backend derrubado, o erro do
+    `homeLoader` preencheu só a área de conteúdo, com sidebar e topbar
+    intactos e navegáveis; (2) com o backend de volta, "Tentar novamente"
+    mostrou o estado ocupado e recuperou a lista **sem sair da página** nem
+    mudar a URL; (3) com os dados do site bloqueados no DevTools, apareceu a
+    tela "Algo deu errado" com "Recarregar a página" — **não** a tela branca.
+    O ponto (3) é o que motivou o item inteiro e o único que a suíte não
+    alcança.
+  - ~~**Limitação registrada:** o gatilho real da primeira lacuna
     (`localStorage` bloqueado) não foi observado — o jsdom não reproduz. A
     suíte prova que um filho que lança produz o fallback, não que *aquele*
-    filho lança naquele cenário. Ver pendências.
+    filho lança naquele cenário. Ver pendências.~~ **Fechada pela validação
+    acima** — o cenário foi observado no navegador.
 
 - ~~**Próximo — validar em navegador os dois últimos ciclos, que foram
   mesclados e empurrados sem essa passada.**~~ **RESOLVIDO em 2026-08-03:** o
@@ -973,11 +984,14 @@ O que fica aberto, em ordem de quem depende de quem:
 3. ~~**Mesclar `feat/pagination-busy-state`**~~ **FEITO em 2026-08-03:**
    fast-forward `6c63ff5..d33fb65`, com verificação repetida depois do merge.
    Não empurrada ainda.
-3b. **Mesclar `feat/error-boundaries`** (Item 11) — verificada pela suíte,
-   **não** validada em navegador. Como a `main` andou, ela **não** faz mais
-   fast-forward: precisa de rebase sobre `d33fb65` para preservar o histórico
-   linear que o projeto mantém. Não há conflito previsto — os arquivos tocados
-   não se sobrepõem aos da paginação.
+3b. **Mesclar `feat/error-boundaries`** (Item 11) — verificada pela suíte
+   **e validada em navegador em 2026-08-05, sem ressalvas**. Como a `main`
+   andou, ela **não** faz mais fast-forward: precisa de rebase sobre `d33fb65`
+   para preservar o histórico linear que o projeto mantém. Não há conflito
+   previsto — os arquivos tocados não se sobrepõem aos da paginação.
+3c. **Mesclar `fix/auth-storage-access`** — faz fast-forward sobre a `main`
+   atual. Não validada em navegador; a mudança é de caminho de exceção e tem
+   teste que falha contra o código antigo.
 4. ~~**Decidir o deploy conjunto.**~~ **RESOLVIDO em 2026-08-03** — por
    verificação, não por implantação. Não existe produção: o risco era
    contingente a um ambiente que nunca foi criado. Ver a pendência reescrita e
@@ -1172,7 +1186,16 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   arquivo já diz sobre o `safeParse`. **A correção é mover a linha 11 para
   dentro do `try`** — uma linha. Fica como decisão do Gabriel porque é
   mudança de comportamento, não de arquitetura.
-- **O gatilho real do `AppErrorBoundary` nunca foi observado.** O cenário que
+- ~~**O gatilho real do `AppErrorBoundary` nunca foi observado.**~~
+  **RESOLVIDO em 2026-08-05:** o Gabriel bloqueou os dados do site pelo
+  DevTools e recarregou; apareceu a tela "Algo deu errado" com "Recarregar a
+  página", não a tela branca. Vale registrar que este foi o **único** dos três
+  pontos do checklist que a suíte não conseguia alcançar de forma alguma — e
+  que a `fix/auth-storage-access` muda o resultado esperado deste mesmo
+  cenário: com ela mesclada, a aplicação passa a bootar **anônima** em vez de
+  mostrar a tela de erro. Quem revalidar precisa saber qual das duas árvores
+  está olhando. O registro original:
+  O cenário que
   motivou a lacuna 1 do Item 11 (`localStorage` bloqueado no boot) não é
   reproduzível no jsdom. Os testes provam que *um filho que lança* produz o
   fallback; ninguém viu *aquele* filho lançando. Para observar: DevTools →
