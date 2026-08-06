@@ -4181,3 +4181,157 @@ importante: o badge, a timeline, a tabela e os banners foram conferidos e
 **funcionam**; o flick da Home **não** foi resolvido e ficou registrado como
 pendência. A validação do `prefers-reduced-motion` em si (DevTools → Rendering
 → Emulate) **não foi confirmada explicitamente** — ver pendências.
+
+## Item 16 — Pipeline de qualidade (2026-08-06)
+
+**Status:** concluído em 2026-08-06, na branch `feat/ci` de **ambos** os
+repositórios. Fecha o Item 16 e, com ele, a **Fase 3** do `learning_path.md`.
+Primeiro item que produz artefato nos dois repos ao mesmo tempo.
+
+### Por que estudar, e por que só metade
+
+O item empacota duas coisas com valor muito diferente para este projeto.
+
+**CI:** custo comprovado de não ter. O commit `2d07a8d` deixou a `main` do
+frontend quebrada em `tsc`, `eslint` **e** `build`, e ninguém viu por dias
+porque nenhuma verificação rodou naquele intervalo.
+
+**Oxlint: DELIBERADAMENTE PULADO**, com o número na mesa. O ESLint leva
+**2,1 s** aqui. O Oxlint economizaria ~2 segundos, adicionaria uma segunda
+ferramenta de lint com configuração própria e criaria a pergunta "qual das
+duas reclamou disso?" a cada falha. O gargalo real é o Vitest, com **9,8 s**,
+que o Oxlint não toca. Ele faz sentido quando o lint custa dezenas de
+segundos; não é o caso. Decisão do Gabriel, registrada em vez de silenciada —
+o item fica cumprido pela metade **explicitamente**, que é mais honesto que
+inteiro por obrigação.
+
+### Lição 1 — o runner começa vazio
+
+É a ideia que faz todo o resto encaixar. O runner é uma máquina Ubuntu limpa,
+criada a cada execução, que nunca viu o projeto: sem código, sem `node_modules`,
+sem Node na sua versão. Quase todo erro de quem começa nasce de esquecer isso.
+
+Daí a ordem obrigatória: `checkout` (clona) → `setup-node`/`setup-python`
+(instala runtime) → instala dependências → só então verifica.
+
+Vocabulário, mapeado no que já existia:
+
+| Termo | O que é |
+|---|---|
+| workflow | arquivo YAML em `.github/workflows/` |
+| trigger (`on`) | o evento que dispara (`push`) |
+| job | unidade numa máquina própria |
+| step | um passo; `run:` = comando, `uses:` = ação pronta |
+
+### Lição 2 — a prova de um portão é vê-lo fechar
+
+Depois do primeiro verde, um erro de tipo foi inserido **de propósito** e
+empurrado. O CI reprovou em **23 s** contra 2m11s do verde, e a saída mostrou
+por quê:
+
+```
+X Run npm run typecheck
+- Run npm run lint      ← nem rodou
+- Run npm test          ← nem rodou
+- Run npm run build     ← nem rodou
+```
+
+Os passos vão do mais barato ao mais caro e o job para no primeiro que falha,
+então um erro de tipo é reportado sem esperar 10 s de testes. O erro chega
+inteiro: `##[error]src/lib/format.ts(13,9): error TS2322: …`.
+
+Mesmo padrão que este projeto já usa nos testes: **passar não é prova; falhar
+quando deve é.**
+
+### Lição 3 — o achado que valeu mais que o item inteiro
+
+O CI do backend reprovou no primeiro dia, no `pylint src`. Investigando,
+descobriu-se que **ele também reprovava localmente**:
+
+```bash
+$ pylint src ; echo $?
+Your code has been rated at 10.00/10
+8
+```
+
+**Nota e código de saída são coisas diferentes.** O pylint não penaliza a nota
+por uma mensagem de refatoração, mas sai com código ≠ 0 se emitiu qualquer
+mensagem. Nenhuma sessão anterior conferiu o `$?` — todas leram a linha da nota
+e registraram "pylint 10.00/10" como aprovação. **A afirmação estava
+incompleta em vários ciclos deste diário.** O CI achou em 54 segundos, porque
+máquina não lê linha bonita: lê código de saída.
+
+A causa era `R0801` (código duplicado): o envelope de resposta repetido em
+**três** controllers — o pylint apontou dois, porque o terceiro (`payer`) o
+montava inline. `format_refund_response` foi extraída para junto de
+`serialize_refund`.
+
+Os outros três envelopes ficaram de fora **de propósito**: a listagem carrega
+`count/total/sum/page`, a exclusão responde `{id, deleted}` e o revisor tem a
+forma achatada divergente do `UC-007`. Unificar aqueles seria a abstração
+errada — a duplicação real existe só entre os três que de fato concordam.
+
+Confirmado que `--fail-under=10` **não** resolve (continua saindo 8); só
+eliminar a duplicação ou desligar a regra zera o código.
+
+### Lição 4 — o CI é mais confiável que a máquina de quem desenvolve
+
+Alegado na apresentação, **comprovado duas vezes**:
+
+1. O `pylint` acima, invisível para quem lia a nota.
+2. Sem o `.env`, o `pytest` **nem coleta** os testes: 7 erros de
+   `sqlalchemy.exc.ArgumentError`, porque `src/configs` lê `DATABASE_URL` na
+   importação e `create_async_engine(None)` estoura antes de qualquer mock
+   existir. Verificado escondendo o `.env` localmente, não suposto.
+
+O segundo obrigou o workflow a declarar variáveis fictícias — e isso é
+**sintoma, não solução**. Configuração lida em tempo de importação é
+exatamente o que o **Item 17 (pydantic-settings)** existe para resolver. O CI
+transformou uma pendência abstrata em obstáculo concreto.
+
+### Detalhes que valem lembrar
+
+- **`npm ci`, não `npm install`:** instala exatamente o que o lockfile fixa e
+  falha se o `package.json` divergir. É a "CI por lockfile" que a trilha pede.
+  Python não tem equivalente direto; o `requirements.txt` com `==` em tudo dá a
+  mesma garantia por outro caminho.
+- **Nenhum venv no CI.** O runner é descartável, então o isolamento já existe —
+  e isso contorna os shebangs quebrados do `.venv` local, que forçam
+  `python3 -m` aqui.
+- **Versão de ação é código de terceiros.** `@v4` gerou aviso de Node 20
+  depreciado nos dois repos; subiu para `@v5`/`@v6`.
+- **Runtime fixado ao local** (Node 24, Python 3.9): um CI noutra major
+  verificaria algo que ninguém executa.
+
+### O que fica em aberto
+
+**O CI não bloqueia nada.** Ele reporta, mas ainda é possível empurrar para a
+`main` com o CI vermelho. Tornar o check obrigatório é **branch protection**,
+configuração de painel (Settings → Branches → *Require status checks to
+pass*), não do YAML — e não pode ser feita por linha de comando pelo agente.
+Enquanto não estiver ligada, o portão avisa mas não tranca.
+
+### O que lembrar
+
+- O runner começa vazio. `checkout` sempre primeiro.
+- Ordem barata→cara; o job para no primeiro erro.
+- Um portão que nunca foi visto falhando não é um portão.
+- **Leia o código de saída, não a linha bonita.** Vale para `pylint`, e é a
+  razão de o CI achar em 54 s o que meses de leitura humana não acharam.
+- O CI é a fonte da verdade porque parte do zero: sem `.env`, sem `.venv`, sem
+  cache local, sem o que a sua máquina acumulou.
+
+### Verificação
+
+| Repositório | Execução | Resultado |
+|---|---|---|
+| `Refund-FrontEnd` | inicial | ✓ 2m15s |
+| `Refund-FrontEnd` | erro de tipo deliberado | **✗ 23s, no typecheck** |
+| `Refund-FrontEnd` | revert + ações v5 | ✓ 2m11s, sem avisos |
+| `Refund-api` | inicial | **✗ 54s, no pylint** |
+| `Refund-api` | depois da extração | ✓ 1m7s |
+| `Refund-api` | `setup-python@v6` | ✓ sem avisos |
+
+Local, depois da mudança: `pytest` **235 passed**, `pylint src` **10.00/10 com
+exit 0 pela primeira vez**. Frontend inalterado (287 testes, `tsc` 0, lint
+0/0).

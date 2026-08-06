@@ -1017,6 +1017,38 @@ completo e obrigatório está em
     Home não foi resolvido, e a emulação de `prefers-reduced-motion` não foi
     confirmada explicitamente.
 
+- **Fase 3, Item 16 — Pipeline de qualidade: CONCLUÍDO. Fecha a FASE 3.**
+  Na branch `feat/ci` de **ambos** os repositórios — o primeiro item a produzir
+  artefato nos dois ao mesmo tempo. **Nenhuma das duas mesclada.** Detalhes no
+  [diário](../learning-path-progress.md).
+  - **CI em GitHub Actions** rodando as verificações que os `AGENTS.md` já
+    exigiam: `typecheck`/`lint`/`test`/`build` no frontend, `pytest`/`pylint
+    src` no backend, a cada push, do mais barato ao mais caro.
+  - **Oxlint DELIBERADAMENTE PULADO**, com número: o ESLint leva 2,1 s aqui; o
+    gargalo é o Vitest com 9,8 s, que o Oxlint não toca. Decisão do Gabriel.
+  - **O portão foi visto fechar:** um erro de tipo deliberado reprovou em 23 s
+    (contra 2m11s do verde), com `lint`/`test`/`build` sequer executando.
+  - Script `typecheck` separado no frontend (antes só existia dentro do
+    `build`), como a trilha pede.
+  - **Falta branch protection.** O CI reporta mas **não bloqueia** — ainda é
+    possível empurrar com o CI vermelho. É configuração de painel do GitHub
+    (Settings → Branches), não do YAML.
+
+- **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
+  Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
+  `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
+  a nota não é penalizada por uma mensagem de refatoração. Nenhuma sessão
+  anterior conferiu o `$?`, então **vários ciclos deste documento e do diário
+  registram "pylint 10.00/10" como verificação aprovada quando o comando
+  reprovava.** A nota estava certa; a conclusão, não.
+  A causa era `R0801` — o envelope de resposta duplicado em **três**
+  controllers (o pylint apontava dois; o `payer` o montava inline). Resolvido
+  extraindo `format_refund_response` para junto de `serialize_refund`. Os
+  outros três envelopes ficaram de fora de propósito (listagem, exclusão e a
+  forma divergente do `UC-007`). Desde então: **`pylint src` sai com 0**, e os
+  `AGENTS.md` dos dois repos passaram a mandar conferir o código de saída, não
+  a nota.
+
 - ~~**Próximo — validar em navegador os dois últimos ciclos, que foram
   mesclados e empurrados sem essa passada.**~~ **RESOLVIDO em 2026-08-03:** o
   Gabriel validou no navegador, contra a API real, **três** conjuntos, todos
@@ -1819,6 +1851,21 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   restaura uma sessão válida não é vazio (guarda o caminho feliz do
   `storedUserSchema`), mas a prova de que o `id` realmente se propaga descansa
   **só** no segundo teste. Vale saber ao mexer nesse arquivo.
+- **Sem `.env`, o `pytest` do backend nem coleta os testes.** Confirmado ao
+  montar o CI (2026-08-06), escondendo o `.env` localmente: 7 erros de
+  `sqlalchemy.exc.ArgumentError`, porque `src/configs` lê `DATABASE_URL` na
+  importação e `create_async_engine(None)` estoura antes de qualquer mock
+  existir. O workflow contorna declarando variáveis **fictícias** (nada
+  conecta; a suíte é mockada), mas isso é **sintoma, não solução**:
+  configuração lida em tempo de importação é exatamente o que o **Item 17**
+  existe para resolver. O CI transformou uma pendência abstrata em obstáculo
+  concreto.
+- **O CI não bloqueia merge nem push.** Ele reporta. Tornar o check
+  obrigatório exige **branch protection** no painel do GitHub (Settings →
+  Branches → *Require status checks to pass*), nos dois repositórios. Enquanto
+  não estiver ligado, o portão avisa mas não tranca — e a classe de problema
+  que motivou o item (`2d07a8d` quebrando a `main` sem ninguém ver) fica
+  detectável, não impedida.
 - **O `.venv` do `Refund-api` tem shebangs de um caminho antigo**
   (`.../React/Refund-api`). Consequência prática: `pytest` e `pylint` só rodam
   como `.venv/bin/python3 -m pytest` / `-m pylint`, nunca pelos executáveis

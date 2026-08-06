@@ -49,6 +49,20 @@ pytest
 pylint src
 ```
 
+**Confira o código de saída, não a nota.** O `pylint` imprime "rated at
+10.00/10" e ainda assim sai com código diferente de zero quando emitiu
+qualquer mensagem — a nota não é penalizada por uma mensagem de refatoração.
+Este projeto reportou "pylint 10.00/10" como aprovação durante meses enquanto
+o comando saía com 8; o CI encontrou isso no primeiro dia porque lê `$?`.
+
+```bash
+pylint src; echo $?   # 0 é aprovação; a nota sozinha não é
+```
+
+As mesmas verificações rodam no CI (`.github/workflows/ci.yml`) a cada push,
+e **o CI é a fonte da verdade**: ele parte de um ambiente limpo, instalado a
+partir do `requirements.txt`, sem o `.env` nem o `.venv` da sua máquina.
+
 ## Em caso de divergência
 
 - Pare e compare a implementação com a documentação canônica.
