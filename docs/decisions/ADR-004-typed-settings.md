@@ -52,6 +52,15 @@ já aplicam a payloads HTTP.
    recebe a URL como argumento e `get_engine()` a memoiza com
    `lru_cache(maxsize=1)`, construindo o engine na primeira conexão em vez de
    no import. Importar a aplicação deixa de exigir um banco configurado.
+
+   **Com uma dívida que essa mudança cria e que a `Settings` paga.** Construir
+   o engine no import era, incidentalmente, a única coisa que **parseava** a
+   `DATABASE_URL`. Adiá-lo transformaria uma URL malformada de "o processo se
+   recusa a iniciar" em "a aplicação sobe e dá 500 na primeira requisição" —
+   precisamente o modo de falha que esta ADR existe para eliminar. Por isso um
+   `field_validator` chama `make_url` na fronteira de configuração: ele só
+   parseia, não constrói pool nem toca na rede, e mantém a validação onde todo
+   o resto já é validado.
 6. **A configuração de teste vive no `conftest.py` da raiz**, com valores
    fictícios. Como variável de ambiente tem precedência sobre o `.env` no
    `pydantic-settings`, a suíte roda com config fictícia mesmo numa máquina com
@@ -79,3 +88,10 @@ passou a ser responsabilidade do próprio `Settings` (`env_file`).
 - A guarda de produção é uma lista de negação (`*`, `localhost`,
   `127.0.0.1`), não uma prova de que a origem configurada está correta. Ela
   impede os erros conhecidos, não todo erro possível.
+- **Adiar trabalho para depois do import adia junto as validações que aquele
+  trabalho fazia por acidente.** Foi o caso da `DATABASE_URL`. Quem tornar
+  outra coisa preguiçosa neste projeto deve perguntar o que aquele código
+  verificava sem se propor a verificar.
+- A validação de URL confere **sintaxe**, não alcançabilidade. Um host que não
+  existe continua sendo descoberto só na primeira conexão — o que é correto:
+  configuração é verificável no startup, disponibilidade de rede não é.

@@ -1077,13 +1077,23 @@ completo e obrigatório está em
     Dois testes exigiam config real no import por motivos alheios ao engine
     (`..._pool_test.py` importava o `engine` global; `jwt_handler_test.py` usava
     `jwt_info["KEY"]`). Achado lendo os testes antes de escrever código.
+  - **O engine preguiçoso criou uma dívida, achada depois do primeiro commit e
+    corrigida.** Construir o engine no import era a **única coisa que parseava
+    a `DATABASE_URL`**; adiá-lo fazia uma URL malformada deixar de impedir o
+    startup e virar 500 na primeira requisição — o modo de falha que o item
+    existe para eliminar, reintroduzido pela porta dos fundos. Corrigido com um
+    `field_validator` chamando `make_url` na `Settings` (só parseia, sem pool e
+    sem rede), não desfazendo o engine preguiçoso. **Achado porque o Gabriel
+    pediu uma explicação mais funda do conceito**, não pela suíte nem pelos 12
+    cenários manuais.
   - **Um teste tentado e abandonado:** rede de proteção para `lock_timeout` em
     `connect_args`. O SQLAlchemy só os aplica ao abrir conexão real, então um
     engine que nunca conecta não os expõe. A prova daquele parâmetro continua
     sendo o `SHOW lock_timeout` manual.
-  - Verificação: `pytest` **247 passed** (partiu de 235), `pylint src` 10.00/10
-    com **exit 0**, e **12 cenários manuais** — startup sem config, startup só
-    com `DATABASE_URL`, suíte com o `.env` escondido (247 verdes), `/health`,
+  - Verificação: `pytest` **249 passed** (partiu de 235), `pylint src` 10.00/10
+    com **exit 0**, e **13 cenários manuais** — startup sem config, startup só
+    com `DATABASE_URL`, startup com `DATABASE_URL` malformada, suíte com o
+    `.env` escondido (249 verdes), `/health`,
     CORS com origem permitida e com origem estranha, registro + login + rota
     autenticada (201 → token → 200), a guarda de produção recusando e aceitando,
     e `alembic current`.

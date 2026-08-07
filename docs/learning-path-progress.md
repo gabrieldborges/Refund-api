@@ -4472,6 +4472,29 @@ Efeito colateral bom: o teste de pool ficou **melhor**. Ele passou a chamar
 literal — testa a tunagem de pool, que é o assunto dele, sem depender de qual
 banco a aplicação por acaso aponta.
 
+**A dívida que o engine preguiçoso cria, encontrada por uma pergunta e não
+por um teste.** Construir o engine no import era, sem se propor a isso, a
+**única coisa que parseava a `DATABASE_URL`**. Adiá-lo adiou junto essa
+verificação:
+
+```
+DEPOIS DO ENGINE PREGUIÇOSO, ANTES DA CORREÇÃO
+  DATABASE_URL="isto-nao-e-uma-url"  →  a app SOBE, e dá 500 na 1ª requisição
+```
+
+Ou seja: o item melhorou o `JWT_SECRET` e **piorou** a `DATABASE_URL`,
+reintroduzindo pela porta dos fundos exatamente o modo de falha que ele existe
+para eliminar. Isso só apareceu porque o Gabriel pediu uma explicação mais
+funda do engine preguiçoso e a explicação exigiu testar a afirmação.
+
+A correção não foi voltar atrás no engine: foi um `field_validator` chamando
+`sqlalchemy.engine.make_url` na fronteira de configuração, que só parseia — sem
+pool, sem rede. A URL malformada volta a impedir o startup, nomeando o campo.
+
+**A lição generaliza:** adiar trabalho para depois do import adia junto as
+validações que aquele trabalho fazia por acidente. Antes de tornar algo
+preguiçoso, perguntar o que aquele código verificava sem se propor a verificar.
+
 **Um teste tentado e abandonado:** uma rede de proteção para o `lock_timeout`
 em `connect_args`. O SQLAlchemy só aplica `connect_args` quando abre uma
 conexão de verdade, então um engine que nunca conecta não os expõe em lugar
@@ -4494,11 +4517,12 @@ acidente**, nem numa máquina com `.env` de produção configurado.
 
 | Verificação | Resultado |
 |---|---|
-| `pytest` | **247 passed** (partiu de 235; 12 novos em `settings_test.py`) |
+| `pytest` | **249 passed** (partiu de 235; 14 novos em `settings_test.py`) |
 | `pylint src; echo $?` | 10.00/10, **exit 0** |
 | Importar a app sem nenhuma config | `ValidationError` nomeando `database_url` **e** `jwt_secret` |
 | Importar com só `DATABASE_URL` | `ValidationError` nomeando `jwt_secret` — o cenário que antes subia saudável |
-| `pytest` com o `.env` escondido | **247 passed** — as variáveis do CI são de fato desnecessárias |
+| `pytest` com o `.env` escondido | **249 passed** — as variáveis do CI são de fato desnecessárias |
+| `DATABASE_URL` malformada | **não sobe**, nomeando `database_url` (regressão achada e corrigida) |
 | App real: `/health` | `{"status":"ok"}` |
 | CORS `Origin: http://localhost:5173` | header devolvido |
 | CORS `Origin: https://evil.example.com` | sem header |
@@ -4517,3 +4541,9 @@ acidente**, nem numa máquina com `.env` de produção configurado.
   `= Field(...)`, ou a análise estática perde o tipo.
 - Antes de implementar, **reverificar a premissa** que justifica o passo — a
   deste plano estava errada e só a leitura dos testes mostrou.
+- **Tornar algo preguiçoso adia as validações que aquele código fazia por
+  acidente.** O engine parseava a URL sem se propor a isso; adiá-lo abriu um
+  buraco que só fechou quando a checagem foi para a fronteira de configuração.
+- Uma pergunta do tipo "me explica melhor" encontrou um defeito que três
+  rodadas verdes de suíte e doze cenários manuais não encontraram. Explicar
+  obriga a verificar o que se afirma.

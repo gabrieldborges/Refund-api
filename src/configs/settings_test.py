@@ -32,6 +32,28 @@ def test_missing_database_url_aborts_startup(monkeypatch):
     assert "database_url" in str(error.value)
 
 
+# A malformed URL must be caught here, at the configuration boundary. Before
+# the engine became lazy, create_async_engine parsed it at import and this was
+# covered by accident; deferring the engine would otherwise have turned a
+# refused startup into a 500 on the first request.
+def test_malformed_database_url_aborts_startup():
+    with pytest.raises(ValidationError) as error:
+        Settings(_env_file=None, database_url="isto-nao-e-uma-url", jwt_secret="s")
+
+    assert "database_url" in str(error.value)
+
+
+# The guard must accept the real thing, or it would just be a different outage.
+def test_a_valid_database_url_is_accepted():
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+asyncpg://user:pass@host:5432/db?ssl=require",
+        jwt_secret="s",
+    )
+
+    assert settings.database_url.startswith("postgresql+asyncpg://")
+
+
 # An empty string is not a usable secret, and os.getenv could never tell the
 # difference between "unset" and "set to nothing".
 def test_empty_jwt_secret_is_rejected():

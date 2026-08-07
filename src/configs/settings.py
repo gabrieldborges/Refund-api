@@ -15,6 +15,8 @@ from typing import List, Literal
 from typing_extensions import Annotated
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 
 
 class Settings(BaseSettings):
@@ -63,6 +65,29 @@ class Settings(BaseSettings):
     # file — valid, but a trap for a human editing it. With it, the validator
     # below owns the parsing and the file stays comma-separated.
     cors_origins: Annotated[List[str], NoDecode] = ["http://localhost:5173"]
+
+    @field_validator("database_url")
+    @classmethod
+    def check_the_url_can_be_parsed(cls, value: str) -> str:
+        """Parse the URL here so a malformed one cannot reach a running app.
+
+        This exists because the engine is built lazily (see
+        database_connection_handler.build_engine). Creating the engine used to
+        happen at import and was, incidentally, the only thing that ever
+        parsed this string — deferring it to the first connection would have
+        moved a malformed URL from "the process refuses to start" to "the app
+        boots and 500s on the first request", which is the exact failure mode
+        this whole item exists to remove.
+
+        make_url only parses. It builds no pool and touches no network, so the
+        check stays cheap and stays at the configuration boundary, where every
+        other value is already validated.
+        """
+        try:
+            make_url(value)
+        except ArgumentError as error:
+            raise ValueError(f"is not a valid SQLAlchemy URL: {error}") from error
+        return value
 
     @field_validator("cors_origins", mode="before")
     @classmethod
