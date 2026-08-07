@@ -1,5 +1,29 @@
 # UC-011 — Baixar foto de perfil
 
+> **Amendamento (2026-08-07, Item 22).** Esta rota **não devolve mais o corpo
+> binário**. Ela devolve `{"url": "..."}` — uma URL assinada, de vida curta
+> (`FILE_URL_TTL_SECONDS`, padrão 300s), que o navegador busca diretamente. O
+> motivo é que uma tag `<img>` não sabe enviar `Authorization: Bearer`, o que
+> obrigava o cliente a baixar cada arquivo por XHR e montar um Blob.
+>
+> O `media_type` continua derivado da extensão armazenada, **nunca** de um
+> cabeçalho do cliente. Ele fica na resposta porque o cliente precisa escolher
+> entre `<img>` e `<object>` antes de buscar. O `Content-Type` real dos bytes é
+> definido onde eles são servidos:
+> `GET /files/{storage}/{filename}` com o backend local, os metadados do objeto
+> com S3.
+>
+> **A autorização não mudou de lugar:** as regras descritas abaixo continuam
+> sendo aplicadas antes de qualquer URL ser gerada. O que muda é que a decisão
+> passa a valer pelo prazo do link, em vez de ser reconferida a cada
+> requisição. Ver [ADR-003](../decisions/ADR-003-local-receipt-storage.md).
+>
+> **Um caminho de erro mudou de lugar:** "o arquivo sumiu do disco" deixa de
+> ser 404 aqui e passa a aparecer quando o navegador segue a URL. Os 404 de
+> "não existe" e "não é seu" seguem idênticos e inalterados.
+
+
+
 ## Ator principal
 
 Usuário autenticado.

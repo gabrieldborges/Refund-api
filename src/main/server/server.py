@@ -6,6 +6,7 @@ from src.models.entities import users, refunds, refund_reviews  # pylint: disabl
 from src.main.routes.auth_routes import auth_routes
 from src.main.routes.refund_routes import refund_routes
 from src.main.routes.user_routes import user_routes
+from src.main.routes.file_routes import file_routes
 
 
 @asynccontextmanager
@@ -38,6 +39,8 @@ app.add_middleware(
 app.include_router(auth_routes)
 app.include_router(refund_routes)
 app.include_router(user_routes)
+# Only used by the local storage backend; with S3 the browser never comes here.
+app.include_router(file_routes)
 
 
 @app.get("/health")

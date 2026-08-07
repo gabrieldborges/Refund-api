@@ -40,3 +40,27 @@ services:
       interval: 2s
       timeout: 3s
       retries: 15
+
+  # S3-compatible object storage (Item 22), for the same reason postgres-test
+  # exists: exercise the real protocol without an account, a credit card, or a
+  # credential in the repository. boto3 cannot tell this apart from AWS S3 —
+  # only the endpoint URL differs.
+  minio:
+    image: quay.io/minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: refund_test
+      MINIO_ROOT_PASSWORD: refund_test_secret
+    ports:
+      # 9100/9101 rather than the usual 9000/9001: port 9000 is a popular
+      # default (php-fpm, SonarQube, other MinIOs) and was already taken on the
+      # first machine this ran on. Same reasoning that put PostgreSQL on 5433.
+      - "9100:9000"   # S3 API
+      - "9101:9001"   # web console, handy when a test fails
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

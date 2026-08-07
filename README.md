@@ -74,7 +74,7 @@ A primeira é a que roda o tempo todo e **não exige nada além das dependência
 A segunda precisa do banco descartável:
 
 ```bash
-docker compose up -d    # sobe um PostgreSQL 18 em memória, na porta 5433
+docker compose up -d    # PostgreSQL 18 (porta 5433) + MinIO (porta 9100)
 pytest -m integration
 docker compose down     # joga fora
 ```
@@ -87,7 +87,29 @@ opção aqui, nem como atalho local.
 O que cada suíte alcança: a mockada prova que os repositories **montam** o SQL
 certo; a de integração prova que o PostgreSQL **aceita** esse SQL e se comporta
 como assumimos — constraints, defaults do schema, chaves estrangeiras,
-agregados reais, e o `lock_timeout` sob contenção de linha.
+agregados reais, e o `lock_timeout` sob contenção de linha. O MinIO cumpre o
+mesmo papel para o object storage: os testes do `S3FileStorage` gravam num
+bucket de verdade e baixam por URL assinada de verdade.
+
+## Armazenamento de arquivos
+
+Duas implementações da mesma interface, escolhidas por `STORAGE_BACKEND`:
+
+| | `local` (padrão) | `s3` |
+|---|---|---|
+| Onde o arquivo mora | disco da instância | bucket S3-compatível |
+| Sobrevive a um redeploy | **não** | sim |
+| Como a URL é assinada | JWT de vida curta desta API | presigned URL do provedor |
+
+As rotas de arquivo (`/refunds/{id}/receipt`, `/refunds/{id}/payment-receipt`,
+`/users/{id}/avatar`) devolvem **uma URL**, não os bytes — é o que permite um
+`<img src>` funcionar, já que uma tag `<img>` não sabe enviar
+`Authorization: Bearer`.
+
+A autorização continua sendo conferida antes de a URL ser gerada; o que muda é
+que ela passa a valer por `FILE_URL_TTL_SECONDS` (padrão 300s) em vez de ser
+reconferida a cada requisição. Ver
+[ADR-003](docs/decisions/ADR-003-local-receipt-storage.md).
 
 ## Estrutura
 

@@ -34,7 +34,7 @@ def a_refund_payload(name: str = "Almoço") -> dict:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_a_successful_creation_leaves_exactly_one_file(connection_handler, tmp_path):
-    storage = FileStorage(str(tmp_path))
+    storage = FileStorage(str(tmp_path), "receipts")
     users = UsersRepository(connection_handler)
     user_id = await users.insert_user(
         {"name": "Ana", "email": "consistency@example.com", "password": "hashed"}
@@ -51,7 +51,7 @@ async def test_a_successful_creation_leaves_exactly_one_file(connection_handler,
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_a_failed_insert_leaves_no_orphan_on_disk(connection_handler, tmp_path):
-    storage = FileStorage(str(tmp_path))
+    storage = FileStorage(str(tmp_path), "receipts")
     controller = RefundCreatorController(RefundsRepository(connection_handler), storage)
 
     with pytest.raises(IntegrityError):
@@ -65,7 +65,7 @@ async def test_a_failed_insert_leaves_no_orphan_on_disk(connection_handler, tmp_
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_deleting_a_refund_removes_its_receipt_from_disk(connection_handler, tmp_path):
-    storage = FileStorage(str(tmp_path))
+    storage = FileStorage(str(tmp_path), "receipts")
     users = UsersRepository(connection_handler)
     refunds = RefundsRepository(connection_handler)
     user_id = await users.insert_user(
@@ -92,7 +92,7 @@ async def test_deleting_a_refund_removes_its_receipt_from_disk(connection_handle
 async def test_a_refund_is_deleted_even_when_its_file_cannot_be_removed(
     connection_handler, tmp_path
 ):
-    storage = FileStorage(str(tmp_path))
+    storage = FileStorage(str(tmp_path), "receipts")
     users = UsersRepository(connection_handler)
     refunds = RefundsRepository(connection_handler)
     user_id = await users.insert_user(

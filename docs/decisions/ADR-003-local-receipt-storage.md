@@ -2,7 +2,10 @@
 
 ## Status
 
-Aceita. Emendada em 2026-08-07 (Item 21) para definir o que acontece quando o
+Aceita. Emendada em 2026-08-07 (Item 22) para acrescentar uma segunda
+implementação de armazenamento e trocar o modo de servir arquivos por URLs
+assinadas — ver o amendamento ao final da seção de Decisão. Emendada em
+2026-08-07 (Item 21) para definir o que acontece quando o
 banco e o disco discordam — ver o amendamento ao final da seção de Decisão.
 Emendada em 2026-07-29: primeiro para cobrir também as fotos de
 perfil dos usuários; em seguida, no mesmo ciclo, para encerrar o acesso
@@ -124,6 +127,55 @@ compensação em processo resolve isso — exigiria varredura posterior ou fila
 (Item 28). O `POST /refunds/{id}/payment` e os demais fluxos aceitam esse limite
 conscientemente.
 
+**Amendamento (2026-08-07, Item 22):** o disco local deixa de ser a única
+opção, e a forma de servir arquivos muda.
+
+**Object storage.** `S3FileStorage` é a segunda implementação de
+`FileStorageInterface`, escolhida por `STORAGE_BACKEND=s3`. Um bucket, três
+prefixos (`receipts/`, `avatars/`, `payments/`), espelhando os três diretórios
+do backend local. A coluna do banco continua guardando o **nome do arquivo**, não
+a chave completa, então trocar de backend não exige reescrever linha nenhuma.
+Erros são traduzidos: `NoSuchKey` do botocore vira `FileNotFoundError`, que é o
+que os controllers já capturam — um segundo backend não pode significar um
+segundo contrato de erro.
+
+O motivo é o bloqueio nº 3 do primeiro deploy, e ele é o pior dos cinco: a
+maioria dos PaaS tem filesystem efêmero, então **todo comprovante evaporaria a
+cada redeploy**, em silêncio — a linha e o `filename` sobrevivem, e o download
+responde 404 indistinguível de "não é seu".
+
+**URLs assinadas, revertendo parcialmente o amendamento de 2026-07-29.** As três
+rotas de arquivo devolvem `{"url": ...}` em vez dos bytes. A razão é concreta:
+uma tag `<img>` não envia `Authorization: Bearer`, e era por isso que o frontend
+precisava baixar cada arquivo com axios e montar um Blob.
+
+O trade-off, declarado: a rota autenticada **reconferia a autorização a cada
+requisição**; a URL assinada **congela a decisão no momento em que é gerada**.
+Quem copiar o link continua com acesso até ele expirar. O que torna isso
+aceitável — e diferente da URL pública que aquele amendamento removeu — é o
+prazo: `FILE_URL_TTL_SECONDS`, padrão **300 segundos**, contra "para sempre".
+
+A autorização em si **não** mudou de lugar: os controllers continuam decidindo
+dono-ou-admin antes de gerar qualquer URL.
+
+**O backend local também assina.** Sem isso haveria dois contratos — bytes em
+desenvolvimento, URL em produção — e ninguém estaria testando o que roda. Como
+disco local não tem provedor que assine por ele, a assinatura é um **JWT de vida
+curta** carregando o par (storage, filename), servido por `GET /files/{storage}/{filename}`.
+Sem criptografia nova e sem dependência nova: é o mesmo `jwt_secret` e o mesmo
+`JwtHandler` do login. A rota confere que o token foi emitido **para aquele
+arquivo** — sem isso, um token válido leria todos — e recusa nome de arquivo que
+contenha separador de caminho.
+
+**Um comportamento foi perdido, de propósito.** Os controllers não leem mais o
+arquivo, então "a linha sobreviveu mas o arquivo sumiu" deixa de ser 404 na rota
+de metadados e passa a aparecer quando o navegador segue a URL. O
+`payment-receipt` tinha **quatro** caminhos de 404 idênticos verificados byte a
+byte; o quarto mudou de lugar. Os três que importam seguem intactos, porque são
+os que vazariam a existência de um reembolso a quem não tem direito de saber.
+Restaurar o quarto custaria um `HEAD` por URL contra o S3 — a maior parte do que
+este item economiza.
+
 ## Consequências
 
 - A solução é simples e não requer infraestrutura adicional de armazenamento.
@@ -142,6 +194,12 @@ conscientemente.
 - Uma falha ao remover arquivo deixa de derrubar a resposta e passa a produzir
   um `WARNING` com o nome do arquivo — rastro que antes não existia, e cuja
   ausência fez sete órfãos serem descobertos só ao listar o diretório.
-- O acesso autenticado troca a URL pública cacheável pelo navegador por uma
+- O custo de N requisições autenticadas por página **deixa de existir**: o
+  navegador volta a baixar direto e a cachear, agora por um link que expira.
+- Uma implantação com `STORAGE_BACKEND=s3` precisa configurar **CORS no bucket**
+  para o domínio do frontend; caso contrário o navegador bloqueia o download
+  cross-origin. Isso é configuração do provedor, não código deste repositório,
+  e não há como o startup verificar.
+- O acesso autenticado trocava a URL pública cacheável pelo navegador por uma
   requisição com JWT por arquivo exibido; uma tela com N comprovantes ou
   avatares distintos faz N requisições autenticadas, não N downloads diretos.

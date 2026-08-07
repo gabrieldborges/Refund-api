@@ -179,3 +179,74 @@ def test_unknown_environment_is_rejected():
             jwt_secret="s",
             environment="staging",
         )
+
+
+# Item 22 — choosing the s3 backend without credentials would boot healthy and
+# lose the first file somebody uploaded. Same class of failure as the missing
+# JWT_SECRET this module was created for.
+def test_s3_backend_without_a_bucket_aborts_startup():
+    with pytest.raises(ValidationError) as error:
+        Settings(
+            _env_file=None,
+            database_url="postgresql+asyncpg://a:b@c/d",
+            jwt_secret="s",
+            storage_backend="s3",
+        )
+
+    assert "S3_BUCKET" in str(error.value)
+
+
+# The message must name every missing variable, not just the first one — the
+# person reading it is configuring a deployment, not debugging one at a time.
+def test_the_error_names_every_missing_s3_variable():
+    with pytest.raises(ValidationError) as error:
+        Settings(
+            _env_file=None,
+            database_url="postgresql+asyncpg://a:b@c/d",
+            jwt_secret="s",
+            storage_backend="s3",
+        )
+
+    message = str(error.value)
+    assert "S3_BUCKET" in message
+    assert "S3_ACCESS_KEY_ID" in message
+    assert "S3_SECRET_ACCESS_KEY" in message
+
+
+def test_a_fully_configured_s3_backend_is_accepted():
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+asyncpg://a:b@c/d",
+        jwt_secret="s",
+        storage_backend="s3",
+        s3_bucket="refund-prod",
+        s3_access_key_id="AKIA...",
+        s3_secret_access_key="secret",
+    )
+
+    assert settings.storage_backend == "s3"
+
+
+# The guard must not fire for the local backend, or development breaks.
+def test_the_local_backend_needs_no_s3_configuration():
+    settings = Settings(
+        _env_file=None, database_url="postgresql+asyncpg://a:b@c/d", jwt_secret="s"
+    )
+
+    assert settings.storage_backend == "local"
+
+
+# The S3 secret gets the same treatment as the JWT one: printable by accident
+# is how credentials end up in logs.
+def test_the_s3_secret_does_not_appear_in_the_repr():
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+asyncpg://a:b@c/d",
+        jwt_secret="s",
+        storage_backend="s3",
+        s3_bucket="b",
+        s3_access_key_id="k",
+        s3_secret_access_key="super-secret-s3-value",
+    )
+
+    assert "super-secret-s3-value" not in repr(settings)

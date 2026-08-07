@@ -30,17 +30,27 @@ class ReceiptFinderController(ReceiptFinderControllerInterface):
 
         filename = refund["filename"]
 
-        try:
-            content = self.__receipt_storage.read(filename)
-        except FileNotFoundError as exception:
-            # The row survived but the file did not. Reusing the message keeps
-            # this indistinguishable from an unknown id.
-            raise HttpNotFoundError("Refund not found") from exception
-
-        return {"content": content, "media_type": self.__media_type(filename)}
+        # Item 22: a signed URL instead of the bytes. The authorization checks
+        # above still run — the URL is only minted for a caller already
+        # entitled to the file, and it expires in FILE_URL_TTL_SECONDS.
+        #
+        # WHAT CHANGED IN BEHAVIOUR: this no longer reads the file, so "the row
+        # survived but the file did not" is no longer a 404 from HERE; it
+        # surfaces when the browser follows the URL. The anti-enumeration
+        # property that mattered is intact — "does not exist" and "is not
+        # yours" are still indistinguishable, because both are refused before a
+        # URL exists. Checking existence would cost a HEAD request per URL
+        # against S3, which is most of what this item was trying to avoid.
+        return {
+            "url": self.__receipt_storage.get_url(filename),
+            "media_type": self.__media_type(filename),
+        }
 
     def __media_type(self, filename: str) -> str:
         # Derived from the stored extension, never from a client header — the
-        # same reason the upload validators refuse to trust Content-Type.
+        # same reason the upload validators refuse to trust Content-Type. Kept
+        # in the response even though the bytes now come from elsewhere: the
+        # client has to decide between <img> and <object> BEFORE fetching, and
+        # a URL carries no type.
         guessed, _ = mimetypes.guess_type(filename)
         return guessed or "application/octet-stream"
