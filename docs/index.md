@@ -39,3 +39,4 @@ frontend e pela API.
 - [ADR-001 — Manter a arquitetura em camadas da API](decisions/ADR-001-layered-api.md)
 - [ADR-002 — Utilizar PostgreSQL no Neon](decisions/ADR-002-postgresql-neon.md)
 - [ADR-003 — Armazenar comprovantes no disco local](decisions/ADR-003-local-receipt-storage.md)
+- [ADR-004 — Configuração tipada e validada no startup](decisions/ADR-004-typed-settings.md)

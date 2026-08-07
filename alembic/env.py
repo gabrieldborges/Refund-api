@@ -13,11 +13,11 @@ config = context.config
 
 from src.models.settings.metadata import metadata
 from src.models.entities import users, refunds, refund_reviews  # pylint: disable=unused-import
-from src.configs.global_config import database_info
+from src.configs.settings import settings
 
 # The URL comes from the .env at runtime, never from alembic.ini — that file is
 # versioned and must not carry credentials.
-config.set_main_option("sqlalchemy.url", str(database_info["DATABASE_URL"]))
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

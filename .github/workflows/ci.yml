@@ -10,24 +10,13 @@ jobs:
   verify:
     runs-on: ubuntu-latest
 
-    # WHY THESE VARIABLES EXIST, given that no test touches a real database.
-    #
-    # src/configs/__init__.py calls load_dotenv() and global_config.py reads
-    # DATABASE_URL at import time, so the async engine is built while modules
-    # are being imported — before any test runs and before any mock is in
-    # place. With the variable unset, create_async_engine(None) raises and
-    # pytest fails during COLLECTION: 7 errors, 0 tests run. Verified by
-    # temporarily hiding .env locally rather than assumed.
-    #
-    # The values are deliberately fake. Nothing connects: the suite is unit
-    # tests with mocked repositories, and the URL only has to be well-formed
-    # enough for SQLAlchemy to parse it.
-    #
-    # That this is necessary at all is a symptom, not a solution — configuration
-    # read at import time is what Item 17 (pydantic-settings) exists to fix.
-    env:
-      DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/ci
-      JWT_SECRET: ci-only-not-a-real-secret
+    # This job used to declare fake DATABASE_URL and JWT_SECRET variables,
+    # because configuration was read at import time and pytest failed during
+    # COLLECTION without them. Item 17 removed the need: the test values now
+    # live in the repository's root conftest.py, where they are visible as test
+    # configuration and where they also help anyone running the suite without a
+    # .env. Deployment configuration and test configuration stopped sharing a
+    # file.
 
     steps:
       - uses: actions/checkout@v5

@@ -1,5 +1,5 @@
 import pytest
-from src.configs.global_config import upload_info
+from src.configs.settings import settings
 from src.errors.types.http_unprocessable_entity_error import HttpUnprocessableEntityError
 from src.views.http_types.http_request import HttpRequest
 from .refund_creator_validator import refund_creator_validator
@@ -67,7 +67,7 @@ def test_allowed_extensions_pass_regardless_of_case(filename):
 # Reads the limit straight from config and builds content 1 byte over it, so the
 # test stays valid even if the value changes later (no duplicated magic number).
 def test_file_larger_than_the_limit_raises():
-    over_limit = upload_info["MAX_FILE_SIZE_BYTES"] + 1
+    over_limit = settings.max_file_size_bytes + 1
     http_request = HttpRequest(body=valid_body(content=b"x" * over_limit))
 
     with pytest.raises(HttpUnprocessableEntityError):

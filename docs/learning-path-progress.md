@@ -4335,3 +4335,185 @@ Enquanto não estiver ligada, o portão avisa mas não tranca.
 Local, depois da mudança: `pytest` **235 passed**, `pylint src` **10.00/10 com
 exit 0 pela primeira vez**. Frontend inalterado (287 testes, `tsc` 0, lint
 0/0).
+
+## Item 17 — Configuração tipada com pydantic-settings (2026-08-07)
+
+**Status:** concluído em 2026-08-07, na branch `feat/typed-settings` do
+`Refund-api`. Primeiro item da **Fase 4**. Os Itens 18 e 20 já haviam sido
+feitos fora de ordem, no ciclo do workflow de aprovação.
+
+### Por que estudar
+
+Configuração é **entrada externa**, exatamente como o corpo de uma requisição.
+O projeto já tratava entrada externa com rigor em dois lugares — Pydantic nos
+validators, Zod nas fronteiras do frontend — e tratava a configuração como um
+dicionário de strings cruas, sem nenhuma checagem.
+
+### Estado anterior
+
+```python
+# src/configs/__init__.py
+from dotenv import load_dotenv
+load_dotenv()
+
+# src/configs/global_config.py
+database_info = {"DATABASE_URL": os.getenv("DATABASE_URL")}
+jwt_info = {
+    "KEY": os.getenv("JWT_SECRET"),
+    "ALGORITHM": os.getenv("JWT_ALGORITHM", "HS256"),
+    "EXPIRATION_TIME": int(os.getenv("JWT_EXPIRATION_HOURS", "8")),
+}
+```
+
+Mais uma configuração fora dali, escrita direto no código:
+
+```python
+# src/main/server/server.py:23
+allow_origins=["http://localhost:5173"],
+```
+
+### A limitação, medida e não deduzida
+
+Os dois modos de falha foram **executados** antes de escrever qualquer linha:
+
+| Cenário | Comportamento anterior | Quando aparecia |
+|---|---|---|
+| `JWT_SECRET` ausente | `TypeError: Expected a string value` | no **primeiro login de um usuário** |
+| `DATABASE_URL` ausente | `ArgumentError: Could not parse SQLAlchemy URL` | no import, culpando a URL, não a variável |
+
+A primeira linha é a que justifica o item sozinha. **A aplicação subia saudável
+sem o segredo de assinatura**: `/health` respondia `ok`, a listagem funcionava,
+e o sistema só quebrava quando alguém tentava entrar. É o modo de falha mais
+caro que existe — o que passa pela verificação e falha na frente do usuário.
+
+O `str(None)` da segunda linha é a armadilha mais sutil das duas: a variável
+ausente não vira `None`, vira a **string literal `"None"`**, e a partir daí o
+erro fala de sintaxe de URL. A mensagem aponta para o lugar errado.
+
+### Estado ajustado
+
+```python
+class Settings(BaseSettings):
+    environment: Literal["local", "test", "production"] = "local"
+    database_url: Annotated[str, Field(min_length=1)]
+    jwt_secret: Annotated[SecretStr, Field(min_length=1)]
+    jwt_expiration_hours: Annotated[int, Field(gt=0)] = 8
+    cors_origins: Annotated[List[str], NoDecode] = ["http://localhost:5173"]
+```
+
+A mudança observável, com `JWT_SECRET` ausente:
+
+```
+ANTES  → app sobe; 500 no primeiro login: "Expected a string value"
+
+DEPOIS → app não sobe:
+         ValidationError: 1 validation error for Settings
+         jwt_secret
+           Field required [type=missing]
+```
+
+### Cinco coisas aprendidas
+
+**1. `Annotated[T, Field(...)]` não é estilo, é o que faz a análise estática
+funcionar.** A primeira versão usava `jwt_secret: SecretStr = Field(min_length=1)`.
+Roda igual, mas o `pylint` reprovou com quatro `E1101: Instance of 'FieldInfo'
+has no 'get_secret_value' member` — ele infere o tipo do atributo pela
+**atribuição**, não pela anotação. Mover a constraint para dentro do
+`Annotated` remove a atribuição e o tipo volta a ser o declarado.
+
+**2. `SecretStr` compra um modo de falha a menos.** `repr(settings)` imprime
+`SecretStr('**********')`, então um traceback que inclua o objeto de
+configuração não vaza a chave de assinatura. O custo é um `.get_secret_value()`
+explícito nos dois pontos que realmente precisam do valor — o que é uma
+vantagem, não um imposto: marca no código onde o segredo circula.
+
+**3. Um default de ambiente pode ser uma decisão de segurança.** `environment`
+tem default `local`, nunca `production`. Isso é o que garante que a guarda de
+CORS não possa ser pulada por **omissão** — esquecer a variável não pode ser o
+caminho que desliga a proteção.
+
+**4. `NoDecode` existe porque o default do pydantic-settings é JSON.** Para um
+campo de tipo complexo (`List[str]`), a biblioteca roda `json.loads` no valor
+cru da variável. Sem `NoDecode`, `CORS_ORIGINS` teria de ser escrito como
+`["http://a","http://b"]` num arquivo `.env` — válido, e uma armadilha para
+qualquer humano editando. Com ele, um `field_validator(mode="before")` assume o
+parsing e o arquivo continua separado por vírgula.
+
+**5. A premissa que eu tinha errado, e que o próprio projeto ensina a
+desconfiar.** O plano afirmava que tornar o engine preguiçoso permitiria
+remover as variáveis fictícias do `ci.yml`. **Não permitiria.** Conferindo os
+testes antes de implementar, dois deles exigiam configuração real no import por
+motivos que nada tinham a ver com o engine: `database_connection_handler_pool_test.py`
+importava o `engine` global, e `jwt_handler_test.py` usava `jwt_info["KEY"]`. É
+exatamente o padrão que o `current-state.md` já registra para riscos herdados —
+**a premissa deve ser reverificada, não repetida com mais convicção.**
+
+### Engine preguiçoso
+
+O `create_async_engine` no nível do módulo era o que obrigava qualquer import a
+ter uma `DATABASE_URL` parseável. A separação:
+
+```python
+def build_engine(connection_string: str) -> AsyncEngine:
+    return create_async_engine(connection_string, pool_size=5, ...)
+
+@lru_cache(maxsize=1)
+def get_engine() -> AsyncEngine:
+    return build_engine(settings.database_url)
+```
+
+`lru_cache(maxsize=1)` numa função sem argumentos é a forma simples de dizer
+"construa uma vez, na primeira chamada". Não precisa de lock: as funções não
+têm `await`, então o event loop não consegue intercalar dois chamadores no meio
+e construir dois engines.
+
+Efeito colateral bom: o teste de pool ficou **melhor**. Ele passou a chamar
+`build_engine("postgresql+asyncpg://test:test@localhost:5432/test")` com URL
+literal — testa a tunagem de pool, que é o assunto dele, sem depender de qual
+banco a aplicação por acaso aponta.
+
+**Um teste tentado e abandonado:** uma rede de proteção para o `lock_timeout`
+em `connect_args`. O SQLAlchemy só aplica `connect_args` quando abre uma
+conexão de verdade, então um engine que nunca conecta não os expõe em lugar
+nenhum alcançável. Abandonado em vez de alcançado por internals do pool; a
+prova daquele parâmetro continua sendo o `SHOW lock_timeout` manual.
+
+### Onde a configuração de teste passou a morar
+
+O `ci.yml` declarava `DATABASE_URL` e `JWT_SECRET` fictícias, com um comentário
+que corretamente as chamava de sintoma. Elas foram para o `conftest.py` da
+raiz — o único hook que roda cedo o bastante, porque o pytest importa o
+conftest da rootdir antes de qualquer módulo de teste.
+
+Duas propriedades que isso ganha de graça: a suíte roda para quem clonou o
+projeto e não tem `.env`; e como variável de ambiente tem precedência sobre o
+`.env` no pydantic-settings, a suíte **não consegue alcançar o banco real por
+acidente**, nem numa máquina com `.env` de produção configurado.
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` | **247 passed** (partiu de 235; 12 novos em `settings_test.py`) |
+| `pylint src; echo $?` | 10.00/10, **exit 0** |
+| Importar a app sem nenhuma config | `ValidationError` nomeando `database_url` **e** `jwt_secret` |
+| Importar com só `DATABASE_URL` | `ValidationError` nomeando `jwt_secret` — o cenário que antes subia saudável |
+| `pytest` com o `.env` escondido | **247 passed** — as variáveis do CI são de fato desnecessárias |
+| App real: `/health` | `{"status":"ok"}` |
+| CORS `Origin: http://localhost:5173` | header devolvido |
+| CORS `Origin: https://evil.example.com` | sem header |
+| Registro + login + rota autenticada | 201 → token de 3 partes → **200** |
+| `ENVIRONMENT=production` + origem localhost | **não sobe**, com a mensagem da guarda |
+| `ENVIRONMENT=production` + origem real | sobe |
+| `alembic current` | `f76d3be18936 (head)` |
+
+### O que lembrar
+
+- Configuração é entrada externa. Validar no startup transforma um 500 na
+  frente do usuário em uma mensagem de erro para quem está implantando.
+- **Um default pode ser uma decisão de segurança.** `environment` defaulta para
+  `local` para que esquecer a variável nunca desligue a guarda.
+- Constraint de Pydantic vai em `Annotated[T, Field(...)]`, não em
+  `= Field(...)`, ou a análise estática perde o tipo.
+- Antes de implementar, **reverificar a premissa** que justifica o passo — a
+  deste plano estava errada e só a leitura dos testes mostrou.

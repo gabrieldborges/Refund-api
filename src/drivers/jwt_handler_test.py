@@ -4,7 +4,7 @@
 from datetime import datetime, timedelta, timezone
 import jwt as pyjwt
 import pytest
-from src.configs.global_config import jwt_info
+from src.configs.settings import settings
 from .jwt_handler import JwtHandler
 
 
@@ -38,8 +38,8 @@ def test_decode_jwt_token_raises_for_an_expired_token():
             "exp": datetime.now(timezone.utc) - timedelta(hours=1),
             "user_id": 1,
         },
-        key=jwt_info["KEY"],
-        algorithm=jwt_info["ALGORITHM"],
+        key=settings.jwt_secret.get_secret_value(),
+        algorithm=settings.jwt_algorithm,
     )
 
     with pytest.raises(Exception):

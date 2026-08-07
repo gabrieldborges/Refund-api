@@ -14,9 +14,11 @@ async def test_connect_yields_a_session_and_closes_it():
     session = MagicMock()
     session.close = AsyncMock()
 
+    # get_session_factory() is patched, not the session: the handler now asks
+    # for the factory on each call instead of closing over a module global.
     with patch(
-        "src.models.settings.database_connection_handler.async_session",
-        return_value=session,
+        "src.models.settings.database_connection_handler.get_session_factory",
+        return_value=MagicMock(return_value=session),
     ):
         handler = DatabaseConnectionHandler()
         async with handler.connect() as active_session:
@@ -35,8 +37,8 @@ async def test_concurrent_connects_use_independent_sessions():
         session.close = AsyncMock()
 
     with patch(
-        "src.models.settings.database_connection_handler.async_session",
-        side_effect=sessions,
+        "src.models.settings.database_connection_handler.get_session_factory",
+        return_value=MagicMock(side_effect=sessions),
     ):
         handler = DatabaseConnectionHandler()
         seen = []

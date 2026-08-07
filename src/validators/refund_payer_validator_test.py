@@ -1,5 +1,5 @@
 import pytest
-from src.configs.global_config import upload_info
+from src.configs.settings import settings
 from src.errors.types.http_unprocessable_entity_error import HttpUnprocessableEntityError
 from src.views.http_types.http_request import HttpRequest
 from .refund_payer_validator import refund_payer_validator
@@ -37,13 +37,13 @@ def test_rejects_a_missing_file():
 # Content of exactly the maximum size should be accepted; off-by-one in the
 # boundary check would be caught by this test.
 def test_accepts_a_file_at_the_size_ceiling():
-    max_size = upload_info["MAX_FILE_SIZE_BYTES"]
+    max_size = settings.max_file_size_bytes
     refund_payer_validator(build_request(content=b"x" * max_size))
 
 
 # Reads the limit straight from config and builds content 1 byte over it, so the
 # test stays valid even if the value changes later (no duplicated magic number).
 def test_rejects_a_file_over_the_size_ceiling():
-    over_limit = upload_info["MAX_FILE_SIZE_BYTES"] + 1
+    over_limit = settings.max_file_size_bytes + 1
     with pytest.raises(HttpUnprocessableEntityError):
         refund_payer_validator(build_request(content=b"x" * over_limit))

@@ -8,21 +8,27 @@ Os requisitos e as decisões compartilhadas do produto estão na
 
 ## Environment setup
 
-Crie um `.env` na raiz do projeto:
+Copie o [`.env.example`](.env.example) para `.env` e preencha:
 
-```env
-DATABASE_URL=postgresql+asyncpg://usuario:senha@host/database?ssl=require
-UPLOAD_DIR=uploads/receipts
-AVATAR_DIR=uploads/avatars
-PAYMENT_DIR=uploads/payment_receipts
-JWT_SECRET=uma-chave-secreta-aleatoria
-JWT_ALGORITHM=HS256
-JWT_EXPIRATION_HOURS=8
+```bash
+cp .env.example .env
 ```
 
 `usuario`, `senha` e `host` são valores de exemplo: substitua-os pelas
 credenciais do seu ambiente. Nunca versione o `.env` (ele já está no
 `.gitignore`) nem exponha credenciais reais na documentação.
+
+Só duas variáveis são **obrigatórias** — `DATABASE_URL` e `JWT_SECRET`. As
+demais têm default. A lista completa, com os defaults, está no `.env.example`.
+
+A configuração é validada no startup por `src/configs/settings.py`
+([ADR-004](docs/decisions/ADR-004-typed-settings.md)): se uma variável
+obrigatória faltar ou tiver tipo inválido, a aplicação **não sobe** e o erro
+nomeia o campo. Antes disso, um `JWT_SECRET` ausente deixava a aplicação subir
+normalmente e falhava só no primeiro login de um usuário.
+
+A suíte de testes **não** usa o seu `.env`: o `conftest.py` da raiz fixa valores
+fictícios, então `pytest` funciona mesmo sem `.env` e nunca alcança o banco real.
 
 ## Rodando localmente
 

@@ -1,5 +1,5 @@
 import os
-from src.configs.global_config import upload_info
+from src.configs.settings import settings
 from src.errors.types.http_unprocessable_entity_error import HttpUnprocessableEntityError
 from src.views.http_types.http_request import HttpRequest
 
@@ -18,5 +18,5 @@ def avatar_upload_validator(http_request: HttpRequest) -> None:
     if extension not in ALLOWED_AVATAR_EXTENSIONS:
         raise HttpUnprocessableEntityError("Avatar must be JPG or PNG")
 
-    if len(body.get("content", b"")) > upload_info["MAX_FILE_SIZE_BYTES"]:
+    if len(body.get("content", b"")) > settings.max_file_size_bytes:
         raise HttpUnprocessableEntityError("Avatar must be smaller than 4MB")

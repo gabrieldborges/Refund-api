@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from src.configs.settings import settings
 from src.models.entities import users, refunds, refund_reviews  # pylint: disable=unused-import
 from src.main.routes.auth_routes import auth_routes
 from src.main.routes.refund_routes import refund_routes
@@ -18,9 +19,13 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# Was hardcoded to http://localhost:5173, which meant no deployed frontend
+# could ever reach this API. Settings validates the value and refuses a
+# wildcard or a localhost origin when ENVIRONMENT=production, so the insecure
+# configuration is impossible rather than merely discouraged.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

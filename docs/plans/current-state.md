@@ -11,7 +11,7 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-08-03.
+Atualizado em: 2026-08-07.
 
 ## Visão geral
 
@@ -46,19 +46,26 @@ velha sem nenhum aviso. O `git ls-remote` é a única das quatro consultas que
 fala com o servidor; as outras leem o disco. Se as duas discordarem, o
 `ls-remote` é que está certo.
 
-O que era verdade na última verificação (**2026-08-03**), como ponto de
+O que era verdade na última verificação (**2026-08-07**), como ponto de
 partida e não como afirmação durável:
 
-- **`Refund-api`** — `main` e `origin/main` sincronizados.
-- **`Refund-FrontEnd`** — a `main` recebeu três merges por fast-forward em
-  2026-08-03/05 (paginação, correção do `localStorage` e o Item 11) e foi
-  **empurrada**. **Nenhuma branch de trabalho pendente** — as quatro branches
-  já mescladas foram apagadas com `git branch -d` em 2026-08-05. Sobra apenas
+- **`Refund-api`** — `main` e `origin/main` sincronizados. Branches locais
+  antigas já mescladas ainda existem (`feat/authenticated-file-serving`,
+  `feat/refund-payment-and-stats`, `feat/refund-query-and-avatar`); nenhuma é
+  trabalho pendente.
+- **`Refund-FrontEnd`** — `main` e `origin/main` sincronizados. **Nenhuma
+  branch de trabalho pendente**; sobra apenas
   `backup/claude-session-2026-07-13`, que nunca foi branch de trabalho.
 
-Os dois lados foram empurrados em 2026-08-05. Um commit de documentação
-posterior a esta linha já a deixa desatualizada de novo — é para isso que
-existem os comandos acima.
+**Correção registrada:** até 2026-08-07 este documento afirmava, nos itens 15
+e 16, que aquelas branches não tinham sido mescladas. Já tinham. O bloco de
+estado dizia "última verificação 2026-08-03" enquanto os Itens 14, 15 e 16 são
+de 08-05/08-06 — ou seja, o documento contradizia a si mesmo, e a contradição
+só apareceu porque alguém rodou os comandos acima em vez de ler o texto. É
+exatamente a falha que este bloco existe para tornar detectável.
+
+Um commit de documentação posterior a esta linha já a deixa desatualizada de
+novo — é para isso que existem os comandos acima.
 
 **Nem todo SHA envelhece igual, e a diferença é o que este bloco aprendeu.** O
 de uma branch de trabalho (`d33fb65`) se mantém enquanto ela não for mesclada,
@@ -985,10 +992,11 @@ completo e obrigatório está em
     antes do CLDR, então a redação foi preservada de propósito, com teste
     afirmando as duas coisas. **Adotar um padrão não é neutro.**
 
-- **Fase 3, Item 15 — Motion com propósito: CONCLUÍDO.**
+- **Fase 3, Item 15 — Motion com propósito: CONCLUÍDO e MESCLADO.**
   Em duas branches empilhadas do `Refund-FrontEnd`: `feat/motion` (camada de
   reduced-motion) e `feat/motion-animations` sobre ela (as quatro animações),
-  partindo de `887cd45`. **Nenhuma das duas mesclada.** Detalhes no
+  partindo de `887cd45`. (Este documento afirmou até 2026-08-07 que nenhuma das
+  duas tinha sido mesclada; já tinham.) Detalhes no
   [diário](../learning-path-progress.md).
   - **O levantamento inverteu o enquadramento do item.** Não havia animação
     gratuita para remover: quase todo o movimento vem do design system
@@ -1017,9 +1025,11 @@ completo e obrigatório está em
     Home não foi resolvido, e a emulação de `prefers-reduced-motion` não foi
     confirmada explicitamente.
 
-- **Fase 3, Item 16 — Pipeline de qualidade: CONCLUÍDO. Fecha a FASE 3.**
+- **Fase 3, Item 16 — Pipeline de qualidade: CONCLUÍDO e MESCLADO. Fecha a
+  FASE 3.**
   Na branch `feat/ci` de **ambos** os repositórios — o primeiro item a produzir
-  artefato nos dois ao mesmo tempo. **Nenhuma das duas mesclada.** Detalhes no
+  artefato nos dois ao mesmo tempo. (Este documento afirmou até 2026-08-07 que
+  nenhuma das duas tinha sido mesclada; já tinham.) Detalhes no
   [diário](../learning-path-progress.md).
   - **CI em GitHub Actions** rodando as verificações que os `AGENTS.md` já
     exigiam: `typecheck`/`lint`/`test`/`build` no frontend, `pytest`/`pylint
@@ -1033,6 +1043,52 @@ completo e obrigatório está em
   - **Falta branch protection.** O CI reporta mas **não bloqueia** — ainda é
     possível empurrar com o CI vermelho. É configuração de painel do GitHub
     (Settings → Branches), não do YAML.
+
+- **Fase 4, Item 17 — Configuração tipada com pydantic-settings: CONCLUÍDO.**
+  Primeiro item da **Fase 4**, na branch `feat/typed-settings` do `Refund-api`,
+  partindo de `71e5363`. **Não mesclada** — aguarda autorização. Detalhes no
+  [diário](../learning-path-progress.md) e na
+  [ADR-004](../decisions/ADR-004-typed-settings.md). O que mudou:
+  - **`src/configs/settings.py`** (novo) com `Settings(BaseSettings)`.
+    `DATABASE_URL` e `JWT_SECRET` são as duas únicas obrigatórias; o resto tem
+    default. `global_config.py` e o `load_dotenv()` foram **removidos**.
+  - **O modo de falha que justificava o item, medido antes:** sem `JWT_SECRET`
+    a aplicação **subia saudável** (`/health` respondia `ok`) e quebrava com
+    `TypeError: Expected a string value` no **primeiro login de um usuário**.
+    Agora não sobe, com `ValidationError` nomeando `jwt_secret`.
+  - **`SecretStr`** no segredo de JWT — `repr(settings)` imprime
+    `**********`, e ler o valor exige `.get_secret_value()` explícito.
+  - **`environment`** (`local`/`test`/`production`, default `local` — nunca
+    `production` por omissão) e **`CORS_ORIGINS` por configuração**, com um
+    `model_validator` que **recusa o startup** se `production` trouxer `*`,
+    `localhost` ou `127.0.0.1`.
+  - **Engine do SQLAlchemy preguiçoso.** `build_engine(url)` +
+    `get_engine()`/`get_session_factory()` memoizados com `lru_cache(maxsize=1)`.
+    Importar a aplicação deixou de exigir banco configurado. O teste de pool
+    passou a construir o engine com URL literal, o que o deixou melhor: testa a
+    tunagem de pool sem depender de ambiente.
+  - **As variáveis fictícias saíram do `ci.yml`** e foram para um `conftest.py`
+    na raiz. Como variável de ambiente vence o `.env` no pydantic-settings, a
+    suíte roda com config fictícia **inclusive numa máquina com `.env` real** —
+    ou seja, não alcança o banco real por acidente. Também roda para quem
+    clonou sem `.env`.
+  - **Uma premissa do plano estava errada e foi corrigida antes de implementar:**
+    o engine preguiçoso **sozinho** não bastava para tirar as variáveis do CI.
+    Dois testes exigiam config real no import por motivos alheios ao engine
+    (`..._pool_test.py` importava o `engine` global; `jwt_handler_test.py` usava
+    `jwt_info["KEY"]`). Achado lendo os testes antes de escrever código.
+  - **Um teste tentado e abandonado:** rede de proteção para `lock_timeout` em
+    `connect_args`. O SQLAlchemy só os aplica ao abrir conexão real, então um
+    engine que nunca conecta não os expõe. A prova daquele parâmetro continua
+    sendo o `SHOW lock_timeout` manual.
+  - Verificação: `pytest` **247 passed** (partiu de 235), `pylint src` 10.00/10
+    com **exit 0**, e **12 cenários manuais** — startup sem config, startup só
+    com `DATABASE_URL`, suíte com o `.env` escondido (247 verdes), `/health`,
+    CORS com origem permitida e com origem estranha, registro + login + rota
+    autenticada (201 → token → 200), a guarda de produção recusando e aceitando,
+    e `alembic current`.
+  - **Não validado em navegador** — o item não muda nenhuma tela. O frontend
+    não foi tocado.
 
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
@@ -1077,8 +1133,13 @@ completo e obrigatório está em
   escrita depois. Ver a limitação registrada no item e o checklist nas
   pendências.
 
-- **Depois — foto de perfil (upload e exibição).** Único item novo restante do
-  backlog do frontend (ver seção abaixo).
+- **Próximo — decidir entre continuar a Fase 4 (Item 18 e 20 já feitos, então
+  o próximo em aberto é o Item 19 — PostgreSQL descartável para testes de
+  integração) ou o ciclo de feature da foto de perfil**, que é o único item
+  novo restante do backlog do frontend (ver seção abaixo). O Item 19 destrava
+  três pendências registradas: o ciclo `upgrade`/`downgrade` das migrations
+  verificado à mão, a ausência de teste comportamental de contenção de
+  pool/`lock_timeout`, e os testes de integração do Item 25.
 
 ## Encerramento da sessão de 2026-07-31 → 2026-08-03
 
@@ -1247,15 +1308,18 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   silêncio") vale para riscos: **um risco herdado deve ter sua premissa
   reverificada, não seu tom reforçado.**
 
-- **O primeiro deploy tem cinco bloqueios, e o contrato não é o principal.**
-  Levantados em 2026-08-03, ao verificar que não existe produção:
-  1. **CORS fixo em `localhost:5173`** (`src/main/server/server.py:23`) —
-     nenhum frontend implantado consegue falar com a API. É literalmente a
-     prática do **Item 17** ("ambientes local/test/production, CORS e secrets
-     sem defaults inseguros").
-  2. **Configuração por `os.getenv` sem validação** — a aplicação sobe com
-     variável obrigatória ausente e falha tarde, em vez de falhar no startup
-     com erro claro. Também **Item 17**.
+- **O primeiro deploy tinha cinco bloqueios, e o contrato não era o principal.**
+  Levantados em 2026-08-03, ao verificar que não existe produção. **Os dois
+  primeiros foram fechados pelo Item 17 em 2026-08-07** (branch
+  `feat/typed-settings`, ainda não mesclada) e ficam registrados como
+  resolvidos; **restam três**:
+  1. ~~**CORS fixo em `localhost:5173`**~~ **RESOLVIDO no Item 17:**
+     `allow_origins=settings.cors_origins`, configurável por `CORS_ORIGINS`, e
+     um `model_validator` que recusa o startup se `ENVIRONMENT=production`
+     trouxer `*`, `localhost` ou `127.0.0.1`.
+  2. ~~**Configuração por `os.getenv` sem validação**~~ **RESOLVIDO no Item 17:**
+     `Settings(BaseSettings)` valida no startup e a aplicação não sobe com
+     variável obrigatória ausente ou de tipo inválido.
   3. **Comprovantes em disco local** (`UPLOAD_DIR`, ADR-003) — a maioria dos
      PaaS tem filesystem efêmero, então **todo comprovante evapora a cada
      redeploy**. É o **Item 22** (object storage e URLs assinadas). Note que
@@ -1270,7 +1334,13 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   **Consequência para a trilha:** deploy e Learning Path não são assuntos
   separados. Os Itens 17 e 22 são pré-requisitos técnicos do primeiro deploy, e
   os Itens 29/30 são o deploy em si. Quem quiser implantar não precisa de um
-  projeto paralelo — precisa desses quatro itens da trilha.
+  projeto paralelo — precisa desses quatro itens da trilha. **O Item 17 está
+  feito**, o que confirma a tese: dois dos cinco bloqueios caíram como
+  subproduto de um item da trilha, não de um esforço separado de deploy.
+
+  **Ressalva importante sobre o bloqueio 3.** Ele é o pior dos cinco e não foi
+  tocado: comprovante em disco efêmero **perde dado do usuário em silêncio, sem
+  erro na tela**. Os dois que caíram eram os de falha barulhenta.
 - ~~**`AuthContext.loadStoredUser` lê `localStorage` FORA do próprio
   `try`.**~~ **RESOLVIDO em 2026-08-05**, na branch `fix/auth-storage-access`
   do `Refund-FrontEnd` (commit `d9d8b6b`, **não mesclada**): a leitura entrou
@@ -1874,3 +1944,9 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   (id 15), criado na verificação do fast-forward do backend. Não existe endpoint
   de exclusão de usuário. Junta-se a `admin.validacao@example.com` e
   `validacao.visual@example.com`; todos descartáveis.
+- **Mais um usuário de teste, do Item 17 (2026-08-07):**
+  `item17-verify@example.com`, criado para provar ponta a ponta que a assinatura
+  de JWT funciona lendo o segredo pela `Settings` (registro 201 → login com
+  token de 3 partes → `GET /refunds` com esse token respondendo 200). Sem
+  reembolsos associados; descartável como os demais, e igualmente sem endpoint
+  de exclusão.
