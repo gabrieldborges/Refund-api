@@ -44,3 +44,47 @@ jobs:
 
       - run: pytest
       - run: pylint src
+
+  # A second job, not more steps in the first: the mocked suite must stay
+  # runnable — and fast — without a database, and the two jobs run in parallel.
+  # A failure here is also unambiguous, since nothing in this job is mocked.
+  integration:
+    runs-on: ubuntu-latest
+
+    # The CI equivalent of docker-compose.yml. Same major version as production
+    # (Neon reports 18.4), for the same reason: testing against a different
+    # major would hide exactly the differences this suite exists to expose.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: refund_test
+          POSTGRES_PASSWORD: refund_test
+          POSTGRES_DB: refund_test
+        ports:
+          - 5433:5432
+        # Without a health check the job would start pytest while PostgreSQL is
+        # still initialising, and fail on connection rather than on anything
+        # real.
+        options: >-
+          --health-cmd "pg_isready -U refund_test -d refund_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://refund_test:refund_test@localhost:5433/refund_test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.9'
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # -m integration overrides the "not integration" in pytest.ini's addopts,
+      # so this job runs exactly the tests the other job skips.
+      - run: pytest -m integration

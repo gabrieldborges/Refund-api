@@ -1,0 +1,42 @@
+# A throwaway PostgreSQL for integration tests (Item 19).
+#
+# Not a development database: the application still talks to Neon through
+# DATABASE_URL. This exists so tests can run against the real engine — real
+# constraints, real locks, real migrations — instead of against a mock that
+# only ever returns what we told it to.
+#
+#   docker compose up -d          start it
+#   pytest -m integration         run the tests that need it
+#   docker compose down           throw it away
+services:
+  postgres-test:
+    # Pinned to the SAME MAJOR VERSION as production (Neon reports 18.4).
+    # Testing against a different major would defeat the purpose of the item:
+    # the differences it exists to expose are exactly the ones that vary
+    # between versions.
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: refund_test
+      POSTGRES_PASSWORD: refund_test
+      POSTGRES_DB: refund_test
+    ports:
+      # 5433, not 5432, so this never collides with a PostgreSQL someone
+      # already runs locally.
+      - "5433:5432"
+    # The data directory lives in RAM: the database is fast and genuinely
+    # disposable. Nothing here is meant to survive a restart, and a test that
+    # depends on leftover state should fail.
+    #
+    # The mount point is /var/lib/postgresql, NOT the /var/lib/postgresql/data
+    # that every pre-18 example shows. The 18 image moved the data into a
+    # version-named subdirectory so pg_upgrade can work across the mount, and
+    # mounting the old path makes the container refuse to start with "there
+    # appears to be PostgreSQL data in /var/lib/postgresql/data (unused
+    # mount/volume)".
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U refund_test -d refund_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

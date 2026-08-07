@@ -17,7 +17,13 @@ from src.configs.settings import settings
 
 # The URL comes from the .env at runtime, never from alembic.ini — that file is
 # versioned and must not carry credentials.
-config.set_main_option("sqlalchemy.url", settings.database_url)
+#
+# A caller that already supplied a URL wins. That is what lets the integration
+# tests point Alembic at the throwaway database by building their own Config,
+# without setting a process-wide environment variable that every other test
+# would then inherit.
+if not config.get_main_option("sqlalchemy.url", None):
+    config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

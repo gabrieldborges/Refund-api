@@ -67,6 +67,14 @@ def get_session_factory() -> sessionmaker:
 
 
 class DatabaseConnectionHandler:
+    # session_factory defaults to the process-wide one, so every existing call
+    # site keeps writing DatabaseConnectionHandler() and behaves exactly as
+    # before. Passing one explicitly is what lets the integration tests point
+    # the real repositories at the throwaway database, instead of the handler
+    # being permanently wired to a single global.
+    def __init__(self, session_factory=None):
+        self.__session_factory = session_factory
+
     # connect() opens a NEW session per call and keeps it in a local variable —
     # never on self. That is what makes a single shared handler safe under
     # concurrency: two overlapping requests each get their own session instead of
@@ -74,7 +82,8 @@ class DatabaseConnectionHandler:
     # (correctly shared); only the per-operation session is scoped locally.
     @asynccontextmanager
     async def connect(self):
-        session: AsyncSession = get_session_factory()()
+        factory = self.__session_factory or get_session_factory()
+        session: AsyncSession = factory()
         try:
             yield session
         finally:

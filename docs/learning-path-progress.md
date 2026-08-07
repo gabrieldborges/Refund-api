@@ -4547,3 +4547,135 @@ acidente**, nem numa máquina com `.env` de produção configurado.
 - Uma pergunta do tipo "me explica melhor" encontrou um defeito que três
   rodadas verdes de suíte e doze cenários manuais não encontraram. Explicar
   obriga a verificar o que se afirma.
+
+## Item 19 — PostgreSQL como referência de produção (2026-08-07)
+
+**Status:** concluído em 2026-08-07, na branch `feat/integration-tests` do
+`Refund-api`. Segundo item da Fase 4.
+
+### A premissa escrita na trilha estava morta
+
+O `learning_path.md` descreve o item assim: *"`asyncpg` está instalado, mas o
+README orienta SQLite local."* **Não orienta mais.** `grep -rni "sqlite"` no
+`README.md`, em `src/`, `alembic/` e `docs/` (fora do diário) não devolve nada
+além de registro histórico — a migração para o Neon aconteceu meses atrás e
+está na ADR-002.
+
+Sobrou um resíduo que ninguém tinha notado: **`aiosqlite==0.22.1` no
+`requirements.txt`, importado por nenhum arquivo.** Removido.
+
+Metade do item já estava feita, então o item virou a outra metade: *"PostgreSQL
+em container para integração"*.
+
+### A limitação, e por que ela já custou caro duas vezes
+
+Os 249 testes rodam contra mocks. O `conftest.py` dos repositories monta um
+`MagicMock` e cada teste configura o que ele deve devolver:
+
+```python
+execute_result.inserted_primary_key = [1]
+db.session.execute = AsyncMock(return_value=execute_result)
+```
+
+Isso prova que o repository **monta** o SQL certo. Nunca que o PostgreSQL o
+**aceita**, nem o que ele faz com ele. Mesma limitação que o MSW impõe ao
+frontend, e que este projeto já nomeou: *"a suíte roda contra o payload que nós
+mesmos escrevemos."*
+
+Dois bugs escaparam exatamente por aí, ambos achados só com banco real:
+o **singleton de sessão** do `DatabaseConnectionHandler` (500 e vazamento de
+conexão sob concorrência) e o **`paid` não terminal**, registrado no diário
+como "invisível à suíte mockada".
+
+### O que cada nível alcança
+
+| Falha | Mock | Postgres real |
+|---|---|---|
+| Repository monta o SQL errado | ✅ | ✅ |
+| Migration não aplica / `downgrade` quebra | ❌ | ✅ |
+| `UNIQUE` de e-mail | ❌ | ✅ |
+| FK para usuário inexistente | ❌ | ✅ |
+| `server_default` do schema | ❌ | ✅ |
+| `lock_timeout` chegou ao servidor | ❌ | ✅ |
+| `FOR UPDATE` sob contenção | ❌ | ✅ |
+
+### Seis coisas aprendidas
+
+**1. A separação por marker é o que mantém a suíte rápida viável.** `pytest.ini`
+traz `addopts = -m "not integration"`, então `pytest` continua sendo 249 testes
+em 4,2s sem Docker, e `pytest -m integration` roda os 19 novos — um `-m` na
+linha de comando é parseado depois do `addopts` e o sobrescreve. Ninguém é
+obrigado a instalar Docker para trabalhar no projeto.
+
+**2. O container tem de ser a mesma versão maior que produção.** Perguntei ao
+Neon (`show server_version`): **18.4**. O container é `postgres:18-alpine`.
+Testar contra outra maior anularia o item — as diferenças que ele existe para
+expor são justamente as que variam entre versões.
+
+**3. A imagem 18 mudou o ponto de montagem, e isso custou uma partida
+falhada.** Todo exemplo anterior a 18 usa `/var/lib/postgresql/data`; a 18 move
+os dados para um subdiretório com o nome da versão, para o `pg_upgrade`
+funcionar através do mount. Montar o caminho antigo faz o container **recusar a
+subir**, com "there appears to be PostgreSQL data in /var/lib/postgresql/data
+(unused mount/volume)". O `tmpfs` correto é `/var/lib/postgresql`.
+
+**4. Escrevi testes contra interfaces que supus, e o banco real me corrigiu
+três vezes.** Em ordem:
+- `select_user_by_email` devolve `dict`, não objeto com atributos;
+- `select_refunds` devolve **tupla** `(rows, total, sum)`, não dicionário;
+- `insert_user` **captura** o `IntegrityError` e levanta `HttpBadRequestError`,
+  enquanto `insert_refund` **não captura** — a FK propaga crua. Duas
+  repositories, dois contratos de erro diferentes, coisa que só um banco de
+  verdade mostra.
+
+E a quarta correção foi de camada: `count_by_status` é um `GROUP BY`, então só
+devolve status **que têm linhas**. A garantia das quatro chaves do `UC-014`
+mora no `RefundStatsFinderController`, não no repository. Meu teste afirmava na
+camada errada; virou um teste que documenta onde a garantia realmente está.
+
+**5. Um teste de concorrência não precisa ser uma corrida.** A pendência falava
+em "N operações concorrentes", que é a categoria mais propensa a flake — e este
+projeto já pagou caro com o flake do `ResizeObserver`. O desenho adotado é
+determinístico: uma transação **toma o lock deliberadamente e segura**, a outra
+tem um único desfecho possível. Não há nada a ganhar ou perder.
+
+**6. Um teste que trava na regressão é pior que teste nenhum.** A primeira
+versão do teste de contenção passava, mas se o `lock_timeout` sumisse ela
+**travaria para sempre** em vez de falhar. Corrigido com `asyncio.wait_for`: sem
+o parâmetro, o `TimeoutError` não é `DBAPIError` e o `pytest.raises` reporta
+falha em 15s. Provado por quebra deliberada.
+
+### O portão foi visto fechando
+
+Não basta os testes passarem — o projeto já registrou isso três vezes. Removi o
+`connect_args` do `build_engine` de propósito:
+
+```
+com lock_timeout removido   → 2 failed, 2 passed in 15.54s
+restaurado                  → 4 passed in 3.36s
+```
+
+Os 15,5s são a guarda do `wait_for` funcionando: falhou, não travou.
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` (3 rodadas) | **249 passed, 19 deselected**, 4,2s |
+| `pytest -m integration` (3 rodadas) | **19 passed**, 4,66s |
+| `pylint src; echo $?` | 10.00/10, **exit 0** |
+| Quebra deliberada do `lock_timeout` | **2 failed** em 15,5s, sem travar |
+| Sem o container de pé | 19 erros com "Is it up? Run: docker compose up -d" |
+| Suíte rápida sem o container | **249 passed** — imune |
+| `show server_version` (container) | 18.4, igual ao Neon |
+
+### O que lembrar
+
+- **Mock prova que o SQL é montado; só o banco prova que ele é aceito.** As
+  duas suítes são complementares, não redundantes.
+- Testar migration em SQLite seria pior que não testar — esconderia justamente
+  o que se quer ver.
+- **Reverificar a premissa do item antes de implementá-lo.** A deste estava
+  desatualizada, e metade do trabalho já existia.
+- Um teste de concorrência bem desenhado não tem corrida, e um teste que pode
+  travar precisa de uma guarda de tempo.

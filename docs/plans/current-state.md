@@ -1102,6 +1102,59 @@ completo e obrigatório está em
   - **Não validado em navegador** — o item não muda nenhuma tela. O frontend
     não foi tocado.
 
+- **Fase 4, Item 19 — PostgreSQL como referência de produção: CONCLUÍDO.**
+  Na branch `feat/integration-tests` do `Refund-api`, partindo de `4e7aece`.
+  **Não mesclada** — aguarda autorização. Detalhes no
+  [diário](../learning-path-progress.md); a [ADR-002](../decisions/ADR-002-postgresql-neon.md)
+  foi amendada. O que mudou:
+  - **A premissa escrita na trilha estava morta.** O item diz "o README orienta
+    SQLite local"; não orienta há meses (ADR-002). Sobrava só resíduo:
+    **`aiosqlite` no `requirements.txt` sem nenhum import**, agora removido.
+    O item virou a outra metade — "PostgreSQL em container para integração".
+  - **`docker-compose.yml`** com PostgreSQL **18-alpine em `tmpfs`**, porta
+    5433, fixado na mesma versão maior que produção (o Neon reporta **18.4**,
+    verificado por `show server_version`).
+  - **Duas suítes separadas por marker** (`pytest.ini`): `pytest` continua
+    sendo 249 testes em 4,2s **sem Docker**; `pytest -m integration` roda os 19
+    novos. Ninguém é obrigado a instalar Docker para trabalhar no projeto.
+  - **Fecha a pendência do ciclo `upgrade`/`downgrade` das migrations** — 4
+    testes, incluindo um que desce **revisão por revisão** e outro que afirma
+    que o schema migrado **não tem diff de autogenerate** contra as entidades.
+  - **Fecha a pendência do `lock_timeout` sem teste comportamental** — 4 testes:
+    o parâmetro **chega ao servidor** (`SHOW lock_timeout` = `3s`, antes só
+    provado à mão), a contenção de linha **desiste** em vez de esperar para
+    sempre, o lock é **liberado**, e linhas **diferentes não bloqueiam** entre
+    si. Determinístico de propósito: uma transação segura o lock e a outra tem
+    um único desfecho — não é uma corrida.
+  - **7 testes de repository reais** — id gerado por sequência, `UNIQUE` de
+    e-mail, `server_default` do schema, FK para usuário inexistente, agregados
+    computados pelo PostgreSQL, o JOIN do `user` aninhado e a contagem de linhas
+    da exclusão.
+  - **`DatabaseConnectionHandler` aceita um `session_factory` opcional**
+    (default inalterado), que é o que permite apontar os repositories reais para
+    o banco descartável sem variável de ambiente global.
+  - **`alembic/env.py` respeita uma URL já fornecida** pelo chamador, em vez de
+    sobrescrever sempre com a `settings.database_url` — é assim que os testes
+    apontam o Alembic para o banco descartável sem afetar mais nada.
+  - **CI ganhou um segundo job** com `services: postgres`, em paralelo ao
+    primeiro. O `pytest` mockado continua não precisando de banco.
+  - **O portão foi visto fechando:** removendo o `connect_args` do
+    `build_engine`, 2 testes falham em 15,5s; restaurado, 4 verdes. Os 15,5s são
+    a guarda `asyncio.wait_for` funcionando — **um teste que trava na regressão
+    é pior que teste nenhum**, e a primeira versão travava.
+  - **Quatro correções que o banco real impôs** a testes escritos contra
+    interfaces supostas: `select_user_by_*` devolve `dict`; `select_refunds`
+    devolve **tupla**; `insert_user` traduz `IntegrityError` em
+    `HttpBadRequestError` enquanto `insert_refund` deixa propagar; e
+    `count_by_status` é um `GROUP BY` que só devolve status **com linhas** — a
+    garantia das quatro chaves do `UC-014` mora no controller, não no
+    repository.
+  - Verificação: `pytest` **249 passed, 19 deselected** (3 rodadas),
+    `pytest -m integration` **19 passed** (3 rodadas), `pylint src` **exit 0**,
+    e a mensagem de container ausente conferida ("Is it up? Run: docker compose
+    up -d").
+  - **Não validado em navegador** — o item não toca nenhuma tela.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1145,13 +1198,16 @@ completo e obrigatório está em
   escrita depois. Ver a limitação registrada no item e o checklist nas
   pendências.
 
-- **Próximo — decidir entre continuar a Fase 4 (Item 18 e 20 já feitos, então
-  o próximo em aberto é o Item 19 — PostgreSQL descartável para testes de
-  integração) ou o ciclo de feature da foto de perfil**, que é o único item
-  novo restante do backlog do frontend (ver seção abaixo). O Item 19 destrava
-  três pendências registradas: o ciclo `upgrade`/`downgrade` das migrations
-  verificado à mão, a ausência de teste comportamental de contenção de
-  pool/`lock_timeout`, e os testes de integração do Item 25.
+- **Próximo — decidir entre continuar a Fase 4 (com 17, 18, 19 e 20 feitos, o
+  próximo em aberto é o Item 21 — consistência entre banco e arquivo, que hoje
+  tem DOIS call sites com o mesmo formato de bug) ou o ciclo de feature da foto
+  de perfil**, único item novo restante do backlog do frontend (ver seção
+  abaixo). O Item 19 deixou a infraestrutura de teste de integração pronta, o
+  que também destrava o Item 25 quando ele chegar.
+
+  **Vale olhar fora da trilha:** o GitHub reportou **14 vulnerabilidades do
+  Dependabot** no `Refund-api` (5 high, 5 moderate, 4 low) no push de
+  2026-08-07. Não foi investigado.
 
 ## Encerramento da sessão de 2026-07-31 → 2026-08-03
 
@@ -1506,22 +1562,34 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   antes produzia o 500 depois de 30s. **Pendência nova, mais restrita:** essa
   verificação foi manual (Task 12), não existe teste automatizado que
   exercite contenção real de pool/lock — ver logo abaixo.
-- **O ajuste de pool/lock_timeout não tem teste comportamental na suíte.**
-  `database_connection_handler_pool_test.py` verifica os *parâmetros* passados
-  a `create_async_engine` (que `pool_size` é 5, que `pool_pre_ping` é `True`),
-  não que o Postgres real os aceitou nem que a contenção efetivamente some.
-  A única prova de que `lock_timeout` chegou ao servidor foi um `SHOW
-  lock_timeout` manual contra a conexão real, e a única prova de que a
-  contenção não trava mais foi a corrida de três `PATCH` concorrentes rodada à
-  mão na Task 12 de verificação. Nenhuma das duas é repetível em CI. Escrever
-  um teste de integração contra Postgres real (não mockado) que dispare N
-  operações concorrentes e afirme que nenhuma delas espera além do
-  `lock_timeout` é candidato a um item de backend futuro — depende de alguma
-  forma de banco descartável em teste, a mesma dependência do Item 19.
-- **O ciclo `upgrade`/`downgrade` das migrations é verificado à mão.**
-  Automatizá-lo exige um PostgreSQL descartável, que é o **Item 19**. Testar
-  migrations em SQLite seria pior que não testar: esconderia justamente as
-  diferenças que o Item 19 existe para expor. Limitação aceita e registrada.
+- ~~**O ajuste de pool/lock_timeout não tem teste comportamental na suíte.**~~
+  **RESOLVIDO no Item 19 (2026-08-07):** `src/test_integration/lock_contention_test.py`
+  afirma, contra PostgreSQL real e de forma repetível em CI, que o
+  `lock_timeout` **chega ao servidor** (`SHOW lock_timeout` = `3s` — antes só
+  provado à mão) e que a contenção de linha **desiste** em vez de esperar para
+  sempre, mais que o lock é liberado e que linhas diferentes não bloqueiam
+  entre si.
+
+  **Uma diferença deliberada em relação ao que esta pendência pedia:** ela
+  falava em "disparar N operações concorrentes", que é a categoria mais
+  propensa a flake — e este projeto já pagou caro com o do `ResizeObserver`. O
+  desenho adotado **não é uma corrida**: uma transação toma o lock
+  deliberadamente e segura, a outra tem um único desfecho possível. O `pool_size`
+  continua coberto apenas pelas redes de proteção de parâmetro do
+  `database_connection_handler_pool_test.py`; a exaustão de pool em si não tem
+  teste comportamental, e isso segue em aberto.
+
+  **O que continua sem cobertura:** o proxy do Neon. O container é PostgreSQL
+  puro, e foi justamente o proxy que descartou em silêncio a forma de
+  `lock_timeout` recomendada pela documentação do asyncpg. Verde aqui não prova
+  que o Neon se comporta igual.
+- ~~**O ciclo `upgrade`/`downgrade` das migrations é verificado à mão.**~~
+  **RESOLVIDO no Item 19 (2026-08-07):** `src/test_integration/migrations_test.py`
+  automatiza o ciclo contra o PostgreSQL descartável do `docker-compose.yml`,
+  incluindo um teste que desce **revisão por revisão** e outro que afirma que o
+  schema migrado não tem diff de autogenerate contra as entidades. O raciocínio
+  original continua valendo e foi honrado: SQLite não foi usado, porque
+  esconderia justamente as diferenças que o item existe para expor.
 - **Existe um admin de teste no banco.** `admin.validacao@example.com` foi criado
   e promovido durante a verificação ponta a ponta do ciclo de aprovação, junto de
   `validacao.visual@example.com` e seus reembolsos de teste. São descartáveis.

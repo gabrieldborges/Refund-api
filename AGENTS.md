@@ -49,6 +49,17 @@ pytest
 pylint src
 ```
 
+Quando a mudança tocar repositories, migrations ou a camada de conexão, rode
+também a suíte de integração, que precisa do banco descartável:
+
+```bash
+docker compose up -d
+pytest -m integration
+```
+
+Ela fica **fora** do `pytest` padrão de propósito: a suíte mockada não pode
+passar a exigir Docker. A separação é por marker, declarada no `pytest.ini`.
+
 **Confira o código de saída, não a nota.** O `pylint` imprime "rated at
 10.00/10" e ainda assim sai com código diferente de zero quando emitiu
 qualquer mensagem — a nota não é penalizada por uma mensagem de refatoração.

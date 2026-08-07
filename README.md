@@ -61,6 +61,34 @@ fictícios, então `pytest` funciona mesmo sem `.env` e nunca alcança o banco r
 A API sobe em `http://localhost:3333`.
 Documentação automática (Swagger) em `http://localhost:3333/docs`.
 
+## Testes
+
+São duas suítes, separadas por marker do pytest.
+
+```bash
+pytest                  # a suíte mockada: rápida, sem banco, sem Docker
+pytest -m integration   # contra um PostgreSQL de verdade (precisa do container)
+```
+
+A primeira é a que roda o tempo todo e **não exige nada além das dependências**.
+A segunda precisa do banco descartável:
+
+```bash
+docker compose up -d    # sobe um PostgreSQL 18 em memória, na porta 5433
+pytest -m integration
+docker compose down     # joga fora
+```
+
+O container está fixado na **mesma versão maior que a produção** (Neon reporta
+18.4). Testar contra outra maior esconderia justamente as diferenças que os
+testes de integração existem para expor — e é por isso que SQLite não é uma
+opção aqui, nem como atalho local.
+
+O que cada suíte alcança: a mockada prova que os repositories **montam** o SQL
+certo; a de integração prova que o PostgreSQL **aceita** esse SQL e se comporta
+como assumimos — constraints, defaults do schema, chaves estrangeiras,
+agregados reais, e o `lock_timeout` sob contenção de linha.
+
 ## Estrutura
 
 Segue o mesmo padrão em camadas dos outros projetos Python:
