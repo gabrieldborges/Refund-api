@@ -1103,8 +1103,10 @@ completo e obrigatório está em
     não foi tocado.
 
 - **Fase 4, Item 19 — PostgreSQL como referência de produção: CONCLUÍDO.**
-  Na branch `feat/integration-tests` do `Refund-api`, partindo de `4e7aece`.
-  **Não mesclada** — aguarda autorização. Detalhes no
+  Na branch `feat/integration-tests` do `Refund-api` (`4e7aece..a8e8fa8`, 1
+  commit). **Mesclada na `main` por fast-forward e empurrada em 2026-08-07**,
+  com verificação repetida depois do merge (249 + 19 testes, `pylint src` exit
+  0). Detalhes no
   [diário](../learning-path-progress.md); a [ADR-002](../decisions/ADR-002-postgresql-neon.md)
   foi amendada. O que mudou:
   - **A premissa escrita na trilha estava morta.** O item diz "o README orienta
