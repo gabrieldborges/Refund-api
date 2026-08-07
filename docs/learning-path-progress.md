@@ -4803,3 +4803,139 @@ era verificável listando o diretório à mão.
   menos grave que uma resposta errada.
 - Um `SIGKILL` entre o `save()` e o commit continua descoberto — isso exige
   varredura ou fila (Item 28), não compensação em processo.
+
+## Item 22 — Object storage e URLs assinadas (2026-08-07)
+
+**Status:** concluído em 2026-08-07, em **dois repositórios**:
+`feat/object-storage` no `Refund-api` e `feat/signed-file-urls` no
+`Refund-FrontEnd`. **Nenhuma das duas mesclada.** Quarto item da Fase 4 nesta
+sessão, e o maior dela.
+
+### Duas metades, e a segunda foi escolha do Gabriel
+
+Eu recomendei fazer só object storage e adiar as URLs assinadas para um ciclo
+próprio. Ele escolheu incluir as duas. A recomendação estava baseada em "URL
+assinada é otimização, não correção de perda de dado" — o que continua
+verdadeiro, mas as duas juntas evitaram uma migração de contrato em dois
+passos.
+
+### O terreno já estava preparado
+
+`read() -> bytes` (e não `-> str` com um caminho) foi escrito no ciclo de
+arquivos autenticados com um comentário explícito: *"a path would assert that
+the file lives on a local filesystem, which is exactly the claim the
+object-storage item (22) will invalidate."*
+
+Resultado: `S3FileStorage` entrou sem tocar em **nenhum** controller. Os oito
+composers trocaram `FileStorage(settings.upload_dir)` por
+`build_storage("receipts")`.
+
+### O problema que a escolha das URLs assinadas abriu
+
+O motivo de existir URL assinada é `<img src={url}>` funcionar **sem header**.
+Mas o `FileStorage` local não tem servidor que assine por ele. Três saídas:
+
+| Opção | Problema |
+|---|---|
+| Só S3 devolve URL | **Dois contratos** — dev testa uma coisa, produção roda outra |
+| Só existe S3 | A aplicação passa a exigir Docker para rodar |
+| Assinar também no local | Código a mais |
+
+Escolhida a terceira, e ela saiu barata **porque o projeto já assina**: um JWT
+de vida curta com `(storage, filename)`, servido por
+`GET /files/{storage}/{filename}`. Mesmo `jwt_secret`, mesmo `JwtHandler`.
+Nenhuma criptografia nova, nenhuma dependência nova.
+
+### O achado que só apareceu ao fazer o frontend
+
+Eu tinha feito as rotas devolverem só `{"url": ...}`. Ao migrar o
+`ReceiptPreview`, apareceu que ele decide `<img>` vs `<object>` por
+`blob.type` — **e uma URL não carrega tipo**. Sem `media_type` na resposta, o
+cliente teria que adivinhar pela extensão da URL.
+
+Corrigido no backend antes de continuar: a resposta é
+`{"url", "media_type"}`. A regra que sobreviveu inteira é a que importa — o
+tipo vem da extensão armazenada, **nunca** de um cabeçalho do cliente.
+
+**A lição é sobre ordem de trabalho:** fazer o backend inteiro antes de olhar o
+consumidor escondeu um campo faltando por três horas de implementação.
+
+### O trade-off de segurança, declarado
+
+A rota autenticada **reconferia a autorização a cada requisição**. A URL
+assinada **congela a decisão** no momento em que é gerada. Quem copiar o link
+mantém acesso até expirar.
+
+O que torna isso aceitável, e diferente da URL pública que a ADR-003 removeu, é
+o prazo: **300 segundos** contra "para sempre". E a autorização em si não mudou
+de lugar — os controllers continuam decidindo dono-ou-admin antes de qualquer
+URL existir.
+
+### Um comportamento perdido de propósito
+
+Os controllers não leem mais o arquivo, então "a linha sobreviveu mas o arquivo
+sumiu" deixou de ser 404 ali. O `payment-receipt` tinha **quatro** caminhos de
+404 idênticos verificados byte a byte; o quarto mudou de lugar. Os três que
+importam seguem intactos — são os que vazariam a existência de um reembolso.
+Restaurar o quarto custaria um `HEAD` por URL contra o S3, que é a maior parte
+do que o item economiza.
+
+### Quatro coisas aprendidas
+
+**1. `services:` do GitHub Actions não sobrescreve o `command` da imagem.** O
+MinIO precisa de `server /data` para subir. Escrevi primeiro um bloco
+`services:` com `--entrypoint sh` e um comentário afirmando que funcionava —
+não funcionaria, subiria um shell que sai na hora. Trocado por `docker run`
+num step, que é verificável.
+
+**2. Porta 9000 é disputada.** Já estava ocupada na primeira máquina. MinIO foi
+para 9100/9101, mesmo raciocínio que levou o Postgres para 5433.
+
+**3. `staleTime` precisa ser menor que o TTL da URL.** O default global do
+projeto é 30s, o TTL é 300s — nesse caso específico o default já bastaria, mas
+fixar 150s explicitamente é o que impede que uma mudança futura no default
+entregue uma URL vencida. **O sintoma seria uma imagem quebrada sem erro
+nenhum na camada de dados**, que é o pior tipo.
+
+**4. Código morto com comentário justificando existe.** O `useObjectUrl` dizia
+morar na camada compartilhada *"porque o ciclo da foto de perfil vai precisar
+do mesmo comportamento"*. Deixou de ser verdade no mesmo commit — avatares
+também viram URL. Apagado, com o teste junto: deixá-lo mandaria o próximo
+leitor por um caminho que não existe mais.
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` | **277 passed, 32 deselected** (partiu de 261) |
+| `pytest -m integration` | **32 passed** (partiu de 23) |
+| `pylint src; echo $?` | 10.00/10, **exit 0** |
+| `npx vitest run` (3 rodadas) | **283 passed em 51 arquivos** |
+| `npx tsc -b --noEmit` | exit 0 |
+| `npm run lint` | 0 erros, 0 warnings |
+| `npm run build` | ok, 606,92 → **607,87 kB** |
+| Quebra: remover a checagem token↔arquivo | 2 failed |
+| Quebra: remover a guarda de path traversal | 1 failed |
+
+Os testes de integração baixam uma presigned URL com **urllib** — que não sabe
+nada de AWS, então se funciona ali funciona num `<img>` —, confirmam que o
+mesmo objeto é **recusado sem a assinatura**, e confirmam que a URL **expira**.
+
+### O que NÃO foi verificado
+
+**Nada disso foi visto num navegador.** É o item em que essa lacuna mais pesa:
+o ponto inteiro é uma URL carregar numa tag `<img>` sem header, e a suíte roda
+contra MSW — o payload que nós mesmos escrevemos. Ver pendências.
+
+E o **CORS do bucket**: uma implantação com S3 precisa liberar o domínio do
+frontend no provedor, ou o navegador bloqueia o download cross-origin. É
+configuração de painel, não código, e o startup não tem como verificar.
+
+### O que lembrar
+
+- **Uma boa interface paga juros.** `read() -> bytes` foi escrito dois ciclos
+  antes pensando neste item, e por isso nenhum controller foi tocado.
+- **Olhe o consumidor antes de declarar o contrato pronto.** O `media_type`
+  faltando só apareceu ao migrar a tela.
+- URL assinada troca "reconferido sempre" por "válido por N segundos". O
+  prazo é a decisão inteira.

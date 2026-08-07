@@ -1213,6 +1213,59 @@ completo e obrigatório está em
     `pylint src` **exit 0**.
   - **Não validado em navegador** — o item não toca nenhuma tela.
 
+- **Fase 4, Item 22 — Object storage e URLs assinadas: CONCLUÍDO.**
+  O maior item da sessão, e o primeiro desde o Item 16 a produzir artefato nos
+  **dois** repositórios: `feat/object-storage` no `Refund-api` (partindo de
+  `193299a`) e `feat/signed-file-urls` no `Refund-FrontEnd`. **Nenhuma das duas
+  mesclada** — aguarda autorização. Detalhes no
+  [diário](../learning-path-progress.md); a
+  [ADR-003](../decisions/ADR-003-local-receipt-storage.md) foi amendada de novo
+  e `UC-010`/`UC-011`/`UC-012` também.
+  - **`S3FileStorage`** entrou sem tocar em **nenhum** controller — o
+    `read() -> bytes` escrito dois ciclos antes, com um comentário citando este
+    item, é o que pagou por isso. Um bucket, três prefixos; a coluna do banco
+    segue guardando o **nome**, não a chave, então trocar de backend não
+    reescreve linha nenhuma. `NoSuchKey` é traduzido para `FileNotFoundError`.
+  - **Fecha o bloqueio nº 3 do primeiro deploy**, o pior dos cinco: disco
+    efêmero perdia comprovante em silêncio. **Restam dois** (Dockerfile e
+    branch protection).
+  - **As três rotas de arquivo devolvem `{"url", "media_type"}`**, não bytes —
+    porque uma tag `<img>` não envia `Authorization: Bearer`, que era a razão
+    de o frontend baixar tudo por XHR e montar Blob.
+  - **O backend local também assina**, senão haveria dois contratos e ninguém
+    estaria testando o que roda. JWT de vida curta com `(storage, filename)`,
+    servido por `GET /files/{storage}/{filename}` — mesmo `jwt_secret`, mesmo
+    `JwtHandler`, zero dependência nova. A rota confere que o token é **daquele
+    arquivo** (sem isso, um token válido leria todos) e recusa nome com
+    separador de caminho. **As duas guardas provadas por quebra deliberada.**
+  - **Trade-off de segurança declarado:** a rota autenticada reconferia a
+    autorização **a cada requisição**; a URL assinada **congela** a decisão por
+    `FILE_URL_TTL_SECONDS` (300s). O que separa isso da URL pública que a
+    ADR-003 removeu é o prazo. A autorização em si não mudou de lugar.
+  - **Comportamento perdido de propósito:** "arquivo sumiu do disco" deixou de
+    ser 404 nessas rotas. O `payment-receipt` tinha quatro caminhos de 404
+    idênticos; o quarto mudou de lugar. Os três que importam seguem intactos.
+  - **MinIO no `docker-compose.yml`** (portas 9100/9101 — a 9000 já estava
+    ocupada) e no CI **por `docker run` num step**, não por `services:` —
+    service container não sobrescreve o `command` da imagem, e o MinIO precisa
+    de `server /data`. Um bloco `services:` com `--entrypoint` foi escrito
+    primeiro e descartado: teria subido um shell que sai na hora.
+  - **Achado que só apareceu ao fazer o frontend:** eu tinha feito as rotas
+    devolverem só `{"url"}`, e o `ReceiptPreview` decide `<img>` vs `<object>`
+    por tipo — que uma URL não carrega. `media_type` voltou à resposta.
+    **Fazer o backend inteiro antes de olhar o consumidor escondeu um campo
+    faltando.**
+  - **`useObjectUrl` foi APAGADO** (com seu teste): sem Blob, não há object URL.
+    O comentário dele justificava a camada compartilhada "porque o ciclo da
+    foto de perfil vai precisar" — deixou de valer no mesmo commit, já que
+    avatares também viram URL.
+  - Verificação: `pytest` **277 passed, 32 deselected**, `pytest -m integration`
+    **32 passed**, `pylint src` **exit 0**; no frontend `npx vitest run`
+    **283 passed em 51 arquivos** (3 rodadas), `tsc` exit 0, lint **0/0**,
+    build ok (606,92 → **607,87 kB**). Os testes de integração baixam a
+    presigned URL com **urllib** (que não sabe nada de AWS), confirmam que sem
+    assinatura o objeto é recusado, e confirmam que ela **expira**.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1256,13 +1309,15 @@ completo e obrigatório está em
   escrita depois. Ver a limitação registrada no item e o checklist nas
   pendências.
 
-- **Próximo — decidir entre continuar a Fase 4 (com 17, 18, 19, 20 e 21 feitos,
-  o próximo em aberto é o Item 22 — object storage e URLs assinadas, que é o
-  terceiro dos cinco bloqueios do primeiro deploy e o pior deles: disco efêmero
-  perde comprovante do usuário em silêncio) ou o ciclo de feature da foto de
-  perfil**, único item novo restante do backlog do frontend (ver seção abaixo).
-  O Item 19 deixou a infraestrutura de teste de integração pronta, o que também
-  destrava o Item 25 quando ele chegar.
+- **Próximo — VALIDAR EM NAVEGADOR o Item 22 antes de qualquer outra coisa.**
+  As duas branches estão paradas e é o item em que essa lacuna mais pesa: o
+  ponto inteiro é uma URL carregar numa tag `<img>` sem header, e a suíte roda
+  contra MSW. Ver pendências para o checklist.
+
+  Depois disso: com 17 a 22 feitos, o próximo em aberto da Fase 4 é o **Item
+  23** (Problem Details, RFC 9457), ou o **ciclo de feature da foto de perfil**
+  — único item novo restante do backlog do frontend, e que ficou mais barato
+  agora que o avatar também chega como URL.
 
   **Vale olhar fora da trilha:** o GitHub reportou **14 vulnerabilidades do
   Dependabot** no `Refund-api` (5 high, 5 moderate, 4 low) no push de
@@ -1447,7 +1502,12 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   2. ~~**Configuração por `os.getenv` sem validação**~~ **RESOLVIDO no Item 17:**
      `Settings(BaseSettings)` valida no startup e a aplicação não sobe com
      variável obrigatória ausente ou de tipo inválido.
-  3. **Comprovantes em disco local** (`UPLOAD_DIR`, ADR-003) — a maioria dos
+  3. ~~**Comprovantes em disco local**~~ **RESOLVIDO no Item 22 (2026-08-07,
+     branch não mesclada):** `STORAGE_BACKEND=s3` guarda os arquivos fora da
+     instância. **Ressalva:** uma implantação com S3 precisa liberar o domínio
+     do frontend no **CORS do bucket**, que é configuração de painel do
+     provedor — o startup não tem como verificar isso. O texto original, porque
+     o raciocínio continua útil: a maioria dos
      PaaS tem filesystem efêmero, então **todo comprovante evapora a cada
      redeploy**. É o **Item 22** (object storage e URLs assinadas). Note que
      isto é pior que o risco de contrato: perde dado do usuário, em silêncio e
@@ -1555,6 +1615,24 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   requisições (`?status=approved&per_page=1` e `?status=paid&per_page=1`).
   Candidato a um `GET /refunds/stats` global, por status, no backlog do
   backend.
+- **ITEM 22 NÃO FOI VALIDADO EM NAVEGADOR, e é onde isso mais pesa.** As duas
+  branches (`feat/object-storage` e `feat/signed-file-urls`) estão paradas
+  aguardando isso. O ponto inteiro do item é uma URL assinada carregar numa tag
+  `<img>` **sem cabeçalho de autenticação** — e a suíte do frontend roda contra
+  MSW, ou seja, contra o payload que nós mesmos escrevemos. Checklist mínimo,
+  com o backend e o frontend rodando das duas branches:
+  1. Comprovante de imagem aparece no detalhe do reembolso (o `<img>` carrega
+     de `/files/receipts/...?token=...`).
+  2. Comprovante em PDF aparece no `<object>`, e o link de fallback abre.
+  3. Tela cheia mostra o mesmo arquivo, sem segunda requisição.
+  4. Comprovante de **pagamento** aparece na tela de revisão.
+  5. Esperar **mais de 5 minutos** com a tela aberta e recarregar a imagem: a
+     URL deve ter expirado (o `staleTime` de 150s deve ter buscado outra antes
+     — se a imagem quebrar, o número está errado).
+  6. Copiar a URL assinada e abrir numa aba anônima: deve funcionar enquanto
+     válida (é o comportamento esperado, e é o trade-off do item), e falhar
+     depois de expirar.
+  7. Adulterar um caractere do token na URL: deve dar 404.
 - **O avatar continua sem nenhum consumidor.** `has_avatar` é sempre `false`
   até o ciclo da foto de perfil existir — nem o painel do solicitante do
   ciclo de revisão renderiza avatar (ver o backlog do frontend, item 2, para o
@@ -2077,6 +2155,13 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   não estiver ligado, o portão avisa mas não tranca — e a classe de problema
   que motivou o item (`2d07a8d` quebrando a `main` sem ninguém ver) fica
   detectável, não impedida.
+- **O boto3 já passou da data em que anunciou o fim do suporte a Python 3.9.**
+  A versão instalada (1.42.97) emite `PythonDeprecationWarning` dizendo
+  "no longer support Python 3.9 starting April 29, 2026" — data já passada em
+  2026-08-07. Funciona hoje, mas prende o quanto a dependência pode avançar, e
+  polui a saída da suíte de integração com 9 avisos. **Não foi silenciado de
+  propósito:** é sinal real de que o projeto precisa subir de Python, não
+  ruído. O CI e o `.venv` estão em 3.9 porque foi assim que o projeto começou.
 - **O `.venv` do `Refund-api` tem shebangs de um caminho antigo**
   (`.../React/Refund-api`). Consequência prática: `pytest` e `pylint` só rodam
   como `.venv/bin/python3 -m pytest` / `-m pylint`, nunca pelos executáveis
