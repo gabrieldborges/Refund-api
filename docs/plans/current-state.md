@@ -1155,6 +1155,13 @@ completo e obrigatório está em
     `pytest -m integration` **19 passed** (3 rodadas), `pylint src` **exit 0**,
     e a mensagem de container ausente conferida ("Is it up? Run: docker compose
     up -d").
+  - **O CI foi visto rodando os dois jobs**, no push de 2026-08-07 (run
+    `31209765881`): `verify` **success** (249 passed, 19 deselected) e
+    `integration` **success** (19 passed, 249 deselected), em paralelo, 54s e
+    42s. Conferido na **saída**, não só no status verde — um job pode passar
+    tendo rodado zero teste se a filtragem por marker estiver errada, e as duas
+    linhas de `collected 268 items / … selected` provam que cada job rodou
+    exatamente a metade que devia.
   - **Não validado em navegador** — o item não toca nenhuma tela.
 
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
