@@ -1164,6 +1164,53 @@ completo e obrigatório está em
     exatamente a metade que devia.
   - **Não validado em navegador** — o item não toca nenhuma tela.
 
+- **Fase 4, Item 21 — Consistência entre banco e arquivo: CONCLUÍDO.**
+  Na branch `feat/file-consistency` do `Refund-api`, partindo de `f3e617e`.
+  **Não mesclada** — aguarda autorização. Detalhes no
+  [diário](../learning-path-progress.md); a
+  [ADR-003](../decisions/ADR-003-local-receipt-storage.md) foi amendada.
+  - **São cinco call sites, não dois.** A trilha cita criação e exclusão de
+    reembolso; o levantamento achou também upload de avatar, remoção de avatar
+    e o pagamento — este último **já tinha a compensação completa**, escrita no
+    ciclo de 2026-07-30. O item virou "aplicar aos quatro que ficaram para
+    trás", não "inventar a solução".
+  - **A ordem já estava certa nos cinco** e não foi tocada. Faltava o
+    tratamento da falha.
+  - **Duas falhas distintas.** (A) arquivo órfão quando a escrita no banco
+    falha — criação e upload de avatar. (B) **500 numa operação que deu certo**
+    — na exclusão, um `os.remove` que levanta derrubava a resposta *depois* de
+    a linha já ter sido apagada e commitada; o usuário via erro e, ao tentar de
+    novo, 404. **Esta segunda ninguém tinha nomeado.**
+  - **A regra: antes do commit desfaça, depois do commit registre.** Derrubar
+    uma resposta correta por causa de um arquivo sobrando troca um problema
+    pequeno por um grande.
+  - **A fronteira é o commit, não o fim do método.** `insert_refund` já dá
+    commit, então a compensação da criação cobre **só o insert** — esticar o
+    `try` para incluir a releitura apagaria o comprovante de um reembolso real.
+    Mesma fronteira que a flag `committed` do pagamento já marcava. Há teste
+    dedicado, e ele falha quando o `try` é esticado.
+  - **Primeira linha de log do projeto.** `src/controllers/file_cleanup.py`
+    centraliza a deleção best-effort e emite `logging.warning` com o nome do
+    arquivo. `logging` é stdlib. O **Item 24** depois troca a configuração
+    (JSON, `request_id`) e estas chamadas passam a sair estruturadas — serão
+    refinadas para mover o filename para campo próprio, mas não precisam
+    esperar por isso. Centralizar evitou três cópias do mesmo `try/except`, e
+    `R0801` já reprovou este projeto uma vez.
+  - **Quatro quebras deliberadas**, todas pegas: remover a compensação da
+    criação (1 falha), `delete_quietly` voltar a propagar (**6 falhas** em 4
+    arquivos), esticar o `try` para depois do commit (2 falhas, inclusive o
+    teste da fronteira) e a versão de integração da primeira — que falha
+    **mostrando o órfão pelo nome** (`assert ['ce2180ea-…png'] == []`).
+  - **Essa última evidência não era possível antes do Item 19.** "Não sobrou
+    arquivo no disco" só era verificável listando o diretório à mão.
+  - **O que continua descoberto:** `SIGKILL` entre o `save()` e o commit.
+    Nenhuma compensação em processo resolve — exige varredura ou fila
+    (Item 28).
+  - Verificação: `pytest` **258 passed, 23 deselected** (3 rodadas, partiu de
+    249), `pytest -m integration` **23 passed** (3 rodadas, partiu de 19),
+    `pylint src` **exit 0**.
+  - **Não validado em navegador** — o item não toca nenhuma tela.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1207,12 +1254,13 @@ completo e obrigatório está em
   escrita depois. Ver a limitação registrada no item e o checklist nas
   pendências.
 
-- **Próximo — decidir entre continuar a Fase 4 (com 17, 18, 19 e 20 feitos, o
-  próximo em aberto é o Item 21 — consistência entre banco e arquivo, que hoje
-  tem DOIS call sites com o mesmo formato de bug) ou o ciclo de feature da foto
-  de perfil**, único item novo restante do backlog do frontend (ver seção
-  abaixo). O Item 19 deixou a infraestrutura de teste de integração pronta, o
-  que também destrava o Item 25 quando ele chegar.
+- **Próximo — decidir entre continuar a Fase 4 (com 17, 18, 19, 20 e 21 feitos,
+  o próximo em aberto é o Item 22 — object storage e URLs assinadas, que é o
+  terceiro dos cinco bloqueios do primeiro deploy e o pior deles: disco efêmero
+  perde comprovante do usuário em silêncio) ou o ciclo de feature da foto de
+  perfil**, único item novo restante do backlog do frontend (ver seção abaixo).
+  O Item 19 deixou a infraestrutura de teste de integração pronta, o que também
+  destrava o Item 25 quando ele chegar.
 
   **Vale olhar fora da trilha:** o GitHub reportou **14 vulnerabilidades do
   Dependabot** no `Refund-api` (5 high, 5 moderate, 4 low) no push de
@@ -1807,21 +1855,23 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
 - **Referência quebrada.** `AGENTS.md` (dos dois repos) aponta para
   `../../CODING_PROFILE.md`, que não existe na árvore. O perfil de
   desenvolvedor equivalente está hoje no `CLAUDE.md` global do usuário.
-- **Fragilidade latente banco+arquivo — agora em DOIS lugares, não um.** Na
-  criação de reembolso, o comprovante é salvo em disco **antes** do insert; se
-  o insert falhar, o arquivo fica órfão (o mesmo vale na exclusão). É o Item 21
-  do `learning_path.md` ("consistência entre banco e arquivo"); ainda não
-  tratado. **Novo no ciclo de 2026-07-30:** `RefundPayerController.pay()`
-  repete exatamente o mesmo padrão — `self.__payment_storage.save(...)` roda
-  antes do `UPDATE`/`INSERT` dentro do `UnitOfWork`, e um crash entre os dois
-  órfa o comprovante de pagamento. O código tem um comentário reconhecendo
-  isso explicitamente ("A crash between here and the UPDATE still orphans it —
-  that is Item 21, unresolved, and the UnitOfWork does NOT cover it"). Diferente
-  da criação, aqui existe uma compensação parcial: se o `UPDATE` afeta 0 linhas
-  (outro admin pagou primeiro), o controller **apaga** o arquivo que acabou de
-  gravar antes de responder 422 — mas essa compensação só cobre a corrida
-  perdida, não um crash do processo entre o `save()` e o commit. O Item 21
-  agora precisa resolver dois call sites com o mesmo formato de bug, não um.
+- ~~**Fragilidade latente banco+arquivo — agora em DOIS lugares, não um.**~~
+  **RESOLVIDO no Item 21 (2026-08-07)**, em **cinco** call sites, não dois: os
+  quatro que faltavam ganharam compensação (criação de reembolso, upload de
+  avatar) ou deleção que não derruba a resposta (exclusão de reembolso, remoção
+  de avatar), e o pagamento passou a usar o mesmo helper compartilhado.
+
+  **Duas correções ao registro original, que estava desatualizado:** (1) a
+  compensação do pagamento **não** cobria "só a corrida perdida" — desde os
+  commits `c242ed7`/`30b6f88` ela é um `try/except` em volta do bloco inteiro,
+  gated por `committed`, cobrindo qualquer exceção antes do commit; (2) o
+  levantamento do Item 21 encontrou uma **segunda** falha que este registro não
+  mencionava, e que era pior: na exclusão, um `os.remove` que levanta devolvia
+  **500 para uma operação que já tinha sido commitada**.
+
+  **O que segue verdadeiro:** um `SIGKILL` entre o `save()` e o commit continua
+  órfanando o arquivo. Nenhuma compensação em processo resolve isso — exige
+  varredura posterior ou fila (Item 28).
 - ~~**Pool de conexões pequeno.**~~ RESOLVIDO no ciclo de 2026-07-30: ver a
   pendência resolvida acima (`select_for_update` segurava conexão) — é o
   mesmo ajuste, `pool_size=5, max_overflow=10`.

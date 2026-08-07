@@ -91,3 +91,36 @@ async def test_upload_saves_and_updates_before_deleting_the_previous_file(
 
     call_order = [call[0] for call in manager.mock_calls]
     assert call_order == ["save", "update_avatar", "delete"]
+
+
+# Item 21 — the new file is on disk before the column points at it. A failed
+# update would leak it, exactly like the refund receipt case.
+@pytest.mark.asyncio
+async def test_upload_deletes_the_new_file_when_the_update_fails(
+    mock_repository, mock_storage
+):
+    mock_repository.update_avatar = AsyncMock(side_effect=RuntimeError("database is down"))
+    controller = AvatarUploaderController(mock_repository, mock_storage)
+
+    with pytest.raises(RuntimeError):
+        await controller.upload(user_id=7, original_filename="foto.jpg", content=b"x")
+
+    mock_storage.delete.assert_called_once_with("novo.jpg")
+
+
+# Replacing an existing avatar: once the column points at the new file, the
+# upload has succeeded. Failing to remove the OLD one must not turn that into a
+# 500 — the user's new picture is saved and live.
+@pytest.mark.asyncio
+async def test_upload_succeeds_even_when_removing_the_previous_file_fails(
+    mock_repository, mock_storage
+):
+    mock_repository.select_user_by_id = AsyncMock(
+        return_value={"id": 7, "name": "Gabriel", "avatar_filename": "antiga.png"}
+    )
+    mock_storage.delete = MagicMock(side_effect=OSError("permission denied"))
+    controller = AvatarUploaderController(mock_repository, mock_storage)
+
+    response = await controller.upload(user_id=7, original_filename="foto.jpg", content=b"x")
+
+    assert response["attributes"]["avatar_filename"] == "novo.jpg"

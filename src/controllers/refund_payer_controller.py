@@ -8,6 +8,7 @@ from src.controllers.interfaces.refund_payer_controller_interface import (
     RefundPayerControllerInterface,
 )
 from src.controllers.refund_serializer import format_refund_response
+from src.controllers.file_cleanup import delete_quietly
 from src.errors.types.http_forbidden_error import HttpForbiddenError
 from src.errors.types.http_not_found_error import HttpNotFoundError
 from src.errors.types.http_unprocessable_entity_error import HttpUnprocessableEntityError
@@ -105,7 +106,11 @@ class RefundPayerController(RefundPayerControllerInterface):
             # deleting it here would destroy a valid payment receipt instead
             # of an orphaned one.
             if not committed:
-                self.__delete_orphaned_file(stored_filename)
+                delete_quietly(
+                    self.__payment_storage,
+                    stored_filename,
+                    "payment receipt, transaction failed",
+                )
             raise
 
         # Re-read instead of patching the row we already have. The PATCH /status
@@ -114,13 +119,3 @@ class RefundPayerController(RefundPayerControllerInterface):
         paid_refund = await self.__refunds_repository.select_refund_by_id(refund_id)
 
         return format_refund_response(paid_refund)
-
-    def __delete_orphaned_file(self, stored_filename: str) -> None:
-        # Best-effort compensation. If delete() itself raises (e.g. the file
-        # is already gone), that new exception must not replace the original
-        # one already in flight in the `except` block above — swallowing it
-        # here is what lets `raise` re-propagate the real failure untouched.
-        try:
-            self.__payment_storage.delete(stored_filename)
-        except Exception:
-            pass

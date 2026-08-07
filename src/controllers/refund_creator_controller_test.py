@@ -118,3 +118,76 @@ async def test_create_response_hides_filename_and_exposes_has_avatar(mock_reposi
     assert "filename" not in response["attributes"]
     assert response["attributes"]["user"]["has_avatar"] is True
     assert "avatar_filename" not in response["attributes"]["user"]
+
+
+# Item 21 — the receipt reaches disk BEFORE the insert, because the row needs its
+# filename. If the insert fails, nothing points at that file and it would sit in
+# UPLOAD_DIR forever. Seven such orphans were once found and removed by hand.
+@pytest.mark.asyncio
+async def test_create_deletes_the_receipt_when_the_insert_fails(mock_repository, mock_storage):
+    mock_repository.insert_refund = AsyncMock(side_effect=RuntimeError("database is down"))
+    controller = RefundCreatorController(mock_repository, mock_storage)
+
+    with pytest.raises(RuntimeError):
+        await controller.create(
+            {"name": "Almoço", "category": "food", "amount": 10.0,
+             "filename": "a.jpg", "content": b"x"},
+            user_id=7,
+        )
+
+    mock_storage.delete.assert_called_once_with("uuid-generated-name.jpg")
+
+
+# The original failure must reach the caller unchanged. Compensation is cleanup,
+# never error handling: swallowing here would turn a database outage into a
+# silent success.
+@pytest.mark.asyncio
+async def test_create_reraises_the_original_failure(mock_repository, mock_storage):
+    mock_repository.insert_refund = AsyncMock(side_effect=RuntimeError("boom"))
+    controller = RefundCreatorController(mock_repository, mock_storage)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await controller.create(
+            {"name": "Almoço", "category": "food", "amount": 10.0,
+             "filename": "a.jpg", "content": b"x"},
+            user_id=7,
+        )
+
+
+# A compensation that itself fails must not replace the exception already on its
+# way up. The caller needs to see the database error, not "permission denied".
+@pytest.mark.asyncio
+async def test_create_surfaces_the_insert_error_even_if_cleanup_fails(
+    mock_repository, mock_storage
+):
+    mock_repository.insert_refund = AsyncMock(side_effect=RuntimeError("database is down"))
+    mock_storage.delete = MagicMock(side_effect=OSError("permission denied"))
+    controller = RefundCreatorController(mock_repository, mock_storage)
+
+    with pytest.raises(RuntimeError, match="database is down"):
+        await controller.create(
+            {"name": "Almoço", "category": "food", "amount": 10.0,
+             "filename": "a.jpg", "content": b"x"},
+            user_id=7,
+        )
+
+
+# THE BOUNDARY THAT MATTERS. insert_refund commits, so once it returns the row
+# exists and points at this file. A failure in the re-read afterwards must NOT
+# delete it — that would destroy the receipt of a refund that is live in the
+# database. Same rule RefundPayerController encodes with its `committed` flag.
+@pytest.mark.asyncio
+async def test_create_keeps_the_receipt_when_only_the_reread_fails(
+    mock_repository, mock_storage
+):
+    mock_repository.select_refund_by_id = AsyncMock(side_effect=RuntimeError("read failed"))
+    controller = RefundCreatorController(mock_repository, mock_storage)
+
+    with pytest.raises(RuntimeError):
+        await controller.create(
+            {"name": "Almoço", "category": "food", "amount": 10.0,
+             "filename": "a.jpg", "content": b"x"},
+            user_id=7,
+        )
+
+    mock_storage.delete.assert_not_called()

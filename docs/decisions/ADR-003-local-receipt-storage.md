@@ -2,7 +2,9 @@
 
 ## Status
 
-Aceita. Emendada em 2026-07-29: primeiro para cobrir também as fotos de
+Aceita. Emendada em 2026-08-07 (Item 21) para definir o que acontece quando o
+banco e o disco discordam — ver o amendamento ao final da seção de Decisão.
+Emendada em 2026-07-29: primeiro para cobrir também as fotos de
 perfil dos usuários; em seguida, no mesmo ciclo, para encerrar o acesso
 público aos arquivos. Emendada novamente em 2026-07-30 para cobrir um
 terceiro tipo de arquivo, o comprovante de pagamento — ver os amendamentos
@@ -87,6 +89,41 @@ versionado, com a negação correspondente adicionada ao `.gitignore`
 a mesma ressalva já registrada para os dois primeiros tipos de arquivo, e
 falha do mesmo jeito silencioso num clone limpo sem o `.gitkeep`.
 
+**Amendamento (2026-08-07, Item 21):** uma transação SQL cobre o banco e não
+cobre o disco, então "ou tudo ou nada" entre os dois passa a ser escrito à mão.
+A regra adotada é uma só, e a assimetria é o ponto:
+
+- **Antes de o dado ficar durável, desfaça.** O arquivo foi escrito e nenhuma
+  linha aponta para ele; se a escrita no banco falhar, o arquivo é apagado.
+  Vale para a criação de reembolso e para o upload de avatar.
+- **Depois de o dado ficar durável, não desfaça — registre.** A linha já foi
+  apagada (ou já aponta para o arquivo novo); uma falha ao remover o arquivo
+  não pode derrubar a resposta. Vale para a exclusão de reembolso, a remoção de
+  avatar e a remoção do avatar anterior numa substituição.
+
+O segundo caso corrigiu um defeito que ninguém tinha nomeado: uma falha de
+`os.remove` na exclusão devolvia **500 para uma operação que tinha dado certo**
+— a linha já estava apagada, e o usuário que tentasse de novo receberia 404.
+Trocar uma resposta correta por um arquivo sobrando é o lado certo dessa troca.
+
+A compensação é sempre **best-effort** e mora em `src/controllers/file_cleanup.py`:
+ela engole a própria falha, porque no primeiro caso está dentro de um `except`
+prestes a re-levantar algo mais importante, e no segundo não pode quebrar uma
+resposta de sucesso. Quando engole, emite um `logging.warning` com o nome do
+arquivo — é a primeira linha de log do projeto, e o Item 24 depois a transforma
+em registro estruturado.
+
+**O limite da compensação é o commit, não o fim do método.** Na criação, o
+`insert_refund` já dá commit, então a compensação cobre **apenas** o insert: uma
+falha na releitura seguinte não pode apagar o arquivo, porque a essa altura
+existe uma linha real apontando para ele. É a mesma fronteira que o
+`RefundPayerController` já marcava com sua flag `committed`.
+
+**O que continua descoberto:** um `SIGKILL` entre o `save()` e o commit. Nenhuma
+compensação em processo resolve isso — exigiria varredura posterior ou fila
+(Item 28). O `POST /refunds/{id}/payment` e os demais fluxos aceitam esse limite
+conscientemente.
+
 ## Consequências
 
 - A solução é simples e não requer infraestrutura adicional de armazenamento.
@@ -100,6 +137,11 @@ falha do mesmo jeito silencioso num clone limpo sem o `.gitkeep`.
 - Ambientes com múltiplas instâncias não compartilham os arquivos entre si.
 - Não há armazenamento distribuído, replicação ou durabilidade externa para os
   arquivos.
+- Um arquivo órfão deixa de ser criado por falha de banco, mas continua
+  possível por queda abrupta do processo; a limpeza desse resto continua manual.
+- Uma falha ao remover arquivo deixa de derrubar a resposta e passa a produzir
+  um `WARNING` com o nome do arquivo — rastro que antes não existia, e cuja
+  ausência fez sete órfãos serem descobertos só ao listar o diretório.
 - O acesso autenticado troca a URL pública cacheável pelo navegador por uma
   requisição com JWT por arquivo exibido; uma tela com N comprovantes ou
   avatares distintos faz N requisições autenticadas, não N downloads diretos.

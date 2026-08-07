@@ -8,6 +8,7 @@ from src.controllers.interfaces.avatar_remover_controller_interface import (
     AvatarRemoverControllerInterface,
 )
 from src.errors.types.http_not_found_error import HttpNotFoundError
+from src.controllers.file_cleanup import delete_quietly
 
 
 class AvatarRemoverController(AvatarRemoverControllerInterface):
@@ -30,8 +31,13 @@ class AvatarRemoverController(AvatarRemoverControllerInterface):
         current_filename = user.get("avatar_filename")
         await self.__users_repository.update_avatar(user_id, None)
 
+        # Quietly: the column is already cleared and committed. A failure to
+        # remove the file must not turn a successful removal into a 500 — the
+        # user's avatar IS gone as far as the product is concerned.
         if current_filename:
-            self.__avatar_storage.delete(current_filename)
+            delete_quietly(
+                self.__avatar_storage, current_filename, "avatar, column cleared"
+            )
 
         return {
             "type": "User",

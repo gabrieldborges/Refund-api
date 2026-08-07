@@ -1,4 +1,5 @@
 # pylint: disable=w0621
+import logging
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 from src.errors.types.http_not_found_error import HttpNotFoundError
@@ -121,3 +122,34 @@ async def test_delete_loses_the_race_with_a_concurrent_review(mock_repository, m
         await controller.delete(refund_id=1, user_id=7, role="standard")
 
     mock_storage.delete.assert_not_called()
+
+
+# Item 21 — the DELETE is already committed by the time the file is removed.
+# Letting an os.remove failure escape would answer 500 for a deletion that
+# SUCCEEDED: the user retries and gets a 404, having been told it failed.
+@pytest.mark.asyncio
+async def test_delete_succeeds_even_when_removing_the_file_fails(
+    mock_repository, mock_storage
+):
+    mock_storage.delete = MagicMock(side_effect=OSError("permission denied"))
+    controller = RefundDeleterController(mock_repository, mock_storage)
+
+    response = await controller.delete(refund_id=1, user_id=7, role="standard")
+
+    assert response["attributes"]["deleted"] is True
+
+
+# The orphan must leave a trace. Finding leftover files by listing the directory
+# is how this project discovered seven of them; a warning is what makes the next
+# one findable without that.
+@pytest.mark.asyncio
+async def test_a_failed_file_removal_is_logged_with_the_filename(
+    mock_repository, mock_storage, caplog
+):
+    mock_storage.delete = MagicMock(side_effect=OSError("permission denied"))
+    controller = RefundDeleterController(mock_repository, mock_storage)
+
+    with caplog.at_level(logging.WARNING):
+        await controller.delete(refund_id=1, user_id=7, role="standard")
+
+    assert "abc.jpg" in caplog.text

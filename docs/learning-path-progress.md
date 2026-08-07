@@ -4679,3 +4679,127 @@ Os 15,5s são a guarda do `wait_for` funcionando: falhou, não travou.
   desatualizada, e metade do trabalho já existia.
 - Um teste de concorrência bem desenhado não tem corrida, e um teste que pode
   travar precisa de uma guarda de tempo.
+
+## Item 21 — Consistência entre banco e arquivo (2026-08-07)
+
+**Status:** concluído em 2026-08-07, na branch `feat/file-consistency` do
+`Refund-api`. Terceiro item da Fase 4 nesta sessão.
+
+### O conceito
+
+Uma transação SQL cobre o banco. Ela **não** cobre o disco, o S3, o envio de
+e-mail. Quando uma operação toca os dois, "ou tudo ou nada" deixa de ser
+automático e vira código que alguém escreve. O padrão é a **ação
+compensatória**: se o segundo passo falha, desfaça o primeiro.
+
+### O levantamento mudou o tamanho do item
+
+A trilha fala de dois lugares (criação e exclusão de reembolso). São **cinco**:
+
+| Call site | Ordem | Antes |
+|---|---|---|
+| `RefundCreatorController.create` | `save()` → `insert` | nenhuma compensação |
+| `AvatarUploaderController.upload` | `save()` → `update` | nenhuma compensação |
+| `RefundDeleterController.delete` | `DELETE` → `storage.delete()` | nenhuma |
+| `AvatarRemoverController.remove` | `update` → `storage.delete()` | nenhuma |
+| `RefundPayerController.pay` | `save()` → transação | **completa** |
+
+**A ordem já estava certa nos cinco** — isso não foi tocado. O criador salva
+antes de inserir porque a linha precisa do `filename`; o deletador apaga o
+arquivo depois porque apagar antes destruiria o comprovante de um reembolso que
+sobreviveu a uma corrida perdida. Tudo comentado no código e deliberado.
+
+O que faltava era o tratamento da falha. E o pagamento **já tinha a solução
+pronta**, escrita e revisada — o item virou "aplicar aos quatro que ficaram
+para trás", não "inventar".
+
+### Duas falhas, não uma
+
+**A — arquivo órfão** (criação, upload de avatar). Insert falha, arquivo fica.
+Não é hipotético: sete órfãos já foram achados e removidos à mão neste projeto.
+
+**B — 500 numa operação que deu certo** (exclusão de reembolso e de avatar).
+Esta ninguém tinha nomeado:
+
+```python
+deleted_count = await repository.delete_refund(refund_id)   # ✅ commitado
+...
+self.__receipt_storage.delete(refund["filename"])           # ❌ os.remove levanta
+```
+
+A linha já foi apagada, mas a exceção sobe e a view devolve **500**. O usuário
+tenta de novo e recebe **404**. A operação funcionou; a resposta mentiu.
+
+### A regra, e por que ela é assimétrica
+
+```
+ANTES do commit  →  desfaça   (o arquivo não tem dono)
+DEPOIS do commit →  registre  (o dado durável manda; o arquivo é secundário)
+```
+
+Derrubar uma resposta correta por causa de um arquivo sobrando troca um problema
+pequeno por um grande.
+
+### A fronteira que quase passou despercebida
+
+O `insert_refund` **dá commit**. Então a compensação da criação cobre **apenas o
+insert** — se a releitura seguinte falhar, o arquivo **não** pode ser apagado,
+porque já existe uma linha real apontando para ele. Estender o `try` uma linha a
+mais transformaria a correção num bug pior que o original.
+
+É a mesma fronteira que o `RefundPayerController` já marcava com sua flag
+`committed`. Há um teste dedicado a ela, e ele **falha** quando o `try` é
+esticado — verificado.
+
+### A primeira linha de log do projeto
+
+`src/controllers/file_cleanup.py` centraliza a deleção best-effort. Ela engole a
+própria falha por dois motivos diferentes conforme o caso (não mascarar a
+exceção em voo; não quebrar uma resposta de sucesso) e emite um
+`logging.warning` com o nome do arquivo.
+
+`logging` é stdlib — nada instalado. O Item 24 depois troca a **configuração**
+(formatter JSON, `request_id`) e estas chamadas passam a sair estruturadas; elas
+provavelmente serão **refinadas** para mover o filename da frase para um campo
+próprio, mas não precisam esperar por isso para deixar rastro.
+
+Centralizar também evitou três cópias do mesmo `try/except/pass` — e `R0801`
+(duplicate-code) já reprovou este projeto uma vez.
+
+### Quatro quebras deliberadas
+
+Passar não é prova:
+
+| Quebra | Resultado |
+|---|---|
+| Remover a compensação da criação (unit) | 1 failed |
+| `delete_quietly` voltar a propagar | **6 failed** em 4 arquivos |
+| Esticar o `try` para depois do commit | 2 failed, inclusive o teste da fronteira |
+| Remover a compensação (integração) | 1 failed, **mostrando o órfão pelo nome** |
+
+A última é a mais convincente. A saída da falha traz
+`assert ['ce2180ea-0b...9fd29b16.png'] == []` — o bug reproduzido ponta a ponta,
+com PostgreSQL recusando a FK e um arquivo real sobrando no disco.
+
+Essa evidência **não era possível antes do Item 19**. "Não sobrou arquivo" só
+era verificável listando o diretório à mão.
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` (3 rodadas) | **258 passed, 23 deselected** (partiu de 249) |
+| `pytest -m integration` (3 rodadas) | **23 passed** (partiu de 19) |
+| `pylint src; echo $?` | 10.00/10, **exit 0** |
+| 4 quebras deliberadas | todas pegas pelos testes certos |
+
+### O que lembrar
+
+- **Transação não cobre efeito externo.** Se a operação toca dois sistemas,
+  a compensação é código, não configuração.
+- **A compensação termina no commit, não no fim do método.** Passar disso
+  destrói dado real.
+- **Antes do commit desfaça; depois do commit registre.** Um arquivo sobrando é
+  menos grave que uma resposta errada.
+- Um `SIGKILL` entre o `save()` e o commit continua descoberto — isso exige
+  varredura ou fila (Item 28), não compensação em processo.

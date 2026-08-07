@@ -5,6 +5,7 @@ from src.controllers.interfaces.refund_deleter_controller_interface import (
 )
 from src.errors.types.http_not_found_error import HttpNotFoundError
 from src.errors.types.http_unprocessable_entity_error import HttpUnprocessableEntityError
+from src.controllers.file_cleanup import delete_quietly
 
 
 class RefundDeleterController(RefundDeleterControllerInterface):
@@ -43,7 +44,15 @@ class RefundDeleterController(RefundDeleterControllerInterface):
         # Only remove the receipt file once we know the row was actually deleted —
         # deleting it after losing the race would destroy the receipt of a refund
         # that a reviewer just decided on and that still exists.
-        self.__receipt_storage.delete(refund["filename"])
+        #
+        # Quietly, because the DELETE above is already committed. Letting an
+        # os.remove failure escape here would answer 500 for a deletion that
+        # SUCCEEDED: the user retries and gets a 404, having been told the
+        # operation failed when it did not. A leftover file is the smaller
+        # problem, and the log line is what keeps it findable.
+        delete_quietly(
+            self.__receipt_storage, refund["filename"], "refund receipt, row deleted"
+        )
 
         return self.__format_response(refund_id)
 

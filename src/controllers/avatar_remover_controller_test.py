@@ -72,3 +72,18 @@ async def test_remove_updates_before_deleting_the_file(mock_repository, mock_sto
 
     call_order = [call[0] for call in manager.mock_calls]
     assert call_order == ["update_avatar", "delete"]
+
+
+# Item 21 — the column is cleared and committed before the file is removed. As
+# far as the product is concerned the avatar is already gone, so a failure to
+# delete the file must not answer 500 to a removal that worked.
+@pytest.mark.asyncio
+async def test_remove_succeeds_even_when_deleting_the_file_fails(
+    mock_repository, mock_storage
+):
+    mock_storage.delete = MagicMock(side_effect=OSError("permission denied"))
+    controller = AvatarRemoverController(mock_repository, mock_storage)
+
+    response = await controller.remove(user_id=7)
+
+    assert response["attributes"]["avatar_filename"] is None
