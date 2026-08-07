@@ -1165,8 +1165,10 @@ completo e obrigatório está em
   - **Não validado em navegador** — o item não toca nenhuma tela.
 
 - **Fase 4, Item 21 — Consistência entre banco e arquivo: CONCLUÍDO.**
-  Na branch `feat/file-consistency` do `Refund-api`, partindo de `f3e617e`.
-  **Não mesclada** — aguarda autorização. Detalhes no
+  Na branch `feat/file-consistency` do `Refund-api` (`f3e617e..f7940e0`, 1
+  commit). **Mesclada na `main` por fast-forward e empurrada em 2026-08-07**,
+  com verificação repetida depois do merge (258 + 23 testes, `pylint src` exit
+  0). Detalhes no
   [diário](../learning-path-progress.md); a
   [ADR-003](../decisions/ADR-003-local-receipt-storage.md) foi amendada.
   - **São cinco call sites, não dois.** A trilha cita criação e exclusão de
