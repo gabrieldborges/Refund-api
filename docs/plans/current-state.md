@@ -1215,9 +1215,16 @@ completo e obrigatório está em
 
 - **Fase 4, Item 22 — Object storage e URLs assinadas: CONCLUÍDO.**
   O maior item da sessão, e o primeiro desde o Item 16 a produzir artefato nos
-  **dois** repositórios: `feat/object-storage` no `Refund-api` (partindo de
-  `193299a`) e `feat/signed-file-urls` no `Refund-FrontEnd`. **Nenhuma das duas
-  mesclada** — aguarda autorização. Detalhes no
+  **dois** repositórios: `feat/object-storage` no `Refund-api`
+  (`193299a..6130594`) e `feat/signed-file-urls` no `Refund-FrontEnd`
+  (`dc1f30a..5928f4c`). **As duas mescladas por fast-forward e empurradas em
+  2026-08-07**, com verificação repetida depois de cada merge.
+
+  **MESCLADO SEM VALIDAÇÃO EM NAVEGADOR, por decisão explícita do Gabriel** —
+  ele optou por validar depois. O checklist de 7 pontos segue aberto nas
+  pendências e continua sendo a próxima coisa a fazer; as duas `main` já
+  carregam o contrato novo, então validar deixou de ser "antes de mesclar" e
+  virou "antes de confiar". Detalhes no
   [diário](../learning-path-progress.md); a
   [ADR-003](../decisions/ADR-003-local-receipt-storage.md) foi amendada de novo
   e `UC-010`/`UC-011`/`UC-012` também.
@@ -1616,8 +1623,10 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   Candidato a um `GET /refunds/stats` global, por status, no backlog do
   backend.
 - **ITEM 22 NÃO FOI VALIDADO EM NAVEGADOR, e é onde isso mais pesa.** As duas
-  branches (`feat/object-storage` e `feat/signed-file-urls`) estão paradas
-  aguardando isso. O ponto inteiro do item é uma URL assinada carregar numa tag
+  branches **já foram mescladas e empurradas** (decisão do Gabriel: validar
+  depois), então isto não bloqueia mais um merge — bloqueia a confiança de que
+  a tela funciona. **As duas `main` mudaram de contrato juntas**, o que é
+  coerente por construção e sem risco porque não existe produção. O ponto inteiro do item é uma URL assinada carregar numa tag
   `<img>` **sem cabeçalho de autenticação** — e a suíte do frontend roda contra
   MSW, ou seja, contra o payload que nós mesmos escrevemos. Checklist mínimo,
   com o backend e o frontend rodando das duas branches:
