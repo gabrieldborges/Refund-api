@@ -1045,8 +1045,10 @@ completo e obrigatório está em
     (Settings → Branches), não do YAML.
 
 - **Fase 4, Item 17 — Configuração tipada com pydantic-settings: CONCLUÍDO.**
-  Primeiro item da **Fase 4**, na branch `feat/typed-settings` do `Refund-api`,
-  partindo de `71e5363`. **Não mesclada** — aguarda autorização. Detalhes no
+  Primeiro item da **Fase 4**, na branch `feat/typed-settings` do `Refund-api`
+  (`71e5363..c10a2db`, 2 commits). **Mesclada na `main` por fast-forward e
+  empurrada em 2026-08-07**, com verificação repetida depois do merge (249
+  testes em três rodadas, `pylint src` exit 0). Detalhes no
   [diário](../learning-path-progress.md) e na
   [ADR-004](../decisions/ADR-004-typed-settings.md). O que mudou:
   - **`src/configs/settings.py`** (novo) com `Settings(BaseSettings)`.
