@@ -40,3 +40,4 @@ frontend e pela API.
 - [ADR-002 — Utilizar PostgreSQL no Neon](decisions/ADR-002-postgresql-neon.md)
 - [ADR-003 — Armazenar comprovantes no disco local](decisions/ADR-003-local-receipt-storage.md)
 - [ADR-004 — Configuração tipada e validada no startup](decisions/ADR-004-typed-settings.md)
+- [ADR-005 — Erros padronizados com Problem Details (RFC 9457)](decisions/ADR-005-problem-details.md)

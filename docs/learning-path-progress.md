@@ -4939,3 +4939,84 @@ configuração de painel, não código, e o startup não tem como verificar.
   faltando só apareceu ao migrar a tela.
 - URL assinada troca "reconferido sempre" por "válido por N segundos". O
   prazo é a decisão inteira.
+
+## Item 23 — Erros padronizados com Problem Details (2026-08-08)
+
+**Status:** concluído em 2026-08-08, em dois repositórios:
+`feat/problem-details` no `Refund-api` e no `Refund-FrontEnd`.
+
+### A limitação
+
+Duas formas para a mesma coisa — `detail` string nos nossos erros, `detail`
+lista na validação do FastAPI — e no frontend uma função existindo só para
+distinguir as duas, consumida por 7 telas.
+
+A pior consequência não era a duplicação, e sim: **mensagem é texto de UI, e
+texto de UI não pode ser chave de lógica.** Para tratar "já foi pago por outro
+admin" diferente de "só um aprovado pode ser pago" — ambos 422 — a UI teria que
+comparar strings. O projeto acabou de traduzir a interface inteira no Item 14.
+
+### A decisão que fez o item ser barato
+
+**Três handlers globais, zero dos 38 raise sites tocados.** O formato passou a
+ser decidido num lugar; quem levanta continua levantando o mesmo. Se algum
+`raise` tivesse precisado mudar, seria sinal de que o desenho estava errado.
+
+E a compatibilidade saiu de graça, por uma propriedade da própria RFC:
+**`detail` é string nela também**. Então o ramo `typeof detail === "string"` do
+frontend continuou funcionando durante toda a migração — inclusive para os
+erros de validação, que antes caíam no ramo da lista. **A migração não teve
+momento quebrado.**
+
+### Três coisas aprendidas
+
+**1. `@app.exception_handler(HTTPException)` não pega o 404 do router.** A
+`HTTPException` do FastAPI é subclasse da do Starlette. Registrar na subclasse
+cobre só o que o nosso código levanta; o router levanta a **base** para rota
+desconhecida, e esses 404 escapavam com o formato antigo.
+
+Descoberto **perguntando à API rodando** por `/nao-existe`, não lendo código. E
+o mais importante: **reintroduzir esse bug não faz nenhum teste falhar** — os
+testes chamam os handlers direto, então provam o mapeamento exceção→envelope,
+não o registro. Está registrado como limitação no próprio arquivo de teste e
+nas pendências.
+
+**2. O `request_id` estava no corpo do 500 e não no header.** Verificado, não
+suposto: numa exceção não tratada, ela sobe **passando pelo
+`RequestIdMiddleware`** antes de a camada mais externa do Starlette invocar o
+handler — então `call_next` nunca retorna e o header nunca é acrescentado. O
+corpo tinha o id porque o middleware grava em `request.state` **antes** de
+chamar adiante.
+
+Justo na resposta em que alguém mais quereria copiar o id. A correção não foi
+mexer na ordem dos middlewares: foi o **próprio envelope** marcar a resposta,
+o que torna o comportamento independente de ordenação.
+
+**3. Código morto com comentário é pior que código morto.** O ramo da lista no
+`getApiErrorMessage` foi removido, e o comentário novo diz que ele foi removido
+**por estar morto**, não por ter deixado de ser necessário — mantê-lo sugeriria
+que a API ainda pode responder daquele jeito.
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` | **295 passed, 32 deselected** (partiu de 277) |
+| `pylint src; echo $?` | 10.00/10, **exit 0** |
+| `npx vitest run` (3 rodadas) | **289 passed** (partiu de 283) |
+| `tsc` / `lint` / `build` | 0 / 0-0 / ok (607,81 kB) |
+| API real: 4 caminhos | 400 de negócio, 422 de validação, 404 de rota inexistente, **500 real** — todos com envelope e `X-Request-Id` |
+| Quebra: `detail` volta a ser lista | 1 failed |
+| Quebra: 500 vaza a mensagem original | 1 failed |
+| Quebra: handler na subclasse do FastAPI | **0 failed — a suíte NÃO pega** |
+
+A terceira linha de quebra é a mais honesta da tabela: ela documenta o que a
+suíte **não** cobre.
+
+### O que lembrar
+
+- Registrar handler na **classe base** da exceção, não na subclasse.
+- **Verifique contra o processo rodando** o que depende de ordem de middleware
+  ou de registro — ler o código não mostra nem uma coisa nem outra.
+- Uma migração de contrato sem momento quebrado vale muito, e às vezes ela sai
+  de graça se o formato novo for escolhido com o antigo em mente.

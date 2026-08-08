@@ -1273,6 +1273,35 @@ completo e obrigatório está em
     presigned URL com **urllib** (que não sabe nada de AWS), confirmam que sem
     assinatura o objeto é recusado, e confirmam que ela **expira**.
 
+- **Fase 4, Item 23 — Erros padronizados com Problem Details: CONCLUÍDO.**
+  Em dois repositórios, ambos na branch `feat/problem-details`. **Nenhuma
+  mesclada** — aguarda autorização. Detalhes no
+  [diário](../learning-path-progress.md) e na
+  [ADR-005](../decisions/ADR-005-problem-details.md).
+  - **Três handlers globais, ZERO dos 38 raise sites tocados.** O formato de
+    erro passou a ser decidido num lugar; `error_handler` e os controllers
+    continuam levantando o mesmo de antes.
+  - **`detail` continua sempre string** — é string na RFC também, e é isso que
+    fez a migração **não ter momento quebrado**: os 7 call sites do frontend
+    seguiram funcionando antes mesmo da mudança do lado deles, inclusive para
+    os erros de validação que antes chegavam como lista.
+  - **`type` fica em `about:blank`** (o valor que a RFC usa para "sem código
+    mais específico que o status"). Códigos por erro entram quando houver
+    consumidor — mesma regra de "extrair no segundo uso" do Item 11.
+  - **`request_id`** no corpo e no header `X-Request-Id`, sempre **gerado pela
+    API**, nunca lido de header do cliente (log forging). O **Item 24** reusa
+    esse id nos logs.
+  - **Bug achado contra a API rodando:** `@app.exception_handler(HTTPException)`
+    com a classe do FastAPI **não pega o 404 do router**, que levanta a do
+    Starlette. Registrado na base, que cobre as duas.
+  - **Bug achado por medição:** no 500 o `request_id` estava no corpo e **não
+    no header** — a exceção sobe passando pelo middleware antes de o handler
+    rodar. Corrigido fazendo o próprio envelope marcar a resposta, o que
+    independe de ordenação de middleware.
+  - Verificação: `pytest` **295 passed** (partiu de 277), `pylint` exit 0;
+    frontend **289 passed** (3 rodadas, partiu de 283), `tsc` 0, lint 0/0,
+    build ok. Os quatro caminhos de erro conferidos **contra a API rodando**.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1325,7 +1354,17 @@ completo e obrigatório está em
   verificada. Quem retomar a trilha deve continuar acumulando aqui e planejar
   um ciclo próprio de varredura quando o `learning_path.md` acabar.
 
-- **Próximo — VALIDAR EM NAVEGADOR o Item 22 antes de qualquer outra coisa.**
+- **Próximo — o Item 24** (logs estruturados, request ID, métricas), que já tem
+  meio caminho andado: o `request_id` do Item 23 existe e é para ser **reusado**
+  nos logs, não recriado. O `logging` da stdlib entrou no Item 21.
+
+  **Validação em navegador acumulada: Itens 22 e 23.** Nenhum dos dois foi
+  visto num navegador. O 22 é o mais crítico (o ponto dele é uma URL carregar
+  numa `<img>`); o 23 é mais barato de conferir — basta uma ação que falhe e
+  ver a mensagem aparecer como antes, já que o contrato foi desenhado para não
+  quebrar.
+
+- **VALIDAR EM NAVEGADOR o Item 22.**
   As duas branches estão paradas e é o item em que essa lacuna mais pesa: o
   ponto inteiro é uma URL carregar numa tag `<img>` sem header, e a suíte roda
   contra MSW. Ver pendências para o checklist.
@@ -2173,6 +2212,16 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   não estiver ligado, o portão avisa mas não tranca — e a classe de problema
   que motivou o item (`2d07a8d` quebrando a `main` sem ninguém ver) fica
   detectável, não impedida.
+- **Erro de REGISTRO de exception handler é invisível para a suíte.** Os testes
+  do Item 23 chamam os handlers diretamente, então provam o mapeamento
+  exceção→envelope e **não** que cada um está ligado à exceção certa.
+  Reintroduzir o bug real que foi encontrado — registrar na `HTTPException` do
+  FastAPI em vez da do Starlette, deixando o 404 do router escapar com o
+  formato antigo — **não faz nenhum teste falhar**; foi preciso perguntar à API
+  rodando. Pegar isso exigiria o `TestClient` do FastAPI e portanto **`httpx`
+  como dependência**, que o projeto já dispensou duas vezes (aqui e no
+  `file_routes_test.py`). Se um dia a conta virar, é uma dependência só de
+  teste e destravaria testes de rota de verdade nos dois lugares.
 - **O `boto3` é exigido para subir a aplicação mesmo com
   `STORAGE_BACKEND=local`.** `src/drivers/storage_factory.py` importa
   `S3FileStorage` no topo do módulo, e **todo composer importa essa fábrica** —
