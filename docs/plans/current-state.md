@@ -1316,6 +1316,15 @@ completo e obrigatório está em
   escrita depois. Ver a limitação registrada no item e o checklist nas
   pendências.
 
+- **DECIDIDO em 2026-08-08: as pendências serão varridas ao FIM da trilha, não
+  ao longo dela.** Uma pendência encontrada no meio de um item é para ser
+  **registrada aqui**, não corrigida na hora — mesmo quando a correção é de
+  duas linhas. O motivo é o que esta seção já demonstra várias vezes: uma
+  correção enxertada num item em curso mistura dois assuntos, e a deste
+  documento com pior histórico foi justamente uma feita sob hipótese não
+  verificada. Quem retomar a trilha deve continuar acumulando aqui e planejar
+  um ciclo próprio de varredura quando o `learning_path.md` acabar.
+
 - **Próximo — VALIDAR EM NAVEGADOR o Item 22 antes de qualquer outra coisa.**
   As duas branches estão paradas e é o item em que essa lacuna mais pesa: o
   ponto inteiro é uma URL carregar numa tag `<img>` sem header, e a suíte roda
@@ -2164,6 +2173,28 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   não estiver ligado, o portão avisa mas não tranca — e a classe de problema
   que motivou o item (`2d07a8d` quebrando a `main` sem ninguém ver) fica
   detectável, não impedida.
+- **O `boto3` é exigido para subir a aplicação mesmo com
+  `STORAGE_BACKEND=local`.** `src/drivers/storage_factory.py` importa
+  `S3FileStorage` no topo do módulo, e **todo composer importa essa fábrica** —
+  então uma dependência de um caminho que nunca é executado passou a ser
+  requisito de startup. Numa máquina com o venv correto isso não morde; morde
+  em qualquer ambiente que instale só o necessário.
+
+  **A correção é de duas linhas** (mover o import para dentro do ramo `s3`,
+  com `# pylint: disable=import-outside-toplevel`). Foi escrita e verificada em
+  2026-08-08 — a app sobe com o `boto3` bloqueado e o modo `s3` continua
+  exigindo-o — e depois **revertida**, porque tinha sido feita sob a hipótese
+  errada de que era a causa de um problema do Gabriel (era o venv desativado).
+
+  **Armadilha para quem for escrever o teste dessa correção**, aprendida ao
+  errar: um teste que bloqueia `__import__("boto3")` **passa isolado e falha na
+  suíte completa**. O pytest **importa** `src/test_integration/s3_storage_test.py`
+  durante a COLETA, antes de desselecioná-lo pelo marker, então `boto3` já está
+  em `sys.modules` e bloquear o import não faz efeito. Pior: o bug real
+  acontece no import da aplicação, que já ocorreu antes de qualquer teste
+  rodar. A única forma honesta é um **subprocesso** que instale o bloqueio e só
+  então importe a app.
+
 - **O boto3 já passou da data em que anunciou o fim do suporte a Python 3.9.**
   A versão instalada (1.42.97) emite `PythonDeprecationWarning` dizendo
   "no longer support Python 3.9 starting April 29, 2026" — data já passada em
