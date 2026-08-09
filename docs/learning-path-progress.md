@@ -5518,3 +5518,98 @@ com as duas, assinar só com a nova) é o que permitiria.
   não por quem é atacado.
 - Validar tamanho **depois** de ler é validar tarde.
 - Procedimento que não está escrito não existe.
+
+## Item 28 — Tarefas assíncronas com fila (2026-08-09) — FECHA A FASE 4
+
+**Status:** concluído em 2026-08-09, na branch `feat/orphan-sweep` do
+`Refund-api`. **Cumprido pela metade, explicitamente**, e a metade que ficou de
+fora foi decisão. Decisões na
+[ADR-010](../decisions/ADR-010-orphan-sweep.md).
+
+### O item se autolimita, e isso muda a primeira pergunta
+
+*"Não adicionar worker para CRUD simples."*
+
+Então a pergunta não é "como monto uma fila", é **"este projeto tem trabalho que
+justifique uma?"**. Procurei os candidatos que o próprio item nomeia:
+
+| Candidato | Existe |
+|---|---|
+| e-mail | não |
+| relatório / export | não |
+| processamento de imagem | não |
+| processamento de comprovante | não — o arquivo é gravado como veio |
+
+**Nada aqui precisa ser desacoplado de uma resposta HTTP.** Montar Redis e um
+worker seria exatamente o erro que o texto adverte — e o mesmo raciocínio que
+manteve o Redis fora do Item 27, dois itens atrás.
+
+### Mas o documento já apontava para cá, duas vezes
+
+O `current-state.md` cita o Item 28 em dois lugares, com a mesma frase: *"exige
+varredura posterior **ou** fila (Item 28)"*.
+
+**Fila desacopla trabalho de uma requisição. Este trabalho não pertence a
+requisição nenhuma** — é comparar periodicamente o que está no disco com o que
+está no banco. São categorias diferentes, e chamar a segunda de fila só para
+cumprir o título seria montar infraestrutura por obediência.
+
+### A idade mínima é o argumento inteiro
+
+Não é "liste o diretório e apague o que não está no banco". Um arquivo gravado
+há dois segundos, cuja transação ainda não commitou, **parece exatamente um
+órfão** — e apagá-lo destruiria um comprovante em voo, que é pior que o
+vazamento que a varredura existe para limpar.
+
+Uma hora é muito mais que qualquer requisição daqui leva, então o que passa
+disso ou já tem sua linha, ou nunca vai ter.
+
+**Isso, mais o dry-run por padrão, é o que separa um utilitário de limpeza de
+uma ferramenta que um dia apaga a coisa errada.**
+
+### As três propriedades que o item exige, cada uma com teste
+
+| Propriedade | Teste |
+|---|---|
+| idempotente | rodar duas vezes não remove nada na segunda |
+| observável | cada decisão logada com o nome do arquivo (Item 24) |
+| seguro | idade mínima **e** dry-run, provados por quebra deliberada |
+
+### A interface ganhou `list_files()`
+
+É a única operação que precisa olhar o armazenamento **de fora** — todo outro
+chamador já sabe o nome que quer, porque uma linha do banco disse.
+
+Detalhe que valeria um bug silencioso: a implementação de S3 **pagina**. O
+`list_objects_v2` corta em 1000 chaves e responde truncado sem avisar, então
+uma varredura que lesse só a primeira página reportaria o resto do bucket como
+"não órfão" **por nunca ter olhado**.
+
+### Rodou de verdade e achou
+
+Contra o banco Neon e o disco real, em dry-run: **3 órfãos, um em cada
+storage**. Não foram removidos — apagar arquivo é decisão de quem opera, não do
+item.
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` | **331 passed** |
+| `pytest -m integration` | **68 passed** (partiu de 60) |
+| `pylint src; echo $?` | 10.00/10, **exit 0** |
+| Quebra: sem idade mínima | 2 failed |
+| Quebra: dry-run apagando | 1 failed |
+| Quebra: ignorar o que o banco referencia | 1 failed |
+| Varredura real | 3 órfãos encontrados, 0 removidos |
+
+### O que lembrar
+
+- **Antes de montar a ferramenta, pergunte se o problema existe.** Metade
+  deste item era descobrir que não existia.
+- Fila e varredura resolvem coisas diferentes. "Trabalho de fundo" não é uma
+  categoria só.
+- Um job que apaga dado precisa de **dry-run por padrão** e de uma **janela de
+  segurança**, e as duas coisas por motivos distintos.
+- Listagem paginada: ler só a primeira página é pior que não listar, porque
+  produz uma resposta confiante e errada.

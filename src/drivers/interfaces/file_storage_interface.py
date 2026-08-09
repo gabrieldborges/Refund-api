@@ -1,4 +1,19 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import List, NamedTuple
+
+
+class StoredFile(NamedTuple):
+    """What a listing needs to know about a file, and nothing more.
+
+    `modified_at` is here because the orphan sweep (Item 28) cannot decide
+    anything without it: a file written two seconds ago whose transaction has
+    not committed yet looks exactly like an orphan, and deleting it would
+    destroy a valid receipt mid-flight.
+    """
+
+    name: str
+    modified_at: datetime
 
 
 class FileStorageInterface(ABC):
@@ -28,4 +43,13 @@ class FileStorageInterface(ABC):
         route of this API. Either way the permission lives in the link and it
         expires — the caller has already checked authorization by the time it
         asks for one.
+        """
+
+    @abstractmethod
+    def list_files(self) -> List[StoredFile]:
+        """Everything currently stored, with when it was last written.
+
+        Added for the orphan sweep. Reconciliation is the one operation that
+        has to look at storage from the outside — every other caller already
+        knows the filename it wants, because a database row told it.
         """

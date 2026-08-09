@@ -45,3 +45,4 @@ frontend e pela API.
 - [ADR-007 — Testes de API por HTTP e contrato versionado](decisions/ADR-007-contract-testing.md)
 - [ADR-008 — Cobertura como diagnóstico, sem portão no CI](decisions/ADR-008-coverage.md)
 - [ADR-009 — Controles de abuso na borda](decisions/ADR-009-abuse-controls.md)
+- [ADR-010 — Varredura de órfãos, e por que não uma fila](decisions/ADR-010-orphan-sweep.md)

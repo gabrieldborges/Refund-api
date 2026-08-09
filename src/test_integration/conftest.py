@@ -120,7 +120,46 @@ async def clean_tables(engine):
 
 
 @pytest.fixture
-def api_client(migrated_database, clean_tables, tmp_path, monkeypatch):  # pylint: disable=unused-argument
+def app_uses_the_test_database(monkeypatch):
+    """Points the PROCESS-WIDE connection handler at the throwaway database.
+
+    The `engine` fixture builds its own engine, which is enough for anything
+    that receives a handler by argument. Anything reaching for the module-level
+    `database_connection_handler` — the app's composers, and the orphan sweep —
+    needs this instead.
+
+    It is one line only because Item 17 made the engine lazy. Built at import,
+    the connection would already exist before any fixture ran.
+    """
+    monkeypatch.setattr(settings, "database_url", TEST_DATABASE_URL)
+    get_engine.cache_clear()
+    get_session_factory.cache_clear()
+    yield
+    get_engine.cache_clear()
+    get_session_factory.cache_clear()
+
+
+@pytest.fixture
+def local_storage_dirs(tmp_path, monkeypatch):
+    """Sends uploads to a temp directory instead of the repository's uploads/.
+
+    A test that leaves files in the real folder is how the seven orphans of
+    2026-07 became hard to tell apart from real ones — and this is now doubly
+    true, since the sweep would then find and offer to delete them.
+    """
+    directories = {}
+    for name in ("receipts", "avatars", "payments"):
+        directory = tmp_path / name
+        directory.mkdir()
+        monkeypatch.setitem(LOCAL_DIRECTORIES, name, str(directory))
+        directories[name] = str(directory)
+    return directories
+
+
+@pytest.fixture
+def api_client(  # pylint: disable=unused-argument
+    migrated_database, clean_tables, app_uses_the_test_database, local_storage_dirs
+):
     """The real FastAPI app, over HTTP, against the throwaway database.
 
     Everything below the HTTP layer already had integration tests (Item 19);
@@ -133,27 +172,12 @@ def api_client(migrated_database, clean_tables, tmp_path, monkeypatch):  # pylin
     would already exist by the time any fixture ran and this would require
     process-wide environment variables instead.
     """
-    monkeypatch.setattr(settings, "database_url", TEST_DATABASE_URL)
-    get_engine.cache_clear()
-    get_session_factory.cache_clear()
-
-    # Uploads go to a temp directory, not the repository's uploads/. A test
-    # that leaves files in the real folder is how the seven orphans of 2026-07
-    # became hard to tell apart from real ones.
-    for name in ("receipts", "avatars", "payments"):
-        directory = tmp_path / name
-        directory.mkdir()
-        monkeypatch.setitem(LOCAL_DIRECTORIES, name, str(directory))
-
     # The limiter is process-wide by design, so without this one test's
     # attempts would count against the next one and order would matter.
     rate_limiter.reset()
 
     with TestClient(app) as client:
         yield client
-
-    get_engine.cache_clear()
-    get_session_factory.cache_clear()
 
 
 @pytest.fixture

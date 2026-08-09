@@ -1,9 +1,11 @@
 import os
 import uuid
+from datetime import datetime, timezone
+from typing import List
 from urllib.parse import quote
 from src.configs.settings import settings
 from src.drivers.jwt_handler import JwtHandler
-from .interfaces.file_storage_interface import FileStorageInterface
+from .interfaces.file_storage_interface import FileStorageInterface, StoredFile
 
 
 class FileStorage(FileStorageInterface):
@@ -62,3 +64,16 @@ class FileStorage(FileStorageInterface):
         )
         base = settings.public_base_url.rstrip("/")
         return f"{base}/files/{self.__name}/{quote(filename)}?token={token}"
+
+    def list_files(self) -> List[StoredFile]:
+        if not os.path.isdir(self.__directory):
+            return []
+
+        listing = []
+        for name in os.listdir(self.__directory):
+            path = os.path.join(self.__directory, name)
+            if not os.path.isfile(path):
+                continue
+            modified = datetime.fromtimestamp(os.path.getmtime(path), timezone.utc)
+            listing.append(StoredFile(name=name, modified_at=modified))
+        return listing

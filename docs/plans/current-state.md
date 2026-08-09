@@ -1512,6 +1512,35 @@ completo e obrigatório está em
     54), `pylint` exit 0, cobertura 98%, e **as três frentes provadas por
     quebra deliberada**.
 
+- **Fase 4, Item 28 — Tarefas assíncronas com fila: CONCLUÍDO. FECHA A FASE 4.**
+  Branch `feat/orphan-sweep` do `Refund-api`. **Não mesclada.** Detalhes no
+  [diário](../learning-path-progress.md) e na
+  [ADR-010](../decisions/ADR-010-orphan-sweep.md).
+  - **A FILA FOI DISPENSADA, com motivo.** O item diz "não adicionar worker
+    para CRUD simples", e o projeto não tem e-mail, relatório nem processamento
+    de arquivo — **nada precisa ser desacoplado de uma resposta HTTP**. Mesmo
+    raciocínio que manteve o Redis fora do Item 27; mesmo precedente do Oxlint
+    no Item 16 (item cumprido pela metade **explicitamente**).
+  - **O que foi construído é o que o documento já apontava duas vezes:** a
+    varredura de órfãos. Fila desacopla de uma requisição; esta varredura não
+    pertence a requisição nenhuma.
+  - **Fecha o resto do Item 21.** O `SIGKILL` entre `save()` e commit continua
+    criando órfãos — é inerente —, mas agora existe algo que os encontra.
+  - **Idade mínima de 1h e dry-run por padrão**, cada um por um motivo
+    diferente: um arquivo de dois segundos cuja transação não commitou é
+    indistinguível de um órfão, e um comando que apaga na primeira execução
+    acaba apagando o que não devia. **Ambos provados por quebra deliberada.**
+  - **`FileStorageInterface` ganhou `list_files()`** — a única operação que
+    olha o armazenamento de fora. A implementação de S3 **pagina**, porque
+    `list_objects_v2` trunca em 1000 chaves em silêncio.
+  - **RODOU DE VERDADE: 3 órfãos encontrados** (um por storage), **0 removidos**
+    — apagar arquivo é decisão de quem opera. Rodar
+    `python -m init.sweep_orphans --apply` os remove.
+  - **Não há agendamento** — é comando manual. Automatizar exige cron ou
+    agendador do provedor, e não há onde implantar (Itens 29/30).
+  - Verificação: `pytest` **331**, integração **68** (partiu de 60), `pylint`
+    exit 0, três quebras deliberadas.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1564,11 +1593,15 @@ completo e obrigatório está em
   verificada. Quem retomar a trilha deve continuar acumulando aqui e planejar
   um ciclo próprio de varredura quando o `learning_path.md` acabar.
 
-- **Próximo — o Item 28** (tarefas assíncronas com fila), que **fecha a Fase
-  4**. O texto dele já avisa para não adicionar worker para CRUD simples, então
-  a primeira pergunta é se este projeto tem trabalho que justifique fila.
+- **A FASE 4 ESTÁ FECHADA** (Itens 17 a 28). **Próximo é o Item 29 — CI/CD**,
+  que abre a **Fase 5** e é o primeiro dos dois bloqueios restantes do primeiro
+  deploy; o outro é o `Dockerfile` (Item 30). O CI já existe desde o Item 16 —
+  o que falta é o CD e o branch protection.
 
-  **Uma branch não mesclada:** `feat/rate-limiting` no `Refund-api`. — as quatro foram mescladas em
+  **Duas branches não mescladas:** `feat/rate-limiting` e `feat/orphan-sweep`,
+  ambas no `Refund-api` (a segunda empilhada sobre a primeira).
+
+  **3 órfãos reais aguardando decisão** — ver o Item 28. — as quatro foram mescladas em
   2026-08-09. **Validação em navegador dos Itens 25 e 26: não se aplica**,
   nenhum dos dois toca tela.
 

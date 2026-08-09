@@ -1,9 +1,10 @@
 import os
 import uuid
+from typing import List
 import boto3
 from botocore.exceptions import ClientError
 from src.configs.settings import settings
-from .interfaces.file_storage_interface import FileStorageInterface
+from .interfaces.file_storage_interface import FileStorageInterface, StoredFile
 
 
 class S3FileStorage(FileStorageInterface):
@@ -84,3 +85,19 @@ class S3FileStorage(FileStorageInterface):
             Params={"Bucket": self.__bucket, "Key": self.__key(filename)},
             ExpiresIn=settings.file_url_ttl_seconds,
         )
+
+    def list_files(self) -> List[StoredFile]:
+        # Paginated because list_objects_v2 caps at 1000 keys per call and
+        # answers silently truncated otherwise — a sweep that read only the
+        # first page would report the rest of the bucket as "not orphaned"
+        # simply by never looking at it.
+        paginator = self.__client().get_paginator("list_objects_v2")
+        prefix = f"{self.__prefix}/"
+
+        listing = []
+        for page in paginator.paginate(Bucket=self.__bucket, Prefix=prefix):
+            for stored in page.get("Contents", []):
+                name = stored["Key"][len(prefix):]
+                if name:
+                    listing.append(StoredFile(name=name, modified_at=stored["LastModified"]))
+        return listing

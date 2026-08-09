@@ -61,6 +61,31 @@ fictícios, então `pytest` funciona mesmo sem `.env` e nunca alcança o banco r
 A API sobe em `http://localhost:3333`.
 Documentação automática (Swagger) em `http://localhost:3333/docs`.
 
+## Varredura de arquivos órfãos
+
+Arquivo órfão é um arquivo em disco (ou no bucket) que **nenhuma linha do banco
+referencia**. Eles aparecem por dois caminhos que nenhuma compensação em
+processo alcança: um `SIGKILL` entre gravar o arquivo e commitar a linha, e uma
+exclusão de arquivo que falha **depois** do commit — nesse caso a resposta é de
+sucesso, corretamente, e o arquivo fica.
+
+```bash
+python -m init.sweep_orphans            # relata, não remove nada
+python -m init.sweep_orphans --apply    # remove o que relatou
+```
+
+**Relata por padrão, de propósito.** Isto apaga arquivo de usuário; um comando
+que remove na primeira vez que alguém o roda para ver o que ele faz acaba
+removendo algo que não devia.
+
+**Só considera órfão o que tem mais de uma hora.** Um arquivo gravado há dois
+segundos, cuja transação ainda não commitou, é indistinguível de um órfão — e
+apagá-lo destruiria um comprovante em pleno voo. Uma hora é muito mais que
+qualquer requisição daqui leva.
+
+Rodar duas vezes é seguro: a segunda não encontra nada, porque a primeira já
+removeu.
+
 ## Rotação de secrets
 
 Não há automação para isto — é procedimento, e está escrito porque um segredo
