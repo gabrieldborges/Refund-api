@@ -1274,8 +1274,9 @@ completo e obrigatório está em
     assinatura o objeto é recusado, e confirmam que ela **expira**.
 
 - **Fase 4, Item 23 — Erros padronizados com Problem Details: CONCLUÍDO.**
-  Em dois repositórios, ambos na branch `feat/problem-details`. **Nenhuma
-  mesclada** — aguarda autorização. Detalhes no
+  Em dois repositórios, ambos na branch `feat/problem-details`
+  (`fbe7ff6..a62ce26` na api, `5928f4c..8e02f72` no frontend). **As duas
+  mescladas por fast-forward e empurradas em 2026-08-09.** Detalhes no
   [diário](../learning-path-progress.md) e na
   [ADR-005](../decisions/ADR-005-problem-details.md).
   - **Três handlers globais, ZERO dos 38 raise sites tocados.** O formato de
@@ -1303,8 +1304,9 @@ completo e obrigatório está em
     build ok. Os quatro caminhos de erro conferidos **contra a API rodando**.
 
 - **Fase 4, Item 24 — Logs estruturados e request ID: CONCLUÍDO.**
-  Na branch `feat/structured-logs` do `Refund-api`, só backend. **Não
-  mesclada.** Detalhes no [diário](../learning-path-progress.md) e na
+  Na branch `feat/structured-logs` do `Refund-api` (`a62ce26..160e1cc`), só
+  backend, **empilhada sobre o Item 23** — um único fast-forward levou as duas.
+  **Mesclada e empurrada em 2026-08-09.** Detalhes no [diário](../learning-path-progress.md) e na
   [ADR-006](../decisions/ADR-006-structured-logging.md).
   - **Cumpre a promessa do Item 23:** o `request_id` do corpo do erro agora
     aparece nos logs. **Verificado contra a API rodando** — o `X-Request-Id` do
@@ -1382,9 +1384,12 @@ completo e obrigatório está em
 - **Próximo — o Item 25** (testes de integração e contrato), que o Item 19 já
   destravou ao criar a infraestrutura de banco descartável.
 
-  **BRANCHES NÃO MESCLADAS ACUMULANDO:** `feat/problem-details` (Item 23, nos
-  dois repos) e `feat/structured-logs` (Item 24, só api). **Validação em
-  navegador acumulada: Itens 22 e 23.** Nenhum dos dois foi
+  **Nenhuma branch de trabalho pendente** — as três foram mescladas em
+  2026-08-09, com verificação repetida depois de cada merge. **Validação em
+  navegador acumulada: Itens 22, 23 e 24.** O 22 continua sendo o crítico (o
+  ponto dele é uma URL carregar numa `<img>`); o 23 e o 24 são baratos de
+  conferir junto, numa ação que falhe: a mensagem deve aparecer como sempre, e
+  o log do servidor deve trazer o mesmo `request_id` que a resposta. Nenhum dos dois foi
   visto num navegador. O 22 é o mais crítico (o ponto dele é uma URL carregar
   numa `<img>`); o 23 é mais barato de conferir — basta uma ação que falhe e
   ver a mensagem aparecer como antes, já que o contrato foi desenhado para não
