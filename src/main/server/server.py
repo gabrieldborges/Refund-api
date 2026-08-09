@@ -1,7 +1,10 @@
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from src.configs.logging_config import configure_logging
 from src.configs.settings import settings
@@ -17,6 +20,7 @@ from src.main.routes.auth_routes import auth_routes
 from src.main.routes.refund_routes import refund_routes
 from src.main.routes.user_routes import user_routes
 from src.main.routes.file_routes import file_routes
+from src.models.settings.database_connection_handler import database_connection_handler
 
 
 @asynccontextmanager
@@ -31,6 +35,8 @@ async def lifespan(_app: FastAPI):
 # Before the app exists, so anything logged during startup already goes
 # through the configured handler instead of Python's lastResort.
 configure_logging()
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(lifespan=lifespan)
 
@@ -131,6 +137,29 @@ app.include_router(user_routes)
 app.include_router(file_routes)
 
 
+# LIVENESS: "is the process alive?" Answers without touching anything, on
+# purpose — if this fails, the process is wedged and restarting is the fix.
+# Checking the database here would make a database outage restart every
+# instance in a loop, turning a recoverable problem into an outage.
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+
+# READINESS: "can this instance actually serve?" A different question, and
+# until now nothing answered it — /health said ok with the database
+# unreachable, measured. An orchestrator reading that would keep routing users
+# to an instance that cannot answer a single request.
+@app.get("/ready")
+async def readiness_check():
+    try:
+        async with database_connection_handler.connect() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception:  # pylint: disable=broad-except
+        # 503, not 500: this is not an error in the request, it is this
+        # instance saying "do not send me traffic yet". The reason is
+        # deliberately not in the body — a readiness probe is public.
+        logger.warning("Readiness check failed", exc_info=True)
+        return JSONResponse(status_code=503, content={"status": "unavailable"})
+
+    return {"status": "ready"}

@@ -1,0 +1,29 @@
+# THE FIRST LINE MATTERS MOST: the .env carries the database URL, the JWT
+# signing key and the S3 credentials. A secret baked into an image leaks with
+# the image, to everyone who can pull it.
+.env
+.env.*
+!.env.example
+
+# The local virtualenv is for THIS machine — it even has shebangs pointing at
+# an old path (a recorded pendency). Copying it in would shadow the one the
+# build creates.
+.venv
+venv
+
+# Uploaded files belong in storage, not in the image.
+uploads/
+
+# Generated, and large.
+htmlcov/
+.coverage
+.pytest_cache/
+__pycache__/
+*.pyc
+
+.git
+.github
+docs/
+contract/
+*.md
+!README.md

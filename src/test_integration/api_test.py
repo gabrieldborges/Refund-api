@@ -467,3 +467,21 @@ def test_security_headers_are_present_on_every_response(api_client):
     # Keeps a signed file URL, which carries a token in its query, out of the
     # Referer header when a browser navigates away.
     assert response.headers["Referrer-Policy"] == "no-referrer"
+
+
+# READINESS is a different question from liveness: "can this instance serve?",
+# not "is the process alive?". Until Item 30 nothing answered it — /health said
+# ok with the database unreachable, measured — and an orchestrator reading that
+# keeps routing users to an instance that cannot answer anything.
+@pytest.mark.integration
+def test_readiness_reports_ready_when_the_database_answers(api_client):
+    response = api_client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
+@pytest.mark.integration
+def test_liveness_and_readiness_are_different_endpoints(api_client):
+    assert api_client.get("/health").json() == {"status": "ok"}
+    assert api_client.get("/ready").json() == {"status": "ready"}

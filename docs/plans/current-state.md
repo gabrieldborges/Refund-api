@@ -1556,6 +1556,36 @@ completo e obrigatório está em
   - Verificação: `pytest` **333** (partiu de 331), integração 68, `pylint`
     exit 0; frontend 305.
 
+- **Fase 5, Item 30 — Containers: CONCLUÍDO. FECHA O ÚLTIMO BLOQUEIO DO
+  PRIMEIRO DEPLOY.** Branch `feat/container` do `Refund-api`. **Não mesclada.**
+  Detalhes no [diário](../learning-path-progress.md) e na
+  [ADR-011](../decisions/ADR-011-container.md).
+  - **Só a API.** O frontend vira estático; conteinerizá-lo esbarra no
+    `VITE_API_URL` resolvido em **tempo de build**, que prenderia a imagem a um
+    ambiente.
+  - **`/ready` novo.** O `/health` respondia 200 **com o banco inalcançável** —
+    medido. Está certo para liveness e errado para readiness; faltava o
+    segundo. **O `HEALTHCHECK` do Docker aponta para `/health` de propósito:**
+    apontá-lo para o readiness faria uma queda de banco reiniciar todas as
+    instâncias em laço.
+  - **`requirements.txt` dividido, por medição:** 37,7 MB de 115,4 MB de
+    site-packages (um terço) eram pytest, pylint, coverage e httpx. Imagem
+    **396 → 366 MB**, e `import pytest` falha dentro dela.
+  - Multi-stage, usuário **não-root** (`refund`), `.env` barrado no
+    `.dockerignore`.
+  - **Verificado CONSTRUINDO E RODANDO:** `/ready` **503 com o banco parado** e
+    recuperando sozinho, container vivo o tempo todo, healthcheck `healthy`,
+    nenhum `.env` dentro.
+  - **Terceiro experimento inválido da sessão**, pego a tempo: com
+    `--network host` no macOS eu não falava com o container — havia outro
+    processo na 3333. O log de acesso denunciou.
+  - Verificação: `pytest` **334**, integração **70**, `pylint` exit 0.
+
+- **A imagem é construída sobre Python 3.9, sem correções de segurança.** O
+  `boto3` já avisa que encerrou o suporte. Construir imagem de produção sobre
+  isso é dívida real, e é o argumento mais concreto acumulado para subir de
+  versão — junta-se à pendência do boto3.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1608,14 +1638,14 @@ completo e obrigatório está em
   verificada. Quem retomar a trilha deve continuar acumulando aqui e planejar
   um ciclo próprio de varredura quando o `learning_path.md` acabar.
 
-- **Próximo — o Item 30** (containers e configuração por ambiente), que é o
-  **último bloqueio restante do primeiro deploy** e o penúltimo item da trilha.
-  Depois dele sobra só o **31** (performance orientada por medição), onde mora
-  o bundle de 608 kB.
+- **Próximo — o Item 31** (performance orientada por medição), **o ÚLTIMO da
+  trilha**. É onde mora o bundle de 608 kB com o aviso de chunk > 500 kB aberto
+  desde o restyle, e o item avisa para definir sintoma e orçamento antes de
+  otimizar.
 
-  **Três branches não mescladas no `Refund-api`** — `feat/rate-limiting`,
-  `feat/orphan-sweep` e `feat/ci-completeness`, empilhadas nessa ordem — e
-  **uma no `Refund-FrontEnd`** (`feat/ci-completeness`).
+  **Quatro branches não mescladas no `Refund-api`** — `feat/rate-limiting`,
+  `feat/orphan-sweep`, `feat/ci-completeness` e `feat/container`, empilhadas
+  nessa ordem — e **uma no `Refund-FrontEnd`** (`feat/ci-completeness`).
 
   **3 órfãos reais aguardando decisão** — ver o Item 28. — as quatro foram mescladas em
   2026-08-09. **Validação em navegador dos Itens 25 e 26: não se aplica**,

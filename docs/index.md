@@ -46,3 +46,4 @@ frontend e pela API.
 - [ADR-008 — Cobertura como diagnóstico, sem portão no CI](decisions/ADR-008-coverage.md)
 - [ADR-009 — Controles de abuso na borda](decisions/ADR-009-abuse-controls.md)
 - [ADR-010 — Varredura de órfãos, e por que não uma fila](decisions/ADR-010-orphan-sweep.md)
+- [ADR-011 — Empacotar a API em container](decisions/ADR-011-container.md)

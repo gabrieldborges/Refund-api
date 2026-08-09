@@ -5687,3 +5687,94 @@ segunda pessoa.
   HTML diz *o quê*.
 - **Um portão que muda o fluxo de trabalho é decisão de quem trabalha**, não
   configuração que se liga por completude.
+
+## Item 30 — Containers e configuração por ambiente (2026-08-09)
+
+**Status:** concluído em 2026-08-09, na branch `feat/container` do
+`Refund-api`. **Fecha o último bloqueio do primeiro deploy.** Decisões na
+[ADR-011](../decisions/ADR-011-container.md).
+
+### A apresentação foi refeita, pela segunda vez na trilha
+
+Igual ao Item 26: comecei pelo vocabulário — multi-stage, readiness,
+`VITE_API_URL` — e não entrou. Refiz começando pelo problema, e o problema
+tinha acontecido **com o Gabriel no dia anterior**: a aplicação não subiu
+porque o venv não estava ativado.
+
+Esse é o item inteiro em uma frase. Sete passos de README, cada um uma chance
+de a máquina de destino não ficar igual. O projeto já tinha duas cicatrizes
+registradas da mesma classe: o `.venv` com shebangs de caminho antigo, e o CI
+fixando `python-version: '3.9'`.
+
+**A lição de comunicação se repetiu, então vale mais que da primeira vez:**
+problema concreto vivido → o que a ferramenta faz → só então o vocabulário.
+
+### O achado independente: o `/health` mentia
+
+```
+/health com o banco inalcançável  →  200 {"status": "ok"}
+```
+
+Medido. E o mais interessante é que **isso está certo** — para liveness. O erro
+era ter um endpoint só fazendo dois papéis:
+
+| Pergunta | Se falhar | Existia? |
+|---|---|---|
+| o processo está vivo? | reinicie | ✅ `/health` |
+| consegue atender? | não mande tráfego | ❌ faltava |
+
+E há uma armadilha na direção oposta, que evitei de propósito: **o
+`HEALTHCHECK` do Docker aponta para `/health`, não para `/ready`**. O Docker
+reinicia container cujo healthcheck falha — apontá-lo para o readiness faria
+uma queda de banco reiniciar todas as instâncias em laço, transformando algo
+recuperável em apagão.
+
+### O terceiro experimento inválido desta sessão
+
+Rodei o container com `--network host` e conclui que o `/ready` estava
+quebrado: respondia 200 com o PostgreSQL parado.
+
+Estava errado — **eu não estava falando com o container**. No macOS,
+`--network host` não expõe a porta ao host, e havia **dois processos Python na
+3333**: o app que o Gabriel tinha subido à mão. Todo o meu `curl` foi para lá.
+
+O que denunciou foi o **log de acesso**: as requisições de `/ready` não
+apareciam nele. Refeito com `-p 3399:3333`, a requisição aparece no log e o
+comportamento é o correto — 503 com o banco fora, 200 quando volta, container
+seguindo vivo o tempo todo.
+
+**Terceira vez na sessão** que quase concluí de um experimento inválido (as
+outras: o bloco do MinIO no CI, a sonda do coverage). O padrão que salvou as
+três: procurar a evidência de que o experimento mediu o que eu achava.
+
+### A decisão que saiu de um número
+
+Dividir o `requirements.txt` não estava no plano. Medi dentro da imagem:
+**37,7 MB de 115,4 MB de site-packages — um terço — eram pytest, pylint,
+coverage e httpx**, código que nunca roda servindo requisição.
+
+396 → 366 MB, e `import pytest` falha lá dentro. Verificado.
+
+### Verificação, toda contra o container rodando
+
+| Verificação | Resultado |
+|---|---|
+| usuário do processo | `refund`, não root |
+| `/health` | 200 |
+| `/ready` com banco de pé | 200 |
+| **`/ready` com banco parado** | **503**, e o container **continua vivo** |
+| `/ready` depois do banco voltar | 200, sozinho |
+| `HEALTHCHECK` do Docker | `healthy` |
+| `.env` dentro da imagem | nenhum |
+| `import pytest` na imagem | `ModuleNotFoundError` |
+| `pytest` / integração / `pylint` | **334** / **70** / exit 0 |
+
+### O que lembrar
+
+- **Liveness e readiness são perguntas diferentes**, e apontar o restart para a
+  errada piora a queda que ele deveria mitigar.
+- Um experimento precisa provar que mediu o que você pensa. O log de acesso foi
+  a testemunha aqui.
+- Decisão de otimização com número: um terço da imagem era ferramenta de teste.
+- **A imagem é construída sobre Python 3.9, que já não recebe correção de
+  segurança.** É o argumento mais concreto até agora para subir de versão.

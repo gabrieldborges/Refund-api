@@ -40,7 +40,9 @@ jobs:
       # lives on it, so the isolation a venv provides locally is already there.
       # This also sidesteps the stale shebangs in the local .venv, which force
       # `python3 -m pytest` there — on CI the plain commands work.
-      - run: pip install -r requirements.txt
+      # requirements-dev.txt puxa o requirements.txt e acrescenta as
+      # ferramentas de teste e lint, que NÃO entram na imagem (Item 30).
+      - run: pip install -r requirements-dev.txt
 
       # --cov reports and never gates. The number is printed for whoever
       # wants to read it; nothing fails on it, because the three most recent
@@ -102,7 +104,9 @@ jobs:
           python-version: '3.9'
           cache: pip
 
-      - run: pip install -r requirements.txt
+      # requirements-dev.txt puxa o requirements.txt e acrescenta as
+      # ferramentas de teste e lint, que NÃO entram na imagem (Item 30).
+      - run: pip install -r requirements-dev.txt
 
       # MinIO is started here rather than as a `services:` entry, and the
       # reason is a real limitation: a service container cannot override the

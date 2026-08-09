@@ -1,0 +1,25 @@
+# Ferramentas de teste e lint. NÃO entram na imagem de produção — medido:
+# eram 37,7 MB de 115,4 MB de site-packages, um terço do que estava
+# instalado, para código que nunca roda servindo requisição.
+#
+# O CI instala este arquivo; o Dockerfile instala só o requirements.txt.
+-r requirements.txt
+
+astroid==3.3.11
+coverage==7.10.7
+dill==0.4.1
+httpcore==1.0.9
+httpx==0.28.1
+iniconfig==2.1.0
+isort==6.1.0
+mccabe==0.7.0
+platformdirs==4.4.0
+pluggy==1.6.0
+Pygments==2.20.0
+pylint==3.3.9
+pytest-asyncio==1.2.0
+pytest-cov==7.1.0
+pytest-mock==3.15.1
+pytest==8.4.2
+tomli==2.4.1
+tomlkit==0.15.0

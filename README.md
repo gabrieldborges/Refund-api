@@ -37,7 +37,7 @@ fictícios, então `pytest` funciona mesmo sem `.env` e nunca alcança o banco r
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
-   pip install -r requirements.txt
+   pip install -r requirements-dev.txt   # runtime + teste e lint
    ```
 
 2. Aplique as migrations (obrigatório antes de subir o servidor pela primeira

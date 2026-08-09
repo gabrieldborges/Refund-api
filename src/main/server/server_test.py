@@ -111,3 +111,13 @@ async def test_an_unexpected_error_still_carries_the_request_id():
 
     assert body_of(response)["request_id"] == "req-test"
     assert response.headers["X-Request-Id"] == "req-test"
+
+
+# LIVENESS answers without touching anything, on purpose: if a database outage
+# made this fail, an orchestrator would restart every instance in a loop and
+# turn something recoverable into an outage.
+@pytest.mark.asyncio
+async def test_liveness_does_not_depend_on_the_database():
+    from .server import health_check  # pylint: disable=import-outside-toplevel
+
+    assert await health_check() == {"status": "ok"}
