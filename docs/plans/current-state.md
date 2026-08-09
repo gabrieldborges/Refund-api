@@ -1485,7 +1485,7 @@ completo e obrigatório está em
     47), `pylint` exit 0; frontend **305** (partiu de 304).
 
 - **Fase 4, Item 27 — Rate limiting e segurança operacional: CONCLUÍDO.**
-  Branch `feat/rate-limiting` do `Refund-api`, só backend. **Não mesclada.**
+  Branch `feat/rate-limiting` do `Refund-api`, só backend. **Mesclada e empurrada em 2026-08-09.**
   Detalhes no [diário](../learning-path-progress.md) e na
   [ADR-009](../decisions/ADR-009-abuse-controls.md).
   - **O threat model que o item exige achou duas coisas reais.** (1) **O
@@ -1513,7 +1513,7 @@ completo e obrigatório está em
     quebra deliberada**.
 
 - **Fase 4, Item 28 — Tarefas assíncronas com fila: CONCLUÍDO. FECHA A FASE 4.**
-  Branch `feat/orphan-sweep` do `Refund-api`. **Não mesclada.** Detalhes no
+  Branch `feat/orphan-sweep` do `Refund-api`. **Mesclada e empurrada em 2026-08-09.** Detalhes no
   [diário](../learning-path-progress.md) e na
   [ADR-010](../decisions/ADR-010-orphan-sweep.md).
   - **A FILA FOI DISPENSADA, com motivo.** O item diz "não adicionar worker
@@ -1542,7 +1542,7 @@ completo e obrigatório está em
     exit 0, três quebras deliberadas.
 
 - **Fase 5, Item 29 — CI/CD: CONCLUÍDO.** Branch `feat/ci-completeness` nos
-  dois repositórios. **Não mesclada.** Detalhes no
+  dois repositórios. **Mesclada e empurrada em 2026-08-09.** Detalhes no
   [diário](../learning-path-progress.md).
   - **O título engana:** o corpo do item não menciona deploy — ele lista
     garantias de CI. CD de verdade exige onde implantar (Item 30 + provedor).
@@ -1557,7 +1557,7 @@ completo e obrigatório está em
     exit 0; frontend 305.
 
 - **Fase 5, Item 30 — Containers: CONCLUÍDO. FECHA O ÚLTIMO BLOQUEIO DO
-  PRIMEIRO DEPLOY.** Branch `feat/container` do `Refund-api`. **Não mesclada.**
+  PRIMEIRO DEPLOY.** Branch `feat/container` do `Refund-api`. **Mesclada e empurrada em 2026-08-09.**
   Detalhes no [diário](../learning-path-progress.md) e na
   [ADR-011](../decisions/ADR-011-container.md).
   - **Só a API.** O frontend vira estático; conteinerizá-lo esbarra no
@@ -1643,9 +1643,9 @@ completo e obrigatório está em
   desde o restyle, e o item avisa para definir sintoma e orçamento antes de
   otimizar.
 
-  **Quatro branches não mescladas no `Refund-api`** — `feat/rate-limiting`,
-  `feat/orphan-sweep`, `feat/ci-completeness` e `feat/container`, empilhadas
-  nessa ordem — e **uma no `Refund-FrontEnd`** (`feat/ci-completeness`).
+  **Nenhuma branch de trabalho pendente** — as cinco foram mescladas em
+  2026-08-09; as quatro do backend estavam empilhadas, então um fast-forward
+  levou os quatro itens. Verificação repetida depois de cada merge.
 
   **3 órfãos reais aguardando decisão** — ver o Item 28. — as quatro foram mescladas em
   2026-08-09. **Validação em navegador dos Itens 25 e 26: não se aplica**,
