@@ -42,7 +42,10 @@ jobs:
       # `python3 -m pytest` there — on CI the plain commands work.
       - run: pip install -r requirements.txt
 
-      - run: pytest
+      # --cov reports and never gates. The number is printed for whoever
+      # wants to read it; nothing fails on it, because the three most recent
+      # defects here all lived on covered lines (Item 26, ADR-008).
+      - run: pytest --cov
       - run: pylint src
 
   # A second job, not more steps in the first: the mocked suite must stay

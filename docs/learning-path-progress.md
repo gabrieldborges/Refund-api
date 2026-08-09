@@ -5324,3 +5324,101 @@ silêncio**. Está escrito no topo dos três arquivos envolvidos, de propósito.
 - Placeholders de contrato precisam **preservar o tipo**, ou o arquivo mente
   sobre a forma que se propõe a documentar.
 - Uma regra de arquitetura boa se paga em lugares que ninguém previu.
+
+## Item 26 — Cobertura como diagnóstico (2026-08-09)
+
+**Status:** concluído em 2026-08-09, na branch `feat/coverage` dos dois
+repositórios. Decisões na [ADR-008](../decisions/ADR-008-coverage.md).
+
+### O item foi reapresentado do zero
+
+A primeira apresentação não foi entendida, e com razão: eu abri com o
+vocabulário (branch coverage, portão no CI, catraca) antes de estabelecer o que
+a ferramenta **faz**. A segunda começou pelo concreto — instalei, rodei, e
+mostrei o número real do projeto e uma linha específica que nenhum teste
+tocava. Aí a conversa andou.
+
+**Lição de comunicação, não de código:** quando um conceito não entra, o
+problema costuma ser a ordem. Ferramenta → número real → achado real →
+vocabulário, e não o inverso.
+
+### A tese do item, provada pela história do próprio projeto
+
+O texto do item avisa que *"porcentagem alta não garante boas asserções"*. Aqui
+isso não é teoria: **os três defeitos mais recentes viviam em linhas cobertas.**
+
+| Defeito | Linha coberta? | Teste pegava? |
+|---|---|---|
+| Item 23 — handler na classe errada | sim | não |
+| Item 24 — filtro nunca instalado | sim | não |
+| 09/08 — mensagem inalcançável | sim | não |
+
+É por isso que nada reprova num número. O caminho mais barato para subir a
+porcentagem é escrever asserções fracas.
+
+### Configurar o relatório já é metade do trabalho
+
+O primeiro relatório era quase todo ruído: **treze arquivos de interface a
+80%**, porque o `pass` de um método abstrato nunca executa. Ninguém leria uma
+lista assim. Excluir interfaces, entidades e o próprio código de teste é o que
+fez o sinal aparecer.
+
+E o número depende de **quais testes rodam**: o `s3_file_storage` dá 42% com a
+suíte rápida e 97% com a de integração. "A cobertura do projeto" não é um
+número só.
+
+### Quatro achados reais, e o item entregou testes
+
+| Achado | O que era |
+|---|---|
+| `error_handler.py:17` | o caminho de **erro inesperado** — o 500 — nunca executou em 317 testes |
+| `storage_factory.py:29` | o ramo `s3` do `build_storage`: **o que produção usaria**, nunca executado (os testes de S3 constroem a classe direto) |
+| `refund_routes` 77%, `user_routes` 59% | **todos os fluxos de admin a 0% por HTTP** — pagamento, revisão e as rotas de avatar |
+| `useAuth.ts:7` (frontend) | a guarda de "usado fora do AuthProvider", nunca exercitada |
+
+O terceiro é o que o item pede textualmente: *"usar o relatório para encontrar
+**autorização** ou falha parcial esquecida"*. Sete testes HTTP novos saíram
+dali, incluindo BR-016 (admin não decide o próprio pedido) e BR-021 (qualquer
+autenticado lê qualquer avatar).
+
+Backend 94% → **98%**. Frontend 92,5% → **92,7%**. Os números são consequência.
+
+### O ponto cego do instrumento
+
+O `return JSONResponse(...)` final de **toda** rota é reportado como nunca
+executado — treze linhas. **Elas executam:** as requisições devolvem 200/201
+com o corpo certo, e o dado bruto do coverage mostra a linha imediatamente
+acima registrada.
+
+Persegui a causa e **não achei**. `concurrency = thread` não mudou nada; um app
+FastAPI isolado sem o middleware deste projeto registra a mesma instrução
+normalmente, o que aponta para composição do app — mas a sonda que provaria
+isso saiu errada (o arquivo de teste ficou desatualizado e eu quase concluí do
+resultado inválido). Fica como **observação, não diagnóstico**.
+
+Não excluí as linhas. Excluir transformaria uma distorção conhecida numa
+invisível — e alguém lendo o relatório de cima para baixo iria escrever testes
+para código já testado.
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` | **325 passed** (partiu de 317) |
+| `pytest -m integration` | **54 passed** (partiu de 47) |
+| `pylint src; echo $?` | 10.00/10, **exit 0** |
+| `npx vitest run` | **305 passed** (partiu de 304) |
+| Cobertura backend | 94% → **98%** |
+| Cobertura frontend | 92,5% → **92,7%** |
+
+### O que lembrar
+
+- Cobertura responde **"isto nunca executou"**. Nunca responde "isto está
+  certo".
+- **Configurar o relatório é metade do valor** — um relatório barulhento não é
+  lido.
+- O número depende de quais testes rodam; não existe "a cobertura do projeto".
+- **Conheça o ponto cego do seu instrumento**, e escreva-o onde quem lê o
+  relatório vai tropeçar nele.
+- Quando um conceito não entra, mude a **ordem**: ferramenta, número real,
+  achado real, e só então o vocabulário.

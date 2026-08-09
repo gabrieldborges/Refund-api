@@ -238,3 +238,138 @@ def test_a_standard_user_cannot_review_a_refund(authenticated):
     )
 
     assert response.status_code == 403
+
+
+# --------------------------------------------------------------------------
+# Admin flows — added by Item 26, which found them at 0% over HTTP
+# --------------------------------------------------------------------------
+#
+# The coverage report put refund_routes at 77% and user_routes at 59%, with the
+# payment routes, the review route and every avatar route never once reached by
+# a request. Those are the authorization-heavy paths: exactly what the item's
+# practice line ("usar o relatório para encontrar autorização/falha parcial
+# esquecida") asks for.
+
+
+@pytest.mark.integration
+def test_an_admin_can_approve_and_then_pay_a_refund(authenticated, admin_headers):
+    client, headers, _ = authenticated
+    refund_id = create_refund(client, headers).json()["attributes"]["id"]
+
+    approved = client.patch(
+        f"/refunds/{refund_id}/status", headers=admin_headers, json={"status": "approved"}
+    )
+    assert approved.status_code == 200
+
+    paid = client.post(
+        f"/refunds/{refund_id}/payment",
+        headers=admin_headers,
+        files={"file": ("comprovante.pdf", b"%PDF-1.4 fake", "application/pdf")},
+    )
+    assert paid.status_code == 200
+    assert paid.json()["attributes"]["status"] == "paid"
+
+
+# BR-016: an admin must not decide on their own request. Enforced before any
+# database lookup, and never exercised through a real request until now.
+@pytest.mark.integration
+def test_an_admin_cannot_review_their_own_refund(api_client, admin_headers):
+    own = create_refund(api_client, admin_headers).json()["attributes"]["id"]
+
+    response = api_client.patch(
+        f"/refunds/{own}/status", headers=admin_headers, json={"status": "approved"}
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.integration
+def test_the_payment_receipt_is_served_to_the_owner(authenticated, admin_headers):
+    client, headers, _ = authenticated
+    refund_id = create_refund(client, headers).json()["attributes"]["id"]
+    client.patch(
+        f"/refunds/{refund_id}/status", headers=admin_headers, json={"status": "approved"}
+    )
+    client.post(
+        f"/refunds/{refund_id}/payment",
+        headers=admin_headers,
+        files={"file": ("comprovante.pdf", b"%PDF-1.4 fake", "application/pdf")},
+    )
+
+    # The OWNER, not the admin — the payment receipt is readable by both, and
+    # the owner is the case a standard user actually hits.
+    metadata = client.get(f"/refunds/{refund_id}/payment-receipt", headers=headers).json()
+    assert metadata["media_type"] == "application/pdf"
+
+    path = metadata["url"].split("localhost:3333")[-1]
+    assert client.get(path).content == b"%PDF-1.4 fake"
+
+
+# An unpaid refund answers exactly like an unknown one — one of the four
+# identical 404 paths verified byte for byte when the endpoint was built, and
+# never checked over HTTP since.
+@pytest.mark.integration
+def test_an_unpaid_refund_has_no_payment_receipt(authenticated):
+    client, headers, _ = authenticated
+    refund_id = create_refund(client, headers).json()["attributes"]["id"]
+
+    unpaid = client.get(f"/refunds/{refund_id}/payment-receipt", headers=headers)
+    unknown = client.get("/refunds/999999/payment-receipt", headers=headers)
+
+    assert unpaid.status_code == unknown.status_code == 404
+    assert unpaid.json()["detail"] == unknown.json()["detail"]
+
+
+@pytest.mark.integration
+def test_the_review_history_records_who_decided_and_when(authenticated, admin_headers):
+    client, headers, _ = authenticated
+    refund_id = create_refund(client, headers).json()["attributes"]["id"]
+    client.patch(
+        f"/refunds/{refund_id}/status",
+        headers=admin_headers,
+        json={"status": "rejected", "reason": "Duplicado"},
+    )
+
+    history = client.get(f"/refunds/{refund_id}/reviews", headers=headers).json()
+
+    assert history["count"] == 1
+    assert history["attributes"][0]["to_status"] == "rejected"
+    assert history["attributes"][0]["reason"] == "Duplicado"
+
+
+# --------------------------------------------------------------------------
+# Avatar routes — user_routes.py was at 59%, all of it here
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+def test_an_avatar_can_be_uploaded_read_and_removed(authenticated):
+    client, headers, user_id = authenticated
+
+    upload = client.post(
+        "/users/me/avatar", headers=headers, files={"file": ("foto.png", b"png", "image/png")}
+    )
+    assert upload.status_code == 200
+
+    # has_avatar is what the refund responses expose instead of the filename.
+    refund_id = create_refund(client, headers).json()["attributes"]["id"]
+    detail = client.get(f"/refunds/{refund_id}", headers=headers).json()["attributes"]
+    assert detail["user"]["has_avatar"] is True
+
+    metadata = client.get(f"/users/{user_id}/avatar", headers=headers).json()
+    assert client.get(metadata["url"].split("localhost:3333")[-1]).content == b"png"
+
+    assert client.delete("/users/me/avatar", headers=headers).status_code == 200
+    assert client.get(f"/users/{user_id}/avatar", headers=headers).status_code == 404
+
+
+# BR-021: any authenticated user may read any avatar — there is no
+# authorization decision here, only a lookup, and that is worth pinning.
+@pytest.mark.integration
+def test_any_authenticated_user_can_read_another_users_avatar(authenticated, admin_headers):
+    client, headers, user_id = authenticated
+    client.post(
+        "/users/me/avatar", headers=headers, files={"file": ("foto.png", b"png", "image/png")}
+    )
+
+    assert client.get(f"/users/{user_id}/avatar", headers=admin_headers).status_code == 200

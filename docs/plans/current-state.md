@@ -1454,6 +1454,33 @@ completo e obrigatório está em
   `contract/app.json` → `src/test/contract/`. Mesma forma do problema dos SHAs
   que este documento registrou seis vezes: nasce verdadeiro e morre em silêncio.
 
+- **Fase 4, Item 26 — Cobertura como diagnóstico: CONCLUÍDO.**
+  Branch `feat/coverage` nos dois repositórios. **Nenhuma mesclada.** Detalhes
+  no [diário](../learning-path-progress.md) e na
+  [ADR-008](../decisions/ADR-008-coverage.md).
+  - **Nada reprova num número, e o motivo é local:** os três defeitos mais
+    recentes deste projeto viviam em **linhas cobertas** (handler na classe
+    errada, filtro não instalado, mensagem inalcançável). Portão num número dá
+    segurança que os fatos daqui contradizem.
+  - **O item entregou TESTES, não porcentagem.** Quatro achados fechados: o
+    caminho de 500 do `error_handler` (nunca executado em 317 testes), o ramo
+    `s3` do `build_storage` (**o que produção usaria**), a guarda do `useAuth`
+    no frontend, e — o maior — **todos os fluxos de admin a 0% por HTTP**:
+    pagamento, revisão e rotas de avatar. Sete testes HTTP novos, incluindo
+    BR-016 e BR-021.
+  - Backend 94% → **98%**; frontend 92,5% → **92,7%**.
+  - **PONTO CEGO CONHECIDO, documentado no `.coveragerc`:** o
+    `return JSONResponse(...)` final de toda rota é reportado como nunca
+    executado — 13 linhas que **executam**. Causa **não isolada**:
+    `concurrency = thread` não mudou nada, e a sonda que apontaria o middleware
+    saiu errada. Registrado como observação, não diagnóstico. Não foi excluído
+    de propósito — excluir tornaria a distorção invisível.
+  - **A primeira apresentação do item não foi entendida** e foi refeita do
+    zero, começando pela ferramenta rodando e por um achado real em vez do
+    vocabulário. Lição de comunicação registrada no diário.
+  - Verificação: `pytest` **325** (partiu de 317), integração **54** (partiu de
+    47), `pylint` exit 0; frontend **305** (partiu de 304).
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1506,10 +1533,12 @@ completo e obrigatório está em
   verificada. Quem retomar a trilha deve continuar acumulando aqui e planejar
   um ciclo próprio de varredura quando o `learning_path.md` acabar.
 
-- **Próximo — o Item 26** (cobertura como diagnóstico), último da Fase 4 antes
-  de 27 e 28. O item avisa que porcentagem alta não garante boas asserções — e
-  esta sessão tem três exemplos frescos disso, todos de código coberto cuja
-  ligação não era.
+- **Próximo — o Item 27** (rate limiting e segurança operacional) ou o **28**
+  (tarefas assíncronas com fila), que fecham a Fase 4.
+
+  **QUATRO BRANCHES NÃO MESCLADAS ACUMULANDO:** `feat/api-contract-tests` e
+  `feat/coverage` no `Refund-api`; `feat/contract-test` e `feat/coverage` no
+  `Refund-FrontEnd`. As de cobertura estão empilhadas sobre as de contrato.
 
   **Nenhuma validação em navegador pendente** pela primeira vez em três itens:
   a sessão de 2026-08-09 zerou o acúmulo dos Itens 22, 23 e 24 e fechou quatro

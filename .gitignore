@@ -18,3 +18,7 @@ uploads/**
 !uploads/avatars/.gitkeep
 !uploads/payment_receipts/
 !uploads/payment_receipts/.gitkeep
+
+# Relatórios de cobertura (Item 26) — gerados, nunca versionados.
+.coverage
+htmlcov/

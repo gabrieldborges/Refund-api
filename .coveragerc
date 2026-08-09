@@ -1,0 +1,49 @@
+# Coverage answers exactly one question: "which lines never ran?". It never
+# answers "is this correct" — the three most recent defects in this project all
+# lived on lines coverage reported as covered (a handler registered on the
+# wrong class, a filter never installed, a message never reached). The report
+# is a place to look, not a grade to pass, which is why nothing in CI fails on
+# the number.
+[run]
+source = src
+
+# Makes an `if` count as TWO paths instead of one line. error_handler.py read
+# as covered while its 500 path had never once executed; only branch
+# measurement made that visible, and closing it was this item's first finding.
+branch = True
+
+# KNOWN BLIND SPOT, read this before believing the report.
+#
+# Every route handler's final `return JSONResponse(...)` is reported as never
+# executed — nine lines in refund_routes.py, four in user_routes.py. They DO
+# execute: the requests return 200/201 with the right bodies, and the raw
+# coverage data shows the line immediately above each of them recorded.
+#
+# So thirteen entries in this report are FALSE GAPS. Someone reading the list
+# top-down would go write tests for code that is already tested.
+#
+# The cause is not isolated. `concurrency = thread` was tried and changed
+# nothing; an isolated FastAPI app without this project's middleware records
+# the same statement fine, which points at app composition, but the probe that
+# would have proven it was botched and the hypothesis is therefore UNPROVEN.
+# Recorded as an observation, not a diagnosis.
+#
+# Nothing is excluded to hide it: excluding would turn a known distortion into
+# an invisible one.
+
+omit =
+    # Test code measuring itself inflates the number and hides the signal.
+    */*_test.py
+    */conftest.py
+    # Abstract method bodies are a bare `pass` that never executes by design.
+    # Thirteen interface files at 80% were the loudest thing in the first
+    # report, and none of it meant anything.
+    */interfaces/*
+    # Declarative table definitions: data, not logic.
+    */entities/*
+
+[report]
+show_missing = True
+skip_covered = True
+# Sorted by how much is missing, so reading starts where there is most to find.
+sort = -Miss

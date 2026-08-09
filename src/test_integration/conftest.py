@@ -169,3 +169,32 @@ def authenticated(api_client):
     ).json()
 
     return api_client, {"Authorization": f"Bearer {body['token']}"}, body["id"]
+
+
+@pytest_asyncio.fixture
+async def admin_headers(api_client, engine):
+    """Registers a second user and promotes them, returning their auth headers.
+
+    Promotion is a direct UPDATE because registration always creates `standard`
+    (BR-003) and there is no endpoint that grants the role — the same reason
+    init/promote_admin.py exists. Everything AFTER this point goes through the
+    API.
+
+    Added for Item 26: the coverage report showed every admin route at 0 — the
+    payment flow, the review flow and the avatar routes had never been reached
+    over HTTP by anything.
+    """
+    api_client.post(
+        "/auth/register",
+        json={"name": "Chefe", "email": "admin@example.com", "password": "Senha123!"},
+    )
+    async with engine.begin() as connection:
+        await connection.execute(
+            text("UPDATE users SET role = 'admin' WHERE email = 'admin@example.com'")
+        )
+
+    token = api_client.post(
+        "/auth/login", json={"email": "admin@example.com", "password": "Senha123!"}
+    ).json()["token"]
+
+    return {"Authorization": f"Bearer {token}"}
