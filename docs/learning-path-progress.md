@@ -5119,3 +5119,93 @@ peça, não a montagem".
   URL assinada, não depois.
 - Métricas e tracing ficaram de fora por instrução do item: entram quando
   existir onde observá-los.
+
+## Sessão de validação em navegador — 2026-08-09
+
+Não é um item da trilha: é a passada de navegador que três itens seguidos
+ficaram devendo. Dezoito verificações num checklist derivado das pendências,
+percorridas pelo Gabriel. **Todas passaram — e a sessão achou dois bugs**, que
+é a justificativa retroativa para ela ter existido.
+
+### Os dois bugs, e por que a suíte não podia vê-los
+
+**1. A checagem de tipo do Zod roda antes das nossas mensagens.**
+
+```
+name: undefined  ->  "Invalid input: expected string, received undefined"
+name: ""         ->  "validation.nameRequired"
+```
+
+`RefundFormDialog` e `PayRefundDialog` eram os **únicos** formulários sem
+`defaultValues`. Um campo não tocado chegava como `undefined`, o Zod falhava no
+**tipo** antes de alcançar o `.min(1, …)`, e a mensagem de tipo é o default em
+inglês da biblioteca — **que nunca foi uma chave**, logo intraduzível por
+construção, não por esquecimento. Um envio vazio produzia **quatro** de uma vez.
+
+**2. Duas mensagens em português cravadas** em `PageLogin` e `PageRegister`,
+enquanto o campo vizinho usava chave. Ficavam em português com a UI em inglês.
+
+**A lição generaliza para além do i18n:** o Item 14 verificou que as mensagens
+de validação estavam traduzidas, e estavam. Ninguém verificou se elas são
+**alcançadas**. Um catálogo completo não prova que suas chaves chegam à tela —
+e o teste de paridade do Item 14, que é bom, mede o catálogo, não o caminho.
+
+**É a terceira vez seguida que o buraco tem essa forma.** Item 23: handler
+registrado na exceção errada (testei o handler, não o registro). Item 24: filtro
+correto mas não instalado (testei a peça, não a montagem). Agora: mensagem certa
+mas inalcançável. Sempre a ligação entre as partes, nunca as partes.
+
+### O texto nativo do input de arquivo
+
+Pendência desde o restyle, decidida e resolvida aqui. O
+`"Choose File / No file chosen"` pertence ao controle do navegador e **não é
+alcançável por CSS nem por JS** — `::file-selector-button` estiliza o botão mas
+não o renomeia. A única saída é substituir o controle.
+
+Três detalhes que valem para qualquer controle nativo escondido:
+
+- **`sr-only`, nunca `display:none`** — o segundo tira o input da árvore de
+  acessibilidade e do foco.
+- **`aria-labelledby`** fixa o nome acessível; sem isso o `<label>` visível é um
+  **segundo** rótulo e o leitor de tela anuncia os dois concatenados.
+- **O anel de foco migra** para o elemento visível, via `peer`.
+
+### Duas correções ao próprio checklist
+
+**A1 estava ambíguo.** Abrir o detalhe dispara **duas** requisições — a de
+metadados (autenticada, devolve `{url, media_type}`) e a do arquivo. Só a
+segunda prova o item, e eu não distingui. O Gabriel achou a primeira e ficou
+sem entender o que verificar.
+
+**A3 estava errado.** Eu escrevi que a tela cheia não devia gerar requisição
+nenhuma — expectativa herdada da versão com `blob:`, em que uma segunda `<img>`
+com a mesma string não tocava a rede. Com URL HTTP real, o diálogo monta um
+segundo `<img>` e o navegador serve do cache; **é o comportamento correto**, e
+é para isso que a rota manda `Cache-Control: private, max-age=60`.
+
+Vale registrar: em 2 das 18 verificações o defeito estava **no checklist**, não
+no produto. Quem escrever o próximo deve conferir a expectativa contra o código
+atual, não contra a lembrança de como era.
+
+### O número que não é sinal
+
+O Lighthouse deu **Accessibility 100** (fecha a pendência de contraste, que era
+o objetivo) e **Performance 54%**. O segundo **não deve ser citado**: a medição
+foi contra `npm run dev` — módulos não minificados, sem bundling, com o cliente
+de HMR no meio. Mede o servidor de desenvolvimento, não o produto. O assunto de
+performance que existe de verdade é o bundle em ~608 kB com o aviso de chunk
+> 500 kB aberto desde o restyle, e isso é o Item 31.
+
+### O flick
+
+Não reproduziu. Registrado como **não observado**, não como resolvido: ninguém
+achou a causa, então pode ter mudado de condição. Se voltar, o caminho continua
+sendo medir `scrollHeight` por frame — duas correções às cegas já falharam.
+
+### O que lembrar
+
+- **Validar no navegador acha o que a suíte não pode achar**, e desta vez o
+  retorno foi concreto: dois bugs na tela mais usada do produto.
+- **Um catálogo completo não prova que suas chaves chegam à tela.**
+- Ao escrever um checklist, conferir a expectativa contra o código **atual**.
+- Um número de ferramenta só vale se foi medido no artefato certo.

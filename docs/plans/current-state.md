@@ -1329,6 +1329,94 @@ completo e obrigatório está em
   - Verificação: `pytest` **317 passed** (partiu de 295), `pylint` exit 0, mais
     a API real nos dois formatos com o token mascarado nos dois.
 
+- **SESSÃO DE VALIDAÇÃO EM NAVEGADOR — 2026-08-09.** Dezoito verificações,
+  percorridas pelo Gabriel contra um checklist derivado destas pendências
+  (Itens 22, 23, 24 e cinco pendências antigas). **Todas passaram**, com as
+  ressalvas de alcance abaixo — e a sessão **encontrou dois bugs**, que é a
+  justificativa retroativa para ela ter existido.
+
+  **Alcance do registro, honestamente:** das 18, três têm evidência direta
+  descrita pelo Gabriel (A1, A3, C1) e uma virou decisão (C4). As demais foram
+  confirmadas **em bloco**, não uma a uma. É a mesma forma que o ciclo de
+  2026-07-30 ficou registrado, e pela mesma razão: sabe-se que passaram, não o
+  detalhe de cada uma.
+
+  - **A1 — o núcleo do Item 22, confirmado.** A requisição que busca os bytes
+    (`/files/receipts/….png?token=…`) chega **sem header `Authorization`**.
+    Vale registrar que a instrução original do checklist era ambígua: existem
+    **duas** requisições — a de metadados (`/refunds/79/receipt`, autenticada,
+    devolve `{url, media_type}`) e a do arquivo. Só a segunda prova o item.
+  - **A3 — passou, e o CHECK estava errado, não o código.** Ao abrir a tela
+    cheia, requisições reaparecem no Network: é o `.png` servido do **cache**
+    do navegador, porque o diálogo monta um segundo `<img>`. Eu havia escrito
+    a expectativa herdada da versão com `blob:`, em que uma segunda tag com a
+    mesma string não tocava a rede. Com URL HTTP real, tocar o cache é o
+    comportamento correto — daí o `Cache-Control: private, max-age=60` da rota.
+  - **C1 — pendência do contraste FECHADA com número: Lighthouse
+    Accessibility 100**, sem violações. Era exatamente o que faltava: o
+    checklist antigo tinha "parece legível" marcado por olho humano e a
+    auditoria com ferramenta nunca.
+    **Os 54% de Performance da mesma execução NÃO são sinal** e não devem ser
+    citados como tal: a medição foi contra `npm run dev`, ou seja, módulos não
+    minificados, sem bundling, com o cliente de HMR no meio. O número honesto
+    exige `npm run build && npm run preview`. O assunto de performance que
+    **existe de verdade** é outro: o bundle em ~608 kB com o aviso de chunk
+    > 500 kB aberto desde o restyle — Item 31.
+  - **C6 — o flick da Home NÃO REPRODUZIU.** Registrado como **não observado
+    em 2026-08-09**, não como resolvido: ninguém identificou a causa, então
+    ele pode ter mudado de condição em vez de desaparecer. Se voltar, o
+    caminho continua sendo **medir** `scrollHeight` por frame — duas correções
+    às cegas já falharam.
+
+- **DOIS BUGS DE i18n ACHADOS NA VALIDAÇÃO DE 2026-08-09, corrigidos e
+  mesclados** (`Refund-FrontEnd`, `fix/untranslated-validation-messages` e
+  `feat/localized-file-input`, ambas na `main`). Os dois eram invisíveis à
+  suíte e visíveis na primeira tela que o usuário usa.
+
+  **1. A checagem de tipo do Zod roda antes das nossas mensagens.**
+  `RefundFormDialog` e `PayRefundDialog` eram os **únicos** formulários do
+  projeto sem `defaultValues`. Sem isso, um campo não tocado chega ao Zod como
+  `undefined`, ele falha no **tipo** antes de alcançar
+  `.min(1, "validation.nameRequired")`, e a mensagem de tipo é o default em
+  inglês da biblioteca — **que nunca foi uma chave e portanto é intraduzível
+  por construção**. Um envio vazio produzia **quatro** delas de uma vez (nome,
+  valor, categoria e arquivo): o formulário inteiro em inglês numa UI em
+  português.
+
+  Corrigido nos dois lados, porque cada um sozinho deixa buraco:
+  `defaultValues` para os campos chegarem como `""`, **e** mensagem na
+  checagem de tipo — para `file` não existe valor padrão sensato que se possa
+  dar a um `FileList`.
+
+  **2. Duas mensagens em português cravadas no código.** `PageLogin` e
+  `PageRegister` escreviam `"E-mail é obrigatório"` como literal enquanto o
+  campo vizinho usava chave. Ficavam **em português com a interface em
+  inglês** — o espelho do bug acima, e passou por baixo do Item 14 inteiro.
+
+  **A lição, e ela generaliza:** o Item 14 verificou que as mensagens de
+  validação estavam traduzidas, e estavam. O que ninguém verificou é se elas
+  **são alcançadas**. Um catálogo completo não prova que suas chaves chegam à
+  tela.
+
+- **O texto nativo do `<input type="file">` foi RESOLVIDO, não só decidido**
+  (Aberto 4/4, pendente desde o restyle). O `"Choose File / No file chosen"`
+  vem do navegador, na locale **dele**, e **não é alcançável por CSS nem por
+  JS** — `::file-selector-button` estiliza o botão mas não o renomeia, e nada
+  endereça o texto ao lado. A única saída é **substituir o controle**: o
+  `<input>` real continua na página com toda a acessibilidade, e um `<label>`
+  apontando para ele passa a ser a superfície visível, cujo texto é nosso e
+  sai do catálogo (`file.chooseButton`).
+
+  Três detalhes que tornam a substituição segura, e que valem para qualquer
+  controle nativo escondido no futuro:
+  - **`sr-only`, nunca `display:none`** — escondido do segundo jeito o input
+    sai da árvore de acessibilidade e deixa de receber foco.
+  - **`aria-labelledby`** fixa o nome acessível no rótulo do campo; sem isso o
+    `<label>` visível é um **segundo** rótulo do mesmo input e o leitor de
+    tela anuncia os dois concatenados.
+  - **O anel de foco migra para o elemento visível** (via `peer`), porque o
+    input a que ele pertence não é mais visível.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1383,6 +1471,10 @@ completo e obrigatório está em
 
 - **Próximo — o Item 25** (testes de integração e contrato), que o Item 19 já
   destravou ao criar a infraestrutura de banco descartável.
+
+  **Nenhuma validação em navegador pendente** pela primeira vez em três itens:
+  a sessão de 2026-08-09 zerou o acúmulo dos Itens 22, 23 e 24 e fechou quatro
+  pendências antigas.
 
   **Nenhuma branch de trabalho pendente** — as três foram mescladas em
   2026-08-09, com verificação repetida depois de cada merge. **Validação em
@@ -1676,7 +1768,8 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   tamanho. O caminho, se alguém retomar, é **medir** `scrollHeight` por frame
   durante a carga, não tentar uma terceira correção às cegas. Duas correções
   erradas seguidas indicam falta de observação, não de ideia.
-- **A emulação de `prefers-reduced-motion` não foi confirmada.** O Item 15
+- ~~**A emulação de `prefers-reduced-motion` não foi confirmada.**~~
+  **CONFIRMADA em 2026-08-09**, na sessão de validação. O registro original: O Item 15
   validou badge, timeline, tabela e banners no navegador, mas o cenário que
   motivou metade do item — DevTools → Rendering → `Emulate CSS
   prefers-reduced-motion: reduce`, conferindo que nada desliza, o badge não
@@ -1701,7 +1794,9 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   requisições (`?status=approved&per_page=1` e `?status=paid&per_page=1`).
   Candidato a um `GET /refunds/stats` global, por status, no backlog do
   backend.
-- **ITEM 22 NÃO FOI VALIDADO EM NAVEGADOR, e é onde isso mais pesa.** As duas
+- ~~**ITEM 22 NÃO FOI VALIDADO EM NAVEGADOR.**~~ **VALIDADO em 2026-08-09**,
+  junto dos Itens 23 e 24 e de cinco pendências antigas, contra um checklist de
+  18 verificações. Ver o bloco de validação logo abaixo. O registro original: As duas
   branches **já foram mescladas e empurradas** (decisão do Gabriel: validar
   depois), então isto não bloqueia mais um merge — bloqueia a confiança de que
   a tela funciona. **As duas `main` mudaram de contrato juntas**, o que é
@@ -1867,16 +1962,22 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   que fechou o item: não foi um teste novo, foi alguém abrir o navegador — a
   suíte roda contra o MSW, que por definição devolve o payload que nós mesmos
   escrevemos.
-- **Aberto 2/4 — contraste nunca foi auditado com ferramenta.** O checklist
+- ~~**Aberto 2/4 — contraste nunca foi auditado com ferramenta.**~~
+  **RESOLVIDO em 2026-08-09: Lighthouse Accessibility 100**, sem violações de
+  contraste. O registro original: O checklist
   distingue "contraste parece legível" (marcado, olho humano) de "contraste
   auditado no DevTools/Lighthouse" (não marcado). Só a segunda forma produz
   número de razão de contraste; a primeira não substitui a auditoria e não é
   auditável em teste automatizado (o jsdom não calcula cor).
-- **Aberto 3/4 — rejeição de comprovante por tamanho/extensão em runtime.** O
+- ~~**Aberto 3/4 — rejeição de comprovante por tamanho/extensão em runtime.**~~
+  **RESOLVIDO em 2026-08-09**, conferido no navegador. O registro original: O
   upload real (`.jpg`/`.png`/`.pdf`) foi validado, mas o caminho de rejeição não.
   Existe teste automatizado para ele (`RefundFormDialog.test.tsx` cobre a
   rejeição por tamanho), então é conferir a mensagem no navegador, não implementar.
-- **Aberto 4/4 — o "Choose File / No file chosen" do input nativo.** Marcado como
+- ~~**Aberto 4/4 — o "Choose File / No file chosen" do input nativo.**~~
+  **RESOLVIDO em 2026-08-09** — decisão tomada (seguir o idioma do app) e
+  implementada, ver o item sobre a substituição do controle acima. O registro
+  original: Marcado como
   *verificado*, não como *resolvido*: o item pedia "decidir se estiliza". O
   `<input type="file">` continua exibindo o texto nativo do browser, em inglês,
   dentro de uma UI toda em português. Decisão ainda em aberto.
