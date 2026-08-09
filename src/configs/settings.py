@@ -85,6 +85,22 @@ class Settings(BaseSettings):
     # copied link stops working before it can be passed around.
     file_url_ttl_seconds: Annotated[int, Field(gt=0)] = 300
 
+    # --- Abuse controls (Item 27) --------------------------------------
+    #
+    # In-memory, per process, on purpose. The item says to reach for Redis
+    # "somente se o limite precisar ser compartilhado entre réplicas", and
+    # there is one process and no production. A shared store would be
+    # infrastructure bought for a problem nobody has.
+    login_rate_limit: Annotated[int, Field(gt=0)] = 10
+    register_rate_limit: Annotated[int, Field(gt=0)] = 5
+    rate_limit_window_seconds: Annotated[int, Field(gt=0)] = 60
+
+    # Rejected BEFORE the body is buffered. max_file_size_bytes is checked by
+    # the validators, but by then the whole upload is already in memory — this
+    # is the ceiling that keeps it from getting there. Larger than the 4MB file
+    # limit because a multipart body carries the file plus its fields.
+    max_request_body_bytes: Annotated[int, Field(gt=0)] = 8 * 1024 * 1024
+
     # The origin the API is reachable at, used to build local signed URLs. Only
     # matters for storage_backend="local" — with S3 the URL comes from the
     # provider.

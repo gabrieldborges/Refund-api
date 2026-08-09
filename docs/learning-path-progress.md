@@ -5422,3 +5422,99 @@ para código já testado.
   relatório vai tropeçar nele.
 - Quando um conceito não entra, mude a **ordem**: ferramenta, número real,
   achado real, e só então o vocabulário.
+
+## Item 27 — Rate limiting e segurança operacional (2026-08-09)
+
+**Status:** concluído em 2026-08-09, na branch `feat/rate-limiting` do
+`Refund-api`. Só backend. Decisões na
+[ADR-009](../decisions/ADR-009-abuse-controls.md).
+
+### O item manda modelar antes de codar, e o modelo achou coisa
+
+*"Estudar primeiro threat modeling do login e upload."* Duas das quatro
+ameaças não eram suposição:
+
+**O cadastro desfaz o cuidado do login.** O `user_login_controller` tem um
+comentário explicando que a mensagem é genérica de propósito, para não vazar
+quais e-mails existem. E o cadastro ao lado responde
+`"Email already registered"` — **exatamente o que o login se recusa a
+revelar**. A proteção estava furada pela porta ao lado, e ninguém tinha
+notado porque cada endpoint foi lido isoladamente.
+
+**O upload inteiro ia para a memória antes da checagem de tamanho:**
+
+```python
+content = await file.read()                          # rota: corpo INTEIRO
+if len(body["content"]) > settings.max_file_size_bytes:   # validator: só agora
+```
+
+O limite de 4MB é real, mas verificado **depois** de o arquivo estar em
+memória. E como o cadastro é aberto, qualquer um consegue conta e chega lá.
+
+As duas **se combinam**: enumere pelo cadastro, ataque por força bruta o que
+achou.
+
+### Três decisões que valem mais que o código
+
+**Por endereço, não por e-mail.** Limitar por e-mail deixaria qualquer um
+**trancar a conta de uma vítima** queimando a cota de propósito — trocaria
+força bruta por negação de serviço. É o tipo de defesa que cria o problema que
+tenta resolver.
+
+**Janela deslizante, não balde de relógio.** Com baldes fixos o atacante ganha
+`limite` tentativas às 11:59:59 e mais `limite` às 12:00:00. Tem teste, e ele
+move o relógio em vez de dormir — um teste que espera 60s deixa a suíte lenta
+por nada.
+
+**O endereço vem do peer, não do `X-Forwarded-For`.** Confiar nesse header sem
+proxy na frente significa que o cliente escolhe a própria identidade e zera o
+próprio contador trocando uma string.
+
+### O que NÃO foi feito, e por quê
+
+**Sem Redis e sem `slowapi`.** O item diz "Redis somente se o limite precisar
+ser compartilhado entre réplicas". Um processo, zero produção. São 40 linhas.
+
+Os custos ficam declarados: **contadores zeram no restart**, e **uma segunda
+réplica dobraria o limite efetivo**. Aceitáveis hoje; deixam de ser no dia em
+que isto rodar duas vezes.
+
+**O cadastro manteve a mensagem útil.** Enumerar dez e-mails segue possível,
+dez mil não. A solução completa é verificação por e-mail, que exige envio de
+e-mail — inexistente aqui. Trade-off consciente.
+
+### O limite do guarda de tamanho
+
+Ele lê o `Content-Length` **declarado**. Uma requisição *chunked* não manda
+esse header e passa direto — e aí quem pega é a checagem de 4MB dos
+validators, **depois de bufferizar**, que é exatamente o que se queria evitar.
+Fechar exige embrulhar o stream ASGI e contar bytes. Está escrito no código, no
+lugar onde alguém vai tropeçar.
+
+### Rotação de secrets é procedimento
+
+Foi para o README porque **um segredo que ninguém sabe trocar não é trocado**.
+O ponto que mais importa: trocar o `JWT_SECRET` **desloga todo mundo** — não
+existe rotação sem interrupção, e suportar duas chaves simultâneas (verificar
+com as duas, assinar só com a nova) é o que permitiria.
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` | **331 passed** (partiu de 325) |
+| `pytest -m integration` | **60 passed** (partiu de 54) |
+| `pylint src; echo $?` | 10.00/10, **exit 0** |
+| Cobertura | 98%; `rate_limit.py` e `request_guards.py` a **100%** |
+| Quebra: rate limit do login | 1 failed |
+| Quebra: limite de corpo | 1 failed |
+| Quebra: headers | 1 failed |
+
+### O que lembrar
+
+- **Uma proteção lida isoladamente pode estar furada pelo endpoint ao lado.**
+  O login era cuidadoso; o cadastro entregava a mesma informação.
+- Limite por identidade da vítima vira arma contra ela. Conte por quem ataca,
+  não por quem é atacado.
+- Validar tamanho **depois** de ler é validar tarde.
+- Procedimento que não está escrito não existe.

@@ -8,6 +8,10 @@ from src.configs.settings import settings
 from src.errors.problem_details import problem_response
 from src.models.entities import users, refunds, refund_reviews  # pylint: disable=unused-import
 from src.main.middlewares.access_log import AccessLogMiddleware
+from src.main.middlewares.request_guards import (
+    BodySizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from src.main.middlewares.request_id import RequestIdMiddleware, request_id_of
 from src.main.routes.auth_routes import auth_routes
 from src.main.routes.refund_routes import refund_routes
@@ -49,7 +53,12 @@ app.add_middleware(
 # ORDER MATTERS, and Starlette applies add_middleware in REVERSE — the last
 # one added is the outermost. RequestIdMiddleware must be outermost so the id
 # exists before AccessLogMiddleware writes its line, so it is added LAST.
+# Reverse order: the last added is the outermost. Body size is checked before
+# anything else does work on the request, and the id must exist before the
+# access log writes its line.
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(AccessLogMiddleware)
+app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
 

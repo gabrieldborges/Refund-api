@@ -16,6 +16,7 @@ Each was found by running the app by hand. These tests are the automated
 version of running it by hand.
 """
 import pytest
+from src.configs.settings import settings
 
 
 @pytest.mark.integration
@@ -373,3 +374,96 @@ def test_any_authenticated_user_can_read_another_users_avatar(authenticated, adm
     )
 
     assert client.get(f"/users/{user_id}/avatar", headers=admin_headers).status_code == 200
+
+
+# --------------------------------------------------------------------------
+# Abuse controls (Item 27) — the threats modelled before writing them
+# --------------------------------------------------------------------------
+
+
+# Login answers the same message for "no such user" and "wrong password" on
+# purpose, so an attacker cannot learn which emails exist. Nothing stopped them
+# trying ten thousand times against one they already knew — and bcrypt makes
+# every attempt expensive for the SERVER, so this was CPU exhaustion too.
+@pytest.mark.integration
+def test_repeated_login_attempts_are_eventually_refused(api_client):
+    for _ in range(settings.login_rate_limit):
+        api_client.post("/auth/login", json={"email": "a@b.com", "password": "errada"})
+
+    blocked = api_client.post("/auth/login", json={"email": "a@b.com", "password": "errada"})
+
+    assert blocked.status_code == 429
+    assert blocked.headers["content-type"] == "application/problem+json"
+
+
+# Registration answers "Email already registered", which is useful to a person
+# and is exactly what login refuses to reveal. The decision was to keep the
+# message and make BULK enumeration impractical.
+@pytest.mark.integration
+def test_bulk_registration_attempts_are_refused(api_client):
+    for index in range(settings.register_rate_limit):
+        api_client.post(
+            "/auth/register",
+            json={"name": "A", "email": f"probe{index}@example.com", "password": "Senha123!"},
+        )
+
+    blocked = api_client.post(
+        "/auth/register",
+        json={"name": "A", "email": "probe999@example.com", "password": "Senha123!"},
+    )
+
+    assert blocked.status_code == 429
+
+
+# Burning the login allowance must not block a legitimate registration.
+@pytest.mark.integration
+def test_the_two_limits_are_independent(api_client):
+    for _ in range(settings.login_rate_limit + 1):
+        api_client.post("/auth/login", json={"email": "a@b.com", "password": "x"})
+
+    registration = api_client.post(
+        "/auth/register",
+        json={"name": "A", "email": "livre@example.com", "password": "Senha123!"},
+    )
+
+    assert registration.status_code == 201
+
+
+# THE UPLOAD THREAT. Every upload route does `content = await file.read()` and
+# the validators check the 4MB limit AFTERWARDS — by which point the body is
+# already in memory. This is refused on Content-Length, before the route reads
+# a byte.
+@pytest.mark.integration
+def test_an_oversized_body_is_refused_before_it_is_buffered(authenticated):
+    client, headers, _ = authenticated
+    huge = b"x" * (settings.max_request_body_bytes + 1024)
+
+    response = client.post(
+        "/refunds",
+        headers=headers,
+        data={"name": "Grande", "category": "food", "amount": "10.00"},
+        files={"file": ("grande.png", huge, "image/png")},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["status"] == 413
+
+
+# A normal upload must still pass — a size guard that blocks real files would
+# be a worse outage than the one it prevents.
+@pytest.mark.integration
+def test_a_normal_upload_is_unaffected(authenticated):
+    client, headers, _ = authenticated
+
+    assert create_refund(client, headers).status_code == 201
+
+
+@pytest.mark.integration
+def test_security_headers_are_present_on_every_response(api_client):
+    response = api_client.get("/health")
+
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    # Keeps a signed file URL, which carries a token in its query, out of the
+    # Referer header when a browser navigates away.
+    assert response.headers["Referrer-Policy"] == "no-referrer"

@@ -1484,6 +1484,34 @@ completo e obrigatório está em
   - Verificação: `pytest` **325** (partiu de 317), integração **54** (partiu de
     47), `pylint` exit 0; frontend **305** (partiu de 304).
 
+- **Fase 4, Item 27 — Rate limiting e segurança operacional: CONCLUÍDO.**
+  Branch `feat/rate-limiting` do `Refund-api`, só backend. **Não mesclada.**
+  Detalhes no [diário](../learning-path-progress.md) e na
+  [ADR-009](../decisions/ADR-009-abuse-controls.md).
+  - **O threat model que o item exige achou duas coisas reais.** (1) **O
+    cadastro desfazia o cuidado do login**: o login responde a mesma mensagem
+    para "não existe" e "senha errada" de propósito, e o cadastro ao lado
+    responde `"Email already registered"` — exatamente o que o login recusa a
+    revelar. (2) **O upload inteiro ia para a memória antes da checagem de
+    tamanho**: `await file.read()` na rota, limite de 4MB só no validator.
+  - **Rate limit em memória, sem Redis e sem biblioteca**, como o item manda.
+    Custos declarados: contadores zeram no restart, e uma segunda réplica
+    dobraria o limite efetivo.
+  - **Contado por endereço, NÃO por e-mail** — limitar por e-mail deixaria
+    trancar a conta de uma vítima de propósito. **Janela deslizante**, não
+    balde de relógio. **Peer address, não `X-Forwarded-For`.**
+  - **Limite de corpo antes de bufferizar** (413 em problem+json) e **três
+    headers** de segurança, cada um com motivo local — `no-referrer` porque
+    URL assinada carrega token na query.
+  - **Rotação de secrets documentada no README** como procedimento, incluindo
+    que trocar o `JWT_SECRET` **desloga todo mundo**.
+  - **Limite conhecido:** o guarda de tamanho lê o `Content-Length` declarado;
+    requisição *chunked* passa e é pega só pelo validator, depois de
+    bufferizar. Escrito no código.
+  - Verificação: `pytest` **331** (partiu de 325), integração **60** (partiu de
+    54), `pylint` exit 0, cobertura 98%, e **as três frentes provadas por
+    quebra deliberada**.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1536,10 +1564,11 @@ completo e obrigatório está em
   verificada. Quem retomar a trilha deve continuar acumulando aqui e planejar
   um ciclo próprio de varredura quando o `learning_path.md` acabar.
 
-- **Próximo — o Item 27** (rate limiting e segurança operacional) ou o **28**
-  (tarefas assíncronas com fila), que fecham a Fase 4.
+- **Próximo — o Item 28** (tarefas assíncronas com fila), que **fecha a Fase
+  4**. O texto dele já avisa para não adicionar worker para CRUD simples, então
+  a primeira pergunta é se este projeto tem trabalho que justifique fila.
 
-  **Nenhuma branch de trabalho pendente** — as quatro foram mescladas em
+  **Uma branch não mesclada:** `feat/rate-limiting` no `Refund-api`. — as quatro foram mescladas em
   2026-08-09. **Validação em navegador dos Itens 25 e 26: não se aplica**,
   nenhum dos dois toca tela.
 

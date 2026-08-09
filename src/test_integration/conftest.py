@@ -30,6 +30,7 @@ from alembic import command
 from alembic.config import Config
 from src.configs.settings import settings
 from src.drivers.storage_factory import LOCAL_DIRECTORIES
+from src.main.middlewares.rate_limit import rate_limiter
 from src.main.server.server import app
 from src.models.settings.database_connection_handler import (
     DatabaseConnectionHandler,
@@ -143,6 +144,10 @@ def api_client(migrated_database, clean_tables, tmp_path, monkeypatch):  # pylin
         directory = tmp_path / name
         directory.mkdir()
         monkeypatch.setitem(LOCAL_DIRECTORIES, name, str(directory))
+
+    # The limiter is process-wide by design, so without this one test's
+    # attempts would count against the next one and order would matter.
+    rate_limiter.reset()
 
     with TestClient(app) as client:
         yield client

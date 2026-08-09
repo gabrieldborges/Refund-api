@@ -61,6 +61,32 @@ fictícios, então `pytest` funciona mesmo sem `.env` e nunca alcança o banco r
 A API sobe em `http://localhost:3333`.
 Documentação automática (Swagger) em `http://localhost:3333/docs`.
 
+## Rotação de secrets
+
+Não há automação para isto — é procedimento, e está escrito porque um segredo
+que ninguém sabe como trocar não é trocado.
+
+**`JWT_SECRET`.** Trocar **invalida toda sessão ativa**: os tokens em circulação
+foram assinados com a chave antiga e passam a falhar na verificação, então todo
+usuário é deslogado. Não há rotação sem interrupção hoje — suportar duas chaves
+ao mesmo tempo (verificar com a antiga e a nova, assinar só com a nova) é o que
+permitiria, e não existe.
+
+Trocar também **invalida as URLs assinadas de arquivo em voo** (Item 22), que
+são assinadas com a mesma chave. Como elas expiram em 5 minutos, o efeito
+prático é uma imagem quebrada por alguns minutos, não perda de dado.
+
+**`S3_SECRET_ACCESS_KEY`.** Gere a chave nova no provedor, atualize a variável e
+só então revogue a antiga — nessa ordem, ou há uma janela em que nenhum upload
+funciona.
+
+**`DATABASE_URL`.** Rotação de senha do banco derruba as conexões do pool. Com
+uma instância, reiniciar o processo depois de trocar é suficiente.
+
+**Quando trocar:** ao suspeitar de exposição, ao desligar o acesso de alguém que
+teve os valores, e antes do primeiro deploy real — os valores atuais nasceram
+em desenvolvimento e já circularam em terminal.
+
 ## Testes
 
 São duas suítes, separadas por marker do pytest.
