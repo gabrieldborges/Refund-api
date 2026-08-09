@@ -1,0 +1,91 @@
+{
+  "receiptUrl": {
+    "media_type": "image/png",
+    "url": "http://localhost:3333/files/receipts/file.png?token=CONTRACT"
+  },
+  "refundCreate": {
+    "attributes": {
+      "amount_in_cents": 4590,
+      "category": "food",
+      "created_at": "2026-01-01T12:00:00",
+      "id": 1,
+      "name": "Almoço com cliente",
+      "status": "pending",
+      "user": {
+        "has_avatar": false,
+        "id": 1,
+        "name": "Ana"
+      }
+    },
+    "count": 1,
+    "type": "Refund"
+  },
+  "refundDetail": {
+    "attributes": {
+      "amount_in_cents": 4590,
+      "category": "food",
+      "created_at": "2026-01-01T12:00:00",
+      "id": 1,
+      "name": "Almoço com cliente",
+      "status": "pending",
+      "user": {
+        "has_avatar": false,
+        "id": 1,
+        "name": "Ana"
+      }
+    },
+    "count": 1,
+    "type": "Refund"
+  },
+  "refundList": {
+    "attributes": [
+      {
+        "amount_in_cents": 4590,
+        "category": "food",
+        "created_at": "2026-01-01T12:00:00",
+        "id": 1,
+        "name": "Almoço com cliente",
+        "status": "pending",
+        "user": {
+          "has_avatar": false,
+          "id": 1,
+          "name": "Ana"
+        }
+      }
+    ],
+    "count": 1,
+    "page": 1,
+    "per_page": 10,
+    "sum_amount_in_cents": 4590,
+    "total": 1,
+    "total_pages": 1,
+    "type": "Refund"
+  },
+  "refundReviews": {
+    "attributes": [],
+    "count": 0,
+    "type": "RefundReview"
+  },
+  "refundStats": {
+    "by_status": {
+      "approved": {
+        "amount_in_cents": 0,
+        "count": 0
+      },
+      "paid": {
+        "amount_in_cents": 0,
+        "count": 0
+      },
+      "pending": {
+        "amount_in_cents": 4590,
+        "count": 1
+      },
+      "rejected": {
+        "amount_in_cents": 0,
+        "count": 0
+      }
+    },
+    "type": "RefundStats",
+    "user_id": 1
+  }
+}

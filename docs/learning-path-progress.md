@@ -5209,3 +5209,118 @@ sendo medir `scrollHeight` por frame — duas correções às cegas já falharam
 - **Um catálogo completo não prova que suas chaves chegam à tela.**
 - Ao escrever um checklist, conferir a expectativa contra o código **atual**.
 - Um número de ferramenta só vale se foi medido no artefato certo.
+
+## Item 25 — Testes de integração e contrato (2026-08-09)
+
+**Status:** concluído em 2026-08-09, em dois repositórios:
+`feat/api-contract-tests` no `Refund-api` e `feat/contract-test` no
+`Refund-FrontEnd`. Decisões na
+[ADR-007](../decisions/ADR-007-contract-testing.md).
+
+### Metade já existia
+
+A prática que o item pede — *"banco descartável, migration do zero, health/auth
+e um fluxo de refund via cliente FastAPI"* — tinha os dois primeiros desde o
+Item 19. Faltava o **cliente FastAPI**, e faltava contrato.
+
+### Este é o item em que uma dívida venceu
+
+A pendência do Item 23 dizia, textualmente: *"Pegar isso exigiria o TestClient
+do FastAPI e portanto httpx como dependência… **Se um dia a conta virar**, é
+uma dependência só de teste e destravaria testes de rota de verdade."*
+
+O item pede "via cliente FastAPI". A conta virou, e a dívida foi paga **com
+prova**:
+
+```
+bug do Item 23 reintroduzido (handler na classe errada):
+  testes de UNIDADE      6 passed     ← continuam verdes
+  testes HTTP novos      2 failed     ← pegam
+```
+
+Era exatamente a lacuna descrita. Três itens seguidos entregaram um defeito da
+mesma forma — peça certa, ligação errada — e todos os três foram achados
+rodando a aplicação à mão. Estes testes são a versão automatizada disso.
+
+### O engine preguiçoso do Item 17 pagou juros de novo
+
+Apontar a aplicação para o banco de teste é uma linha:
+
+```python
+monkeypatch.setattr(settings, "database_url", TEST_DATABASE_URL)
+get_engine.cache_clear()
+```
+
+Construído no import, como era antes do Item 17, a conexão já existiria antes
+de qualquer fixture rodar e isto exigiria variável de ambiente no processo
+inteiro. **É a segunda vez que aquele item barateia um posterior** — a primeira
+foi o próprio Item 19.
+
+### Quatro suposições minhas que a API real derrubou
+
+Escrevi os testes assumindo o envelope `{type, count, attributes}` em tudo. A
+API tem **três estilos**:
+
+| Resposta | Forma |
+|---|---|
+| login, URL assinada | **plana** |
+| criação, detalhe | `{type, count, attributes}` |
+| listagem | o mesmo, mais paginação no nível de cima |
+
+Não unifiquei — mudaria contrato, e não é o objeto deste item. Mas agora está
+**documentado por um arquivo**, não pela memória de quem leu o código.
+
+### O linter decidiu o formato do contrato
+
+Escrevi um arquivo só. O `eslint-plugin-boundaries` recusou: `src/test` e
+`src/schemas` são camada `app`, e uma feature não importa de `app`. Então um
+teste da feature de reembolsos **não pode** ler um arquivo que também carregue
+o payload de login.
+
+Virou dois arquivos, e a divisão caiu **exatamente na costura que os schemas já
+tinham**. Uma regra de arquitetura que produz uma consequência coerente num
+lugar que ninguém tinha pensado é um bom sinal de que ela descreve algo real —
+e não é o que eu esperava quando comecei a mexer.
+
+### As duas divergências históricas, agora vermelhas
+
+| Quebra | Resultado |
+|---|---|
+| Remover `"paid"` do `refundStatusSchema` | 1 failed |
+| Devolver `user_id` ao topo | 3 failed |
+
+A primeira é a que teria derrubado a Home de **todo** usuário no primeiro
+reembolso pago, e que foi descoberta por leitura, não por teste.
+
+### O que este contrato NÃO cobre
+
+A cópia entre os dois repositórios é **manual**. O CI do backend falha se a API
+mudou e o arquivo não foi regerado; o do frontend falha se os schemas discordam
+do arquivo. **Nenhum dos dois percebe um arquivo regerado que nunca foi
+copiado.**
+
+É o preço de dois repositórios independentes, e tem a mesma forma do problema
+dos SHAs que este projeto já registrou seis vezes: **nasce verdadeiro e morre em
+silêncio**. Está escrito no topo dos três arquivos envolvidos, de propósito.
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` | **317 passed, 47 deselected** |
+| `pytest -m integration` | **47 passed** (partiu de 32) |
+| `pylint src; echo $?` | 10.00/10, **exit 0** |
+| `npx vitest run` (frontend) | **304 passed** (partiu de 294) |
+| Quebra: bug do Item 23 | unidade verde, **HTTP vermelho** |
+| Quebra: `"paid"` removido | 1 failed |
+| Quebra: `user_id` no topo | 3 failed |
+
+### O que lembrar
+
+- **Testar a peça não é testar a montagem** — pela terceira vez. Agora existe
+  a camada que testa a montagem.
+- Um contrato entre repositórios independentes tem um vão que nenhum CI fecha.
+  Escrever o vão vale mais que fingir que não existe.
+- Placeholders de contrato precisam **preservar o tipo**, ou o arquivo mente
+  sobre a forma que se propõe a documentar.
+- Uma regra de arquitetura boa se paga em lugares que ninguém previu.

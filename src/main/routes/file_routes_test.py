@@ -1,8 +1,13 @@
 # pylint: disable=w0621
-# The route handler is called directly rather than through fastapi's TestClient,
-# which would pull in httpx as a dependency for this one file. The handler is a
-# plain async function, so calling it exercises everything that matters here:
-# the signature check, the claim/path match, and the traversal guard.
+# The route handler is still called directly, and that is now a CHOICE rather
+# than a limitation — Item 25 added httpx, so TestClient is available.
+#
+# These stay unit tests because they cover LOGIC (signature check, claim/path
+# match, traversal guard) and run in milliseconds without containers. What they
+# could never cover — that the route is wired up at all — is covered now by
+# src/test_integration/api_test.py, which fetches a signed URL over real HTTP
+# and checks that a tampered one is refused. Rewriting these as integration
+# tests would trade fast coverage for slow coverage of the same logic.
 from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import HTTPException

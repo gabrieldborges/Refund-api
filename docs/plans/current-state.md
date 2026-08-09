@@ -1417,6 +1417,43 @@ completo e obrigatório está em
   - **O anel de foco migra para o elemento visível** (via `peer`), porque o
     input a que ele pertence não é mais visível.
 
+- **Fase 4, Item 25 — Testes de integração e contrato: CONCLUÍDO.**
+  Em dois repositórios: `feat/api-contract-tests` no `Refund-api` e
+  `feat/contract-test` no `Refund-FrontEnd`. **Nenhuma mesclada.** Detalhes no
+  [diário](../learning-path-progress.md) e na
+  [ADR-007](../decisions/ADR-007-contract-testing.md).
+  - **`httpx` entrou, e isso PAGA a dívida registrada no Item 23.** Aquela
+    pendência previa o momento: "se um dia a conta virar". O item pede "um
+    fluxo de refund via cliente FastAPI". **Provado**: com o bug do Item 23
+    reintroduzido, os testes de unidade seguem **verdes** e os HTTP **falham**.
+  - **14 testes de API por HTTP** contra PostgreSQL e MinIO reais — health,
+    auth, envelopes de erro, fluxo completo do reembolso, download por URL
+    assinada **sem header** e anti-enumeração com corpos idênticos.
+  - **O engine preguiçoso do Item 17 pagou juros de novo:** apontar a app para
+    o banco de teste é uma linha. Segunda vez que aquele item barateia um
+    posterior.
+  - **Contrato versionado em DOIS arquivos**, e a divisão foi ditada pelo
+    `eslint-plugin-boundaries`, não por gosto: `src/test` e `src/schemas` são
+    camada `app`, e feature não importa de `app`. O contrato se partiu na mesma
+    costura que os schemas já tinham.
+  - **As duas divergências históricas viram teste vermelho**, provado por
+    quebra: remover `"paid"` do enum (1 falha) e devolver `user_id` ao topo
+    (3 falhas). A primeira é a que teria derrubado a Home de todo usuário.
+  - **Achado ao capturar as respostas: a API tem TRÊS estilos de envelope.**
+    Login e URL assinada planos; criação/detalhe com `{type, count,
+    attributes}`; listagem com paginação no nível de cima. Não unificado —
+    mudaria contrato — mas agora documentado por arquivo, não por memória.
+  - Verificação: `pytest` **317 + 47 de integração** (partiu de 32),
+    `pylint` exit 0; frontend **304** (partiu de 294), `tsc` 0, lint 0/0.
+
+- **A CÓPIA DO CONTRATO ENTRE OS DOIS REPOS É MANUAL — pendência estrutural.**
+  O CI do backend falha se a API mudou e `contract/` não foi regerado; o do
+  frontend falha se os schemas discordam do arquivo. **Nenhum dos dois percebe
+  um contrato regerado que nunca foi copiado.** Destinos:
+  `contract/refunds.json` → `src/features/refunds/contract/`;
+  `contract/app.json` → `src/test/contract/`. Mesma forma do problema dos SHAs
+  que este documento registrou seis vezes: nasce verdadeiro e morre em silêncio.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1469,8 +1506,10 @@ completo e obrigatório está em
   verificada. Quem retomar a trilha deve continuar acumulando aqui e planejar
   um ciclo próprio de varredura quando o `learning_path.md` acabar.
 
-- **Próximo — o Item 25** (testes de integração e contrato), que o Item 19 já
-  destravou ao criar a infraestrutura de banco descartável.
+- **Próximo — o Item 26** (cobertura como diagnóstico), último da Fase 4 antes
+  de 27 e 28. O item avisa que porcentagem alta não garante boas asserções — e
+  esta sessão tem três exemplos frescos disso, todos de código coberto cuja
+  ligação não era.
 
   **Nenhuma validação em navegador pendente** pela primeira vez em três itens:
   a sessão de 2026-08-09 zerou o acúmulo dos Itens 22, 23 e 24 e fechou quatro
@@ -2344,7 +2383,11 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   não estiver ligado, o portão avisa mas não tranca — e a classe de problema
   que motivou o item (`2d07a8d` quebrando a `main` sem ninguém ver) fica
   detectável, não impedida.
-- **Erro de REGISTRO de exception handler é invisível para a suíte.** Os testes
+- ~~**Erro de REGISTRO de exception handler é invisível para a suíte.**~~
+  **RESOLVIDO no Item 25 (2026-08-09):** `httpx` entrou e
+  `src/test_integration/api_test.py` exercita as rotas por HTTP. Reintroduzir o
+  bug agora deixa os testes de unidade verdes e **falha os HTTP** — verificado.
+  O registro original: Os testes
   do Item 23 chamam os handlers diretamente, então provam o mapeamento
   exceção→envelope e **não** que cada um está ligado à exceção certa.
   Reintroduzir o bug real que foi encontrado — registrar na `HTTPException` do

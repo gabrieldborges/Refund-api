@@ -1,0 +1,19 @@
+{
+  "login": {
+    "access": true,
+    "avatar_filename": null,
+    "email": "api@example.com",
+    "id": 1,
+    "name": "Ana",
+    "role": "standard",
+    "token": "eyJhbGciOiJIUzI1NiJ9.CONTRACT.SIGNATURE"
+  },
+  "problemDocument": {
+    "detail": "Not Found",
+    "instance": "/rota-inexistente",
+    "request_id": "00000000-0000-0000-0000-000000000000",
+    "status": 404,
+    "title": "Not Found",
+    "type": "about:blank"
+  }
+}

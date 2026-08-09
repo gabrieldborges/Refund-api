@@ -42,3 +42,4 @@ frontend e pela API.
 - [ADR-004 — Configuração tipada e validada no startup](decisions/ADR-004-typed-settings.md)
 - [ADR-005 — Erros padronizados com Problem Details (RFC 9457)](decisions/ADR-005-problem-details.md)
 - [ADR-006 — Logs estruturados em JSON com request ID](decisions/ADR-006-structured-logging.md)
+- [ADR-007 — Testes de API por HTTP e contrato versionado](decisions/ADR-007-contract-testing.md)

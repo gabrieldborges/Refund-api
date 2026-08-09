@@ -22,14 +22,20 @@ pytest.ini); run them with `pytest -m integration`.
 import os
 import pytest
 import pytest_asyncio
+from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 from alembic import command
 from alembic.config import Config
+from src.configs.settings import settings
+from src.drivers.storage_factory import LOCAL_DIRECTORIES
+from src.main.server.server import app
 from src.models.settings.database_connection_handler import (
     DatabaseConnectionHandler,
     build_engine,
+    get_engine,
+    get_session_factory,
 )
 
 
@@ -110,3 +116,56 @@ async def clean_tables(engine):
             text("TRUNCATE refund_reviews, refunds, users RESTART IDENTITY CASCADE")
         )
     yield
+
+
+@pytest.fixture
+def api_client(migrated_database, clean_tables, tmp_path, monkeypatch):  # pylint: disable=unused-argument
+    """The real FastAPI app, over HTTP, against the throwaway database.
+
+    Everything below the HTTP layer already had integration tests (Item 19);
+    what none of them touched was a ROUTE. This fixture is what Item 25 needed
+    and what the project deferred twice by declining httpx: middleware, routing,
+    composer, view, controller and repository all in one call.
+
+    Repointing the app at the test database is a one-liner ONLY because Item 17
+    made the engine lazy. Built at import, as it used to be, the connection
+    would already exist by the time any fixture ran and this would require
+    process-wide environment variables instead.
+    """
+    monkeypatch.setattr(settings, "database_url", TEST_DATABASE_URL)
+    get_engine.cache_clear()
+    get_session_factory.cache_clear()
+
+    # Uploads go to a temp directory, not the repository's uploads/. A test
+    # that leaves files in the real folder is how the seven orphans of 2026-07
+    # became hard to tell apart from real ones.
+    for name in ("receipts", "avatars", "payments"):
+        directory = tmp_path / name
+        directory.mkdir()
+        monkeypatch.setitem(LOCAL_DIRECTORIES, name, str(directory))
+
+    with TestClient(app) as client:
+        yield client
+
+    get_engine.cache_clear()
+    get_session_factory.cache_clear()
+
+
+@pytest.fixture
+def authenticated(api_client):
+    """Registers a user and returns (client, headers, user_id).
+
+    Through the real endpoints rather than by inserting rows: a fixture that
+    reaches around the API cannot notice when registration or login break.
+    """
+    credentials = {"name": "Ana", "email": "api@example.com", "password": "Senha123!"}
+    api_client.post("/auth/register", json=credentials)
+
+    # The login response is FLAT — no {type, count, attributes} envelope, unlike
+    # every refund response. Three envelope styles coexist in this API; see the
+    # note in contract_test.py.
+    body = api_client.post(
+        "/auth/login", json={"email": credentials["email"], "password": credentials["password"]}
+    ).json()
+
+    return api_client, {"Authorization": f"Bearer {body['token']}"}, body["id"]
