@@ -45,7 +45,22 @@ jobs:
       # --cov reports and never gates. The number is printed for whoever
       # wants to read it; nothing fails on it, because the three most recent
       # defects here all lived on covered lines (Item 26, ADR-008).
-      - run: pytest --cov
+      - run: pytest --cov --cov-report=term --cov-report=html
+
+      # The HTML report, uploaded as an artifact. The terminal number tells you
+      # THAT something is uncovered; only this tells you WHICH lines, and the
+      # per-file pages are where the Item 26 findings actually came from.
+      #
+      # if: always() so a failing test still leaves the report behind — a run
+      # that broke is exactly when you want to look.
+      - name: Coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-backend
+          path: htmlcov/
+          retention-days: 14
+
       - run: pylint src
 
   # A second job, not more steps in the first: the mocked suite must stay

@@ -1541,6 +1541,21 @@ completo e obrigatório está em
   - Verificação: `pytest` **331**, integração **68** (partiu de 60), `pylint`
     exit 0, três quebras deliberadas.
 
+- **Fase 5, Item 29 — CI/CD: CONCLUÍDO.** Branch `feat/ci-completeness` nos
+  dois repositórios. **Não mesclada.** Detalhes no
+  [diário](../learning-path-progress.md).
+  - **O título engana:** o corpo do item não menciona deploy — ele lista
+    garantias de CI. CD de verdade exige onde implantar (Item 30 + provedor).
+  - **Migration check instantâneo, sem banco.** O Item 19 já verifica
+    migrations, mas com PostgreSQL de pé. Faltava a checagem de **múltiplas
+    heads** — o erro mais comum de Alembic, que só aparece ao tentar aplicar.
+    Agora roda na suíte rápida; provado forjando uma segunda head.
+  - **Artefatos de cobertura** publicados nos dois CIs, com `if: always()`.
+  - **Branch protection NÃO foi ligado, por decisão** — ver a pendência
+    reescrita abaixo.
+  - Verificação: `pytest` **333** (partiu de 331), integração 68, `pylint`
+    exit 0; frontend 305.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1593,13 +1608,14 @@ completo e obrigatório está em
   verificada. Quem retomar a trilha deve continuar acumulando aqui e planejar
   um ciclo próprio de varredura quando o `learning_path.md` acabar.
 
-- **A FASE 4 ESTÁ FECHADA** (Itens 17 a 28). **Próximo é o Item 29 — CI/CD**,
-  que abre a **Fase 5** e é o primeiro dos dois bloqueios restantes do primeiro
-  deploy; o outro é o `Dockerfile` (Item 30). O CI já existe desde o Item 16 —
-  o que falta é o CD e o branch protection.
+- **Próximo — o Item 30** (containers e configuração por ambiente), que é o
+  **último bloqueio restante do primeiro deploy** e o penúltimo item da trilha.
+  Depois dele sobra só o **31** (performance orientada por medição), onde mora
+  o bundle de 608 kB.
 
-  **Duas branches não mescladas:** `feat/rate-limiting` e `feat/orphan-sweep`,
-  ambas no `Refund-api` (a segunda empilhada sobre a primeira).
+  **Três branches não mescladas no `Refund-api`** — `feat/rate-limiting`,
+  `feat/orphan-sweep` e `feat/ci-completeness`, empilhadas nessa ordem — e
+  **uma no `Refund-FrontEnd`** (`feat/ci-completeness`).
 
   **3 órfãos reais aguardando decisão** — ver o Item 28. — as quatro foram mescladas em
   2026-08-09. **Validação em navegador dos Itens 25 e 26: não se aplica**,
@@ -2471,7 +2487,24 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   configuração lida em tempo de importação é exatamente o que o **Item 17**
   existe para resolver. O CI transformou uma pendência abstrata em obstáculo
   concreto.
-- **O CI não bloqueia merge nem push.** Ele reporta. Tornar o check
+- **O CI não bloqueia merge nem push — DECISÃO CONSCIENTE desde 2026-08-09,
+  não esquecimento.** Confirmado pela API naquele dia: `Branch not protected`.
+
+  **O motivo de não ligar:** exigir que os checks passem **quebra o fluxo
+  atual**. Hoje o trabalho é mesclado local e empurrado direto na `main`; com
+  checks obrigatórios o GitHub **recusa o push**, porque o check só roda depois
+  do push e o push só é aceito depois do check. Na prática obriga Pull Request
+  em toda mudança, inclusive num commit de documentação — atrito real para um
+  desenvolvedor solo.
+
+  **O que isso deixa em aberto:** a classe de problema que motivou o Item 16
+  (o commit `2d07a8d` quebrando a `main` sem ninguém ver) segue **detectável,
+  não impedida**.
+
+  **Quando revisar:** quando houver uma segunda pessoa no repositório. Aí o
+  custo do PR deixa de ser atrito e passa a ser o mecanismo de revisão.
+
+  O registro original: Ele reporta. Tornar o check
   obrigatório exige **branch protection** no painel do GitHub (Settings →
   Branches → *Require status checks to pass*), nos dois repositórios. Enquanto
   não estiver ligado, o portão avisa mas não tranca — e a classe de problema

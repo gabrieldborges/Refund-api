@@ -5613,3 +5613,77 @@ item.
   segurança**, e as duas coisas por motivos distintos.
 - Listagem paginada: ler só a primeira página é pior que não listar, porque
   produz uma resposta confiante e errada.
+
+## Item 29 — CI/CD (2026-08-09)
+
+**Status:** concluído em 2026-08-09, na branch `feat/ci-completeness` dos dois
+repositórios. Abre a Fase 5.
+
+### O título engana
+
+O item se chama CI/**CD**, mas o corpo dele não menciona deploy uma vez:
+
+> *"integração contínua executa as mesmas garantias em toda alteração:
+> lockfile, typecheck, boundaries, testes, lint, build e migration check.
+> Prática: pipelines independentes por aplicação, cache de dependências e
+> artefatos de cobertura."*
+
+CD de verdade exige onde implantar, e isso é o Item 30 mais um provedor. Este
+item é sobre **completar o CI**, e a maior parte já existia desde o Item 16.
+
+### Três lacunas, uma delas recusada
+
+**A. Migration check só existia caro.** O Item 19 verifica migrations muito
+bem — upgrade, downgrade revisão a revisão, sem diff pendente de autogenerate —
+mas tudo isso roda com PostgreSQL de pé. A verificação de **múltiplas heads**
+não existia em lugar nenhum.
+
+É o erro mais comum de Alembic: duas migrations escritas em paralelo declaram o
+mesmo pai, a história bifurca, e `upgrade head` falha com *"Multiple head
+revisions are present"*. **Ninguém descobre até tentar aplicar** — o que, sem
+produção, seria no primeiro deploy.
+
+E é uma checagem instantânea que **não precisa de banco**: o `ScriptDirectory`
+lê o diretório de versões e nunca abre conexão. Foi para a suíte rápida, que é
+onde um erro tão comum deve ser pego. Provado forjando uma segunda head: os
+dois testes falham.
+
+**B. Cobertura não virava artefato.** Era impressa no log e sumia. Agora o
+relatório HTML é publicado nos dois repos, com `if: always()` — uma execução
+que quebrou é justamente quando se quer olhar.
+
+**C. Branch protection: NÃO foi ligado, e isso é decisão registrada.**
+
+Confirmei pela API que está desligado (`Branch not protected`). É a pendência
+aberta desde o Item 16 — o CI reporta mas não tranca.
+
+O que me fez apresentar isso como decisão em vez de simplesmente ligar: **exigir
+que os checks passem quebra o fluxo atual**. Hoje o Gabriel mescla local e
+empurra direto na `main`. Com checks obrigatórios o GitHub **recusa o push**,
+porque o check só roda depois do push e o push só é aceito depois do check.
+Na prática, obriga a trabalhar por Pull Request.
+
+Para um desenvolvedor solo, isso é atrito em toda mudança, inclusive num commit
+de documentação. **A decisão foi não ligar** — e a pendência passa a registrar
+*por que*, em vez de figurar como esquecimento. Revisar quando houver uma
+segunda pessoa.
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` | **333 passed** (partiu de 331) |
+| `pytest -m integration` | **68 passed** |
+| `pylint src; echo $?` | 10.00/10, **exit 0** |
+| `npm run test:coverage` | **305 passed** |
+| Quebra: segunda head forjada | 2 failed |
+
+### O que lembrar
+
+- **Uma verificação cara e uma barata não são substitutas.** O check completo
+  de migrations existia e era bom; faltava o instantâneo, que pega o erro mais
+  comum sem infraestrutura nenhuma.
+- Artefato de cobertura vale mais que o número: o número diz *que* falta, o
+  HTML diz *o quê*.
+- **Um portão que muda o fluxo de trabalho é decisão de quem trabalha**, não
+  configuração que se liga por completude.
