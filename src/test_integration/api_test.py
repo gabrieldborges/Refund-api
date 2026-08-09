@@ -469,6 +469,42 @@ def test_security_headers_are_present_on_every_response(api_client):
     assert response.headers["Referrer-Policy"] == "no-referrer"
 
 
+# REGRESSION. X-Frame-Options: DENY was applied to every response including
+# /files, and a PDF preview renders through <object> — which IS framing. Images
+# kept working because <img> is not framing, so the symptom read as "PDFs are
+# broken" rather than "a header is too broad". Reported from the browser; no
+# test caught it, because the Item 27 tests asserted the header was PRESENT,
+# which it correctly was.
+#
+# The assertion is deliberately about the ABSENCE of the header on this path.
+@pytest.mark.integration
+def test_file_responses_can_be_embedded_by_the_frontend(authenticated):
+    client, headers, _ = authenticated
+    refund_id = create_refund(client, headers).json()["attributes"]["id"]
+    url = client.get(f"/refunds/{refund_id}/receipt", headers=headers).json()["url"]
+
+    response = client.get(url.split("localhost:3333")[-1])
+
+    assert "X-Frame-Options" not in response.headers
+    # Replaced by the modern header, which unlike X-Frame-Options can name WHO
+    # may embed — SAMEORIGIN would not do, since the file comes from the API's
+    # port and the page from the frontend's.
+    policy = response.headers["Content-Security-Policy"]
+    assert "frame-ancestors" in policy
+    for origin in settings.cors_origins:
+        assert origin in policy
+
+
+# The relaxation must be confined to /files. An API response embedded anywhere
+# is still clickjacking material.
+@pytest.mark.integration
+def test_api_responses_still_refuse_to_be_framed(api_client):
+    response = api_client.get("/health")
+
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Content-Security-Policy"] == "frame-ancestors 'none'"
+
+
 # READINESS is a different question from liveness: "can this instance serve?",
 # not "is the process alive?". Until Item 30 nothing answered it — /health said
 # ok with the database unreachable, measured — and an orchestrator reading that

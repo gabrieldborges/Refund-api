@@ -63,9 +63,29 @@ e-mail — não existe no projeto. Trade-off consciente, não descuido.
 problem+json como todo erro (ADR-005).
 
 **Três headers**, cada um com motivo local: `nosniff` porque esta API serve
-arquivos enviados por usuários; `DENY` de frame porque ela não tem UI própria; e
-`Referrer-Policy: no-referrer` porque uma URL assinada carrega token na query e
-não pode vazar no `Referer`.
+arquivos enviados por usuários; recusa de enquadramento porque ela não tem UI
+própria; e `Referrer-Policy: no-referrer` porque uma URL assinada carrega token
+na query e não pode vazar no `Referer`.
+
+**Amendamento (2026-08-09): o enquadramento é decidido POR CAMINHO, e aplicar
+`X-Frame-Options: DENY` a tudo foi um erro que quebrou o preview de PDF.**
+
+Um PDF é exibido por `<object>` — e `<object>` **é** enquadramento. Imagens
+continuaram funcionando porque `<img>` não é, então o sintoma se leu como "PDF
+quebrou" e não como "um header está largo demais". Relatado do navegador; **os
+testes deste item não pegaram**, porque afirmavam que o header estava
+*presente*, e ele estava.
+
+`SAMEORIGIN` não resolveria: o arquivo vem da porta da API e a página da porta
+do frontend, que são origens diferentes. E com `STORAGE_BACKEND=s3` o arquivo
+nem passa por este middleware — os dois backends se comportariam de forma
+diferente, o que é pior que o bug.
+
+As respostas de `/files/` passam a levar
+`Content-Security-Policy: frame-ancestors` com as **mesmas origens já
+confiadas para chamar a API** — o header moderno consegue dizer *quem* pode
+embutir, coisa que o `X-Frame-Options` não consegue. Todo o resto mantém a
+resposta mais estrita, nos dois headers.
 
 ## Consequências
 

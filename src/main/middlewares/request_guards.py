@@ -37,6 +37,10 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+# The one path whose whole purpose is to be embedded by our own page.
+FILES_PREFIX = "/files/"
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         response = await call_next(request)
@@ -45,9 +49,32 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # bytes and run it. This API serves uploaded files, so a stored .png
         # that is really markup is precisely the case.
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        # The API has no UI of its own; nothing here should ever be framed.
-        response.headers.setdefault("X-Frame-Options", "DENY")
         # Keeps a signed file URL — which carries a token in its query string —
         # out of the Referer header when a browser follows a link away.
         response.headers.setdefault("Referrer-Policy", "no-referrer")
+
+        # FRAMING IS DECIDED PER PATH, and getting this wrong broke PDF
+        # previews. X-Frame-Options: DENY was applied to every response,
+        # including /files — and a PDF is rendered by <object>, which is
+        # framing. Images kept working because <img> is not, so the bug looked
+        # like "PDFs are broken" rather than "a header is too broad".
+        #
+        # SAMEORIGIN would not fix it: the file comes from the API's port and
+        # the page from the frontend's, which are different origins. And with
+        # STORAGE_BACKEND=s3 the file never passes through here at all, so the
+        # two storage backends would behave differently — worse than the bug.
+        #
+        # So files get Content-Security-Policy instead, which unlike
+        # X-Frame-Options can name WHO may embed: the same origins already
+        # trusted to call the API. Everything else keeps the strictest answer,
+        # in both the old header and the modern one.
+        if request.url.path.startswith(FILES_PREFIX):
+            allowed = " ".join(settings.cors_origins)
+            response.headers.setdefault(
+                "Content-Security-Policy", f"frame-ancestors 'self' {allowed}"
+            )
+        else:
+            response.headers.setdefault("X-Frame-Options", "DENY")
+            response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+
         return response

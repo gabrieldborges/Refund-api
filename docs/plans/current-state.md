@@ -2583,6 +2583,24 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   polui a saída da suíte de integração com 9 avisos. **Não foi silenciado de
   propósito:** é sinal real de que o projeto precisa subir de Python, não
   ruído. O CI e o `.venv` estão em 3.9 porque foi assim que o projeto começou.
+- **REGRESSÃO INTRODUZIDA E CORRIGIDA: o `X-Frame-Options: DENY` do Item 27
+  quebrou o preview de PDF.** Relatado pelo Gabriel em 2026-08-09, do
+  navegador. O header foi aplicado a **toda** resposta, inclusive `/files/` —
+  e um PDF é exibido por `<object>`, que **é** enquadramento. Imagens seguiram
+  funcionando porque `<img>` não é, então o sintoma se leu como "PDF quebrou"
+  em vez de "um header está largo demais".
+
+  **Os testes do Item 27 não pegaram**, e o motivo é o de sempre nesta sessão:
+  eles afirmavam que o header estava **presente** — e estava. Ninguém afirmava
+  que um PDF ainda **renderiza**. **Quarta vez com essa forma**: testei a peça,
+  não a montagem.
+
+  **Corrigido escopando por caminho**, não afrouxando: `/files/` recebe
+  `Content-Security-Policy: frame-ancestors` com as mesmas origens já confiadas
+  para chamar a API; todo o resto mantém `DENY` mais `frame-ancestors 'none'`.
+  `SAMEORIGIN` não serviria (portas diferentes são origens diferentes), e com
+  S3 o arquivo nem passa pelo middleware — os dois backends divergiriam.
+  Teste de regressão afirma a **ausência** do header em `/files/`.
 - **O erro de CORS é o ÚNICO que escapa do envelope de problem+json.** Uma
   origem não autorizada recebe `400 Bad Request` com o corpo em texto puro
   `Disallowed CORS origin`, gerado pelo `CORSMiddleware` do Starlette. Ele roda
