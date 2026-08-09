@@ -2583,6 +2583,24 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   polui a saída da suíte de integração com 9 avisos. **Não foi silenciado de
   propósito:** é sinal real de que o projeto precisa subir de Python, não
   ruído. O CI e o `.venv` estão em 3.9 porque foi assim que o projeto começou.
+- **O erro de CORS é o ÚNICO que escapa do envelope de problem+json.** Uma
+  origem não autorizada recebe `400 Bad Request` com o corpo em texto puro
+  `Disallowed CORS origin`, gerado pelo `CORSMiddleware` do Starlette. Ele roda
+  **antes** dos nossos exception handlers, então não vira documento RFC 9457,
+  não tem `request_id` e não aparece com contexto no log de acesso.
+
+  **O sintoma engana**, e isso foi observado de verdade em 2026-08-09: o
+  Gabriel rodou `npm run preview` (porta 4173, fora da lista de origens) e
+  relatou "não consigo logar nem criar conta, o backend recebe a requisição e
+  responde 400". Parecia rejeição de credencial; era a **pergunta prévia do
+  navegador** sendo recusada, e o cadastro nunca chegou a ser tentado — provado
+  por `curl`, que criou a conta com 201 no mesmo instante.
+
+  **Mitigado, não resolvido:** a porta 4173 entrou no `.env.example` e no `.env`
+  local, então o caso concreto não morde mais. Padronizar a resposta exigiria
+  um handler próprio antes do CORSMiddleware ou substituí-lo — e vale pesar se
+  compensa, porque um erro de CORS é lido no console do navegador, não pelo
+  cliente HTTP.
 - **O `.venv` do `Refund-api` tem shebangs de um caminho antigo**
   (`.../React/Refund-api`). Consequência prática: `pytest` e `pylint` só rodam
   como `.venv/bin/python3 -m pytest` / `-m pylint`, nunca pelos executáveis
