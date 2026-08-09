@@ -1419,7 +1419,8 @@ completo e obrigatório está em
 
 - **Fase 4, Item 25 — Testes de integração e contrato: CONCLUÍDO.**
   Em dois repositórios: `feat/api-contract-tests` no `Refund-api` e
-  `feat/contract-test` no `Refund-FrontEnd`. **Nenhuma mesclada.** Detalhes no
+  `feat/contract-test` no `Refund-FrontEnd`. **Mescladas e empurradas em
+  2026-08-09.** Detalhes no
   [diário](../learning-path-progress.md) e na
   [ADR-007](../decisions/ADR-007-contract-testing.md).
   - **`httpx` entrou, e isso PAGA a dívida registrada no Item 23.** Aquela
@@ -1455,8 +1456,10 @@ completo e obrigatório está em
   que este documento registrou seis vezes: nasce verdadeiro e morre em silêncio.
 
 - **Fase 4, Item 26 — Cobertura como diagnóstico: CONCLUÍDO.**
-  Branch `feat/coverage` nos dois repositórios. **Nenhuma mesclada.** Detalhes
-  no [diário](../learning-path-progress.md) e na
+  Branch `feat/coverage` nos dois repositórios, **empilhada sobre a do Item 25
+  em cada um** — um fast-forward por repo levou os dois itens. **Mescladas e
+  empurradas em 2026-08-09**, com verificação repetida depois de cada merge.
+  Detalhes no [diário](../learning-path-progress.md) e na
   [ADR-008](../decisions/ADR-008-coverage.md).
   - **Nada reprova num número, e o motivo é local:** os três defeitos mais
     recentes deste projeto viviam em **linhas cobertas** (handler na classe
@@ -1536,9 +1539,9 @@ completo e obrigatório está em
 - **Próximo — o Item 27** (rate limiting e segurança operacional) ou o **28**
   (tarefas assíncronas com fila), que fecham a Fase 4.
 
-  **QUATRO BRANCHES NÃO MESCLADAS ACUMULANDO:** `feat/api-contract-tests` e
-  `feat/coverage` no `Refund-api`; `feat/contract-test` e `feat/coverage` no
-  `Refund-FrontEnd`. As de cobertura estão empilhadas sobre as de contrato.
+  **Nenhuma branch de trabalho pendente** — as quatro foram mescladas em
+  2026-08-09. **Validação em navegador dos Itens 25 e 26: não se aplica**,
+  nenhum dos dois toca tela.
 
   **Nenhuma validação em navegador pendente** pela primeira vez em três itens:
   a sessão de 2026-08-09 zerou o acúmulo dos Itens 22, 23 e 24 e fechou quatro
