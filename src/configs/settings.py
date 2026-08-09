@@ -39,6 +39,11 @@ class Settings(BaseSettings):
 
     environment: Literal["local", "test", "production"] = "local"
 
+    # Anything the logging module accepts. INFO by default because the access
+    # log lives at that level: DEBUG would add library noise, WARNING would
+    # hide every successful request.
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+
     # Constraints go inside Annotated rather than in a `= Field(...)` default.
     # Both forms behave identically at runtime, but the assignment form makes
     # static analysis infer the attribute as FieldInfo instead of the declared

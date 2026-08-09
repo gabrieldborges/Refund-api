@@ -1302,6 +1302,31 @@ completo e obrigatório está em
     frontend **289 passed** (3 rodadas, partiu de 283), `tsc` 0, lint 0/0,
     build ok. Os quatro caminhos de erro conferidos **contra a API rodando**.
 
+- **Fase 4, Item 24 — Logs estruturados e request ID: CONCLUÍDO.**
+  Na branch `feat/structured-logs` do `Refund-api`, só backend. **Não
+  mesclada.** Detalhes no [diário](../learning-path-progress.md) e na
+  [ADR-006](../decisions/ADR-006-structured-logging.md).
+  - **Cumpre a promessa do Item 23:** o `request_id` do corpo do erro agora
+    aparece nos logs. **Verificado contra a API rodando** — o `X-Request-Id` do
+    header e o id da linha de log são iguais.
+  - **JSON fora de `local`**, linha humana em desenvolvimento. Sem dependência
+    nova (formatter de ~20 linhas; `python-json-logger` seria a terceira
+    dependência recusada por esse motivo).
+  - **`contextvar` + `logging.Filter`** para o id chegar a linhas que estão
+    quatro camadas abaixo da rota e não têm o `Request`. A dúvida real —
+    atravessa o `BaseHTTPMiddleware`? — foi medida, não suposta.
+  - **Access log do uvicorn silenciado por SEGURANÇA:** ele grava a query
+    crua, o que colocaria uma URL assinada válida do Item 22 no log.
+    Silenciado no código, não no `run.py`, para valer com `uvicorn ...` direto.
+  - **Nunca vão para o log:** corpo e headers. A query vai **mascarada**
+    (`token`, `password`, `secret`), preservando o nome do parâmetro.
+  - **A terceira quebra deliberada NÃO falhou** e revelou lacuna real: os
+    testes provavam que o filtro funciona, nenhum provava que está
+    **instalado**. Teste acrescentado. **Mesma classe de lacuna do Item 23** —
+    duas vezes seguidas o buraco foi "testei a peça, não a montagem".
+  - Verificação: `pytest` **317 passed** (partiu de 295), `pylint` exit 0, mais
+    a API real nos dois formatos com o token mascarado nos dois.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1354,11 +1379,12 @@ completo e obrigatório está em
   verificada. Quem retomar a trilha deve continuar acumulando aqui e planejar
   um ciclo próprio de varredura quando o `learning_path.md` acabar.
 
-- **Próximo — o Item 24** (logs estruturados, request ID, métricas), que já tem
-  meio caminho andado: o `request_id` do Item 23 existe e é para ser **reusado**
-  nos logs, não recriado. O `logging` da stdlib entrou no Item 21.
+- **Próximo — o Item 25** (testes de integração e contrato), que o Item 19 já
+  destravou ao criar a infraestrutura de banco descartável.
 
-  **Validação em navegador acumulada: Itens 22 e 23.** Nenhum dos dois foi
+  **BRANCHES NÃO MESCLADAS ACUMULANDO:** `feat/problem-details` (Item 23, nos
+  dois repos) e `feat/structured-logs` (Item 24, só api). **Validação em
+  navegador acumulada: Itens 22 e 23.** Nenhum dos dois foi
   visto num navegador. O 22 é o mais crítico (o ponto dele é uma URL carregar
   numa `<img>`); o 23 é mais barato de conferir — basta uma ação que falhe e
   ver a mensagem aparecer como antes, já que o contrato foi desenhado para não

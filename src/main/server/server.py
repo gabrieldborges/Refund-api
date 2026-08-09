@@ -3,9 +3,11 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from src.configs.logging_config import configure_logging
 from src.configs.settings import settings
 from src.errors.problem_details import problem_response
 from src.models.entities import users, refunds, refund_reviews  # pylint: disable=unused-import
+from src.main.middlewares.access_log import AccessLogMiddleware
 from src.main.middlewares.request_id import RequestIdMiddleware, request_id_of
 from src.main.routes.auth_routes import auth_routes
 from src.main.routes.refund_routes import refund_routes
@@ -21,6 +23,10 @@ async def lifespan(_app: FastAPI):
     # missing columns, so the app would start against a half-updated schema.
     yield
 
+
+# Before the app exists, so anything logged during startup already goes
+# through the configured handler instead of Python's lastResort.
+configure_logging()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -40,6 +46,10 @@ app.add_middleware(
 # after losing access to the refund. They go through authenticated routes
 # instead (GET /refunds/{id}/receipt and GET /users/{id}/avatar).
 
+# ORDER MATTERS, and Starlette applies add_middleware in REVERSE — the last
+# one added is the outermost. RequestIdMiddleware must be outermost so the id
+# exists before AccessLogMiddleware writes its line, so it is added LAST.
+app.add_middleware(AccessLogMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
 

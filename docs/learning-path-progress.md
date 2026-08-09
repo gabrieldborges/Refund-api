@@ -5020,3 +5020,102 @@ suíte **não** cobre.
   ou de registro — ler o código não mostra nem uma coisa nem outra.
 - Uma migração de contrato sem momento quebrado vale muito, e às vezes ela sai
   de graça se o formato novo for escolhido com o antigo em mente.
+
+## Item 24 — Logs estruturados e request ID (2026-08-09)
+
+**Status:** concluído em 2026-08-09, na branch `feat/structured-logs` do
+`Refund-api`. Só backend. Detalhes de decisão na
+[ADR-006](../decisions/ADR-006-structured-logging.md).
+
+### O estado anterior, medido
+
+Uma chamada de log no projeto inteiro e **zero configuração**, então tudo caía
+no `lastResort` do Python: sem hora, sem nível, sem nome do logger. E uma linha
+`INFO` era **descartada em silêncio**, porque o `lastResort` corta abaixo de
+`WARNING`.
+
+Havia uma promessa pendente do Item 23: ele pôs um `request_id` no corpo de
+todo erro dizendo que casaria com um log. Não casava com nada.
+
+### Por que `contextvar` e não parâmetro
+
+`request.state` serve para quem tem o `Request`. Uma linha de log não tem: o
+`file_cleanup.py` loga de dentro de um controller, **quatro camadas abaixo da
+rota**. Passar o request por essas camadas até um logger seria a forma errada
+do problema.
+
+`contextvar` é a ferramenta para "valor ambiente durante esta tarefa". E o
+`logging.Filter` é o que garante que **toda** linha o carregue — uma linha que
+só às vezes tem o id é quase tão ruim quanto nenhuma, porque não dá para
+distinguir "outra requisição" de "alguém esqueceu".
+
+**A dúvida real era se o contextvar atravessa o `BaseHTTPMiddleware`**, que roda
+o app downstream em outra task. Atravessa, porque a task copia o contexto no
+momento em que é criada e nós gravamos antes de chamar adiante. **Verificado
+contra a API rodando**, comparando o `X-Request-Id` do header com o id da linha
+de log: iguais.
+
+### O mascaramento tinha alvo concreto
+
+Não é higiene abstrata. O Item 22 serve arquivos por URL assinada:
+
+```
+/files/receipts/a3f2.png?token=eyJhbGciOi...
+```
+
+Um log de acesso ingênuo grava isso inteiro — **uma credencial funcionando, com
+carimbo de hora, num arquivo que sobrevive anos aos cinco minutos do token**.
+
+E é por isso que o access log do uvicorn foi silenciado: ele grava a query
+crua. Decisão de segurança, não de estética.
+
+### Duas coisas que só a saída real mostrou
+
+**1. `token=%2A%2A%2A`.** O `urlencode` percent-encodava a máscara. Ilegível e
+esconde a intenção. `safe="*"` resolve.
+
+**2. `color_message` vazando com escapes ANSI.** O uvicorn anexa aos próprios
+records a mesma mensagem colorida. Minha regra "tudo que não é campo padrão é
+extra do usuário" pegava isso e cuspia `\x1b[32m` no log.
+
+Nenhuma das duas apareceria lendo o código.
+
+### A quebra deliberada que não falhou
+
+Três quebras. Duas pegas na hora:
+
+| Quebra | Resultado |
+|---|---|
+| Mascaramento desligado | **6 failed** |
+| `uvicorn.access` volta a logar | 1 failed |
+| **Filtro do `request_id` removido** | **0 failed** ← |
+
+A terceira expôs uma lacuna real: meus testes chamavam `RequestIdFilter().filter()`
+direto, provando que o filtro **funciona**, e nenhum provava que ele está
+**instalado** no handler. São afirmações diferentes, e só a segunda era o risco.
+Acrescentei o teste; a quebra passou a falhar.
+
+**É a mesma classe de lacuna do Item 23** (handler registrado na exceção
+errada, invisível para a suíte). Duas vezes seguidas o buraco foi "testei a
+peça, não a montagem".
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` | **317 passed, 32 deselected** (partiu de 295) |
+| `pylint src; echo $?` | 10.00/10, **exit 0** |
+| API real, `ENVIRONMENT=production` | JSON parseável, uma linha por requisição |
+| `X-Request-Id` do header vs. log | **iguais** |
+| Token na query | `token=***`, zero ocorrências do valor |
+| API real, `ENVIRONMENT=local` | linha humana, token também mascarado |
+
+### O que lembrar
+
+- **Testar a peça não é testar a montagem.** Duas vezes seguidas o defeito
+  estava no registro/instalação, não na lógica.
+- `contextvar` para valor ambiente; parâmetro para dependência.
+- Log que grava query string precisa de mascaramento **antes** de existir uma
+  URL assinada, não depois.
+- Métricas e tracing ficaram de fora por instrução do item: entram quando
+  existir onde observá-los.
