@@ -1679,9 +1679,6 @@ completo e obrigatório está em
   4. **3 arquivos órfãos** aguardando decisão (Item 28).
   5. O resto desta seção.
 
-  **Duas branches não mescladas:** `perf/measured-index` no `Refund-api` e
-  `perf/self-host-font` no `Refund-FrontEnd`.
-
   **O que a trilha NÃO entregou, e continua verdadeiro:** não existe deploy. Os
   cinco bloqueios foram endereçados, mas escolher e configurar um provedor não
   é código e nunca foi feito.
