@@ -2,6 +2,7 @@ import os
 import uuid
 from typing import List
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 from src.configs.settings import settings
 from .interfaces.file_storage_interface import FileStorageInterface, StoredFile
@@ -28,6 +29,21 @@ class S3FileStorage(FileStorageInterface):
         # Built per call rather than held on the instance. boto3 clients are
         # not documented as thread-safe to share, and creating one is cheap
         # compared to the network round trip that follows it.
+        #
+        # On real AWS, boto3's default addressing signs the request for the
+        # configured region but points it at the global host
+        # (bucket.s3.amazonaws.com). S3 answers with a redirect to the
+        # regional host, but the signature covers `host`
+        # (X-Amz-SignedHeaders=host), so it no longer matches after the
+        # redirect and the request fails. Forcing virtual-hosted addressing
+        # makes boto3 build the regional host up front, so no redirect ever
+        # happens.
+        #
+        # That config must NOT apply to a custom endpoint: MinIO (and the
+        # integration suite that runs against it) has no wildcard DNS, so
+        # "bucket.localhost:9100" does not resolve. Only real AWS gets it.
+        config = None if settings.s3_endpoint_url else Config(s3={"addressing_style": "virtual"})
+
         return boto3.client(
             "s3",
             # Empty endpoint means real AWS; anything else points at MinIO or
@@ -36,6 +52,7 @@ class S3FileStorage(FileStorageInterface):
             region_name=settings.s3_region,
             aws_access_key_id=settings.s3_access_key_id,
             aws_secret_access_key=settings.s3_secret_access_key.get_secret_value(),
+            config=config,
         )
 
     def __key(self, filename: str) -> str:
