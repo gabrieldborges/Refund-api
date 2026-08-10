@@ -1,4 +1,4 @@
-from sqlalchemy import Table, Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Table, Column, Integer, String, DateTime, ForeignKey, Index
 from sqlalchemy.sql import func
 from src.models.settings.metadata import metadata
 
@@ -30,4 +30,8 @@ RefundReviews = Table(
     # refund_reviewer_validator.
     Column("reason", String, nullable=True),
     Column("created_at", DateTime, server_default=func.now()),  # pylint: disable=not-callable
+    # An unindexed foreign key makes two things slow: reading a refund's
+    # history, which every detail screen does, and deleting the parent, which
+    # scans this table looking for children.
+    Index("ix_refund_reviews_refund", "refund_id"),
 )

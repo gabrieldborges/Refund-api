@@ -5778,3 +5778,98 @@ coverage e httpx**, código que nunca roda servindo requisição.
 - Decisão de otimização com número: um terço da imagem era ferramenta de teste.
 - **A imagem é construída sobre Python 3.9, que já não recebe correção de
   segurança.** É o argumento mais concreto até agora para subir de versão.
+
+## Item 31 — Performance orientada por medição (2026-08-09) — ÚLTIMO ITEM
+
+**Status:** concluído em 2026-08-09, em duas branches: `perf/measured-index` no
+`Refund-api` e `perf/self-host-font` no `Refund-FrontEnd`. **Fecha a trilha.**
+Linha de base em [`performance-budget.md`](../performance-budget.md).
+
+### A apresentação foi refeita, pela terceira vez
+
+Igual aos Itens 26 e 30, e desta vez com um agravante: **este item pode
+terminar em "não faça nada"**, e eu abri com tabelas de números — o que faz
+parecer que existe um problema quando talvez não exista.
+
+Refiz partindo do que o projeto já tinha vivido: **o flick da Home**. Duas
+correções, as duas removidas por não resolverem, e o registro da época dizendo
+*"duas correções erradas seguidas indicam falta de observação, não de ideia"*.
+Aquilo é este item inteiro, em um exemplo que o Gabriel viveu.
+
+### Três premissas minhas caíram, em sequência
+
+Vale registrar a cadeia, porque cada erro produziu o seguinte:
+
+**1. "Desktop não simula rede lenta."** Falso. O preset Desktop do Lighthouse
+simula ~40 ms de latência e 10 Mbps. Eu tinha usado essa premissa para declarar
+o bundle **inocente**.
+
+**2. O primeiro 3s não era Desktop, era Mobile.** O Gabriel corrigiu depois. Ou
+seja, a hipótese que eu construí — *"3s sem rede simulada significa que algo
+está esperando"* — estava apoiada em premissa errada **duas vezes**.
+
+**3. A fonte não era o gargalo.** Auto-hospedei a Open Sans e o LCP em Mobile
+foi de **3s para 2,9s**. Ruído.
+
+O motivo, que eu deveria ter previsto: com `font-display: swap` o texto **já
+pintava** com a fonte de sistema. O que bloqueava era só o `<link>` do CSS — e
+eu troquei três idas externas por um arquivo local de 43 kB, que em 4G lento
+também custa. Empate.
+
+**A medição que motivou a mudança era real e independente** (0,43–0,51s de
+requisição bloqueante, medida com `curl`). Ela só não era a maior.
+
+### O que a medição correta mostrou
+
+Com a atribuição por dependência, usando a saída do próprio Vite:
+
+```
+dependências: 188 kB gzip (81%)   nosso código: 44 kB gzip (19%)
+```
+
+E **não há gordura**: nenhuma biblioteca duplicada, nenhum import de raiz
+trazendo adaptadores que não se usa (conferi o `@hookform/resolvers` — o
+subcaminho está certo), nenhuma dependência esquecida. Os 188 kB são o preço
+de React + Router + Query + RHF + Zod + i18next + axios.
+
+Ganho disponível sem trocar de biblioteca: ~20 kB de 232, ou **~0,15s de
+2,9s**. O item existe para dizer que isso não vale a complexidade.
+
+### O que ficou
+
+**O índice**, porque é medido: 0,33 ms com 80 linhas (o planejador nem usaria),
+2,07 → **0,52 ms com 50 mil**. Não muda nada hoje e não deveria; é a proteção
+mais barata que existe contra crescimento — uma migration, zero código.
+
+**O orçamento escrito**, que é a outra metade do que o item pede. Inclui uma
+seção **"o que NÃO é sintoma"**, com os três enganos que já custaram tempo
+aqui: o aviso de 500 kB do Vite, o Lighthouse contra `npm run dev`, e comparar
+números medidos em modos diferentes.
+
+**A fonte auto-hospedada fica**, com o registro honesto de que **não moveu o
+LCP**. Ela é boa por outro motivo, que a medição não captura: a tela deixou de
+depender de um terceiro estar no ar para aparecer.
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` | **334 passed** |
+| `pytest -m integration` | **72 passed** |
+| `pylint src; echo $?` | exit 0 |
+| migration `upgrade`/`downgrade`/`upgrade` | ok contra banco real |
+| autogenerate sem diff | ok (índices declarados nas entidades também) |
+| frontend | **305 passed**, `tsc` 0, lint 0/0 |
+| LCP Desktop depois da fonte | **0,6s** |
+| LCP Mobile depois da fonte | **2,9s** (era 3s — ruído) |
+
+### O que lembrar
+
+- **Sintoma primeiro, orçamento segundo, código terceiro.** Duas das minhas
+  três premissas eram falsas, e só medir de novo mostrou isso.
+- **Nunca compare medições de modos diferentes.** Isso me levou a uma conclusão
+  errada nesta mesma sessão.
+- Uma mudança pode ser **certa e irrelevante ao mesmo tempo** — a fonte é as
+  duas coisas, e o registro precisa dizer as duas.
+- Quando a medição mostra que não há gordura, **a resposta é parar**. Foi o
+  mesmo desfecho do Item 28.

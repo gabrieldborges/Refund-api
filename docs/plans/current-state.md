@@ -1586,6 +1586,33 @@ completo e obrigatório está em
   isso é dívida real, e é o argumento mais concreto acumulado para subir de
   versão — junta-se à pendência do boto3.
 
+- **Fase 5, Item 31 — Performance orientada por medição: CONCLUÍDO. FECHA A
+  TRILHA.** Branches `perf/measured-index` (`Refund-api`) e
+  `perf/self-host-font` (`Refund-FrontEnd`). **Não mescladas.** Linha de base
+  em [`performance-budget.md`](../performance-budget.md); detalhes no
+  [diário](../learning-path-progress.md).
+  - **A resposta do item foi PARAR.** A atribuição por dependência mostra
+    **188 kB gzip de bibliotecas (81%) e 44 kB de código nosso (19%)**, sem
+    gordura nenhuma — nenhuma lib duplicada, nenhum import de raiz, nenhuma
+    dependência esquecida. Ganho disponível sem trocar de biblioteca: ~20 kB
+    de 232, ou **~0,15s de 2,9s**.
+  - **Três premissas minhas caíram em sequência:** (1) "Desktop não simula
+    rede" — falso, simula; (2) o primeiro 3s era **Mobile**, não Desktop; (3)
+    a fonte não era o gargalo — auto-hospedá-la levou o LCP Mobile de 3s para
+    **2,9s**, ruído. A medição que a motivou (0,5s de requisição bloqueante,
+    via `curl`) era real, só não era a maior.
+  - **A fonte fica**, com registro honesto de que **não moveu o LCP**: a tela
+    deixou de depender de um terceiro estar no ar para aparecer.
+  - **Índice `ix_refunds_user_created`**, medido: 0,33 ms com 80 linhas (o
+    planejador nem usa), 2,07 → **0,52 ms com 50 mil**. Migration testada
+    `upgrade`/`downgrade`/`upgrade`, e os índices declarados também nas
+    entidades para o autogenerate não acusar diferença.
+  - **Orçamento versionado**, com uma seção **"o que NÃO é sintoma"** listando
+    os três enganos que já custaram tempo aqui: o aviso de 500 kB do Vite, o
+    Lighthouse contra `npm run dev`, e comparar modos diferentes.
+  - Verificação: `pytest` **334**, integração **72**, `pylint` exit 0;
+    frontend **305**, `tsc` 0, lint 0/0. LCP Desktop **0,6s**.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1638,10 +1665,26 @@ completo e obrigatório está em
   verificada. Quem retomar a trilha deve continuar acumulando aqui e planejar
   um ciclo próprio de varredura quando o `learning_path.md` acabar.
 
-- **Próximo — o Item 31** (performance orientada por medição), **o ÚLTIMO da
-  trilha**. É onde mora o bundle de 608 kB com o aviso de chunk > 500 kB aberto
-  desde o restyle, e o item avisa para definir sintoma e orçamento antes de
-  otimizar.
+- **A TRILHA ACABOU.** Itens 1 a 31 concluídos, as cinco fases fechadas.
+
+  **O próximo passo combinado em 2026-08-08 é a VARREDURA DE PENDÊNCIAS** —
+  esta seção acumulou o que foi encontrado ao longo do caminho e nunca
+  corrigido na hora, de propósito. Sugestão de ordem, do mais grave ao menos:
+  1. **Python 3.9 sem correção de segurança**, e a imagem de produção é
+     construída sobre ele. O `boto3` já encerrou o suporte.
+  2. **14 vulnerabilidades do Dependabot** no `Refund-api` (5 high), nunca
+     investigadas.
+  3. **Branch protection desligado** — decisão registrada, revisar se houver
+     uma segunda pessoa.
+  4. **3 arquivos órfãos** aguardando decisão (Item 28).
+  5. O resto desta seção.
+
+  **Duas branches não mescladas:** `perf/measured-index` no `Refund-api` e
+  `perf/self-host-font` no `Refund-FrontEnd`.
+
+  **O que a trilha NÃO entregou, e continua verdadeiro:** não existe deploy. Os
+  cinco bloqueios foram endereçados, mas escolher e configurar um provedor não
+  é código e nunca foi feito.
 
   **Nenhuma branch de trabalho pendente** — as cinco foram mescladas em
   2026-08-09; as quatro do backend estavam empilhadas, então um fast-forward

@@ -18,6 +18,7 @@ frontend e pela API.
 - [Regras de negócio](business-rules.md)
 - [Modelo de domínio](domain-model.md)
 - [Roadmap](roadmap.md)
+- [Orçamento de performance](performance-budget.md) — linha de base medida, e o que não é sintoma
 
 ## Casos de uso
 - [UC-001 — Cadastrar usuário](use-cases/UC-001-register-user.md)

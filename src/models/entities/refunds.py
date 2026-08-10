@@ -1,4 +1,4 @@
-from sqlalchemy import Table, Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Table, Column, Integer, String, DateTime, ForeignKey, Index, text
 from sqlalchemy.sql import func
 from src.models.settings.metadata import metadata
 
@@ -21,4 +21,13 @@ Refunds = Table(
     # enforces that pairing — it lives in RefundPayerController.
     Column("payment_filename", String, nullable=True),
     Column("created_at", DateTime, server_default=func.now()),  # pylint: disable=not-callable
+    # Declared here as well as in the migration so autogenerate does not see a
+    # difference between the entities and the database — the check that the
+    # Item 19 suite runs.
+    #
+    # (user_id, created_at DESC) rather than user_id alone: every listing
+    # filters by owner AND orders by date, so one index serves the lookup and
+    # the sort. Measured before adding (Item 31): no effect at today's 80 rows,
+    # 4x at 50,000.
+    Index("ix_refunds_user_created", "user_id", text("created_at DESC")),
 )
