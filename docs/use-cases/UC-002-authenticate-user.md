@@ -31,6 +31,9 @@ Iniciar uma sessão autenticada para acessar as operações de reembolso.
   inicia a sessão.
 - Se o e-mail não tiver formato válido, a validação da rota rejeita a entrada
   antes da autenticação.
+- Se o mesmo cliente exceder o limite de tentativas na janela vigente, a API
+  responde `429` **sem verificar a senha** (BR-023). A tentativa não conta como
+  falha de credencial: ela não chegou a ser avaliada.
 
 ## Pós-condições
 
@@ -42,6 +45,7 @@ Iniciar uma sessão autenticada para acessar as operações de reembolso.
 
 - [BR-004](../business-rules.md#br-004--proteção-da-senha)
 - [BR-005](../business-rules.md#br-005--resposta-genérica-no-login-inválido)
+- [BR-023](../business-rules.md#br-023--limite-de-tentativas-em-autenticação-e-cadastro)
 
 ## Evidências
 

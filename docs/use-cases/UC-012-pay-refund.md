@@ -167,6 +167,7 @@ justamente porque o avatar é opcional.
 - [BR-016](../business-rules.md#br-016--segregação-de-funções-na-revisão)
 - [BR-017](../business-rules.md#br-017--transições-de-status-permitidas)
 - [BR-022](../business-rules.md#br-022--comprovante-de-pagamento-obrigatório)
+- [BR-024](../business-rules.md#br-024--teto-de-tamanho-da-requisição)
 
 ## Evidências
 

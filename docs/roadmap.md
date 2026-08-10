@@ -12,10 +12,35 @@ Os estados possíveis são:
   implementada.
 
 ## Ideias
-Nenhuma intenção registrada.
+
+- **Deploy.** A trilha endereçou os cinco bloqueios técnicos (CORS, configuração
+  validada, object storage, container, CI), mas **escolher e configurar um
+  provedor nunca foi feito** — e não é código. Enquanto não houver, "publicado"
+  neste projeto significa publicado no GitHub.
+- **Foto de perfil na interface.** O backend serve avatar desde 2026-07-29 e
+  `has_avatar` é sempre `false` porque nenhuma tela renderiza um. É o único
+  item de produto ainda não implementado.
+- **Agregado por status cruzando usuários.** Não existe endpoint que some por
+  status para *todos* os usuários, então o card de dinheiro da Home mostra, para
+  o admin, o total solicitado em vez de aprovado + pago.
 
 ## Em análise
-Nenhuma intenção registrada.
+
+- **Subir a versão do Python.** O projeto roda 3.9, que já não recebe correção
+  de segurança, e a imagem de produção é construída sobre ela; o `boto3` já
+  anunciou o fim do suporte. É a pendência mais grave registrada, e
+  provavelmente destrava boa parte das 14 vulnerabilidades que o Dependabot
+  aponta no `Refund-api`.
 
 ## Aprovadas para planejamento
 Nenhuma intenção registrada.
+
+## Dívida técnica
+
+Este documento registra **intenções de produto**. A dívida técnica acumulada
+vive em [`plans/current-state.md`](plans/current-state.md), na seção de
+pendências, que é a lista canônica — e que existe porque a decisão de
+2026-08-08 foi **acumular durante a trilha e varrer no fim**, em vez de
+corrigir no meio de cada item.
+
+A trilha terminou em 2026-08-09. A varredura é o próximo trabalho.

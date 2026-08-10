@@ -5025,7 +5025,7 @@ suíte **não** cobre.
 
 **Status:** concluído em 2026-08-09, na branch `feat/structured-logs` do
 `Refund-api`. Só backend. Detalhes de decisão na
-[ADR-006](../decisions/ADR-006-structured-logging.md).
+[ADR-006](decisions/ADR-006-structured-logging.md).
 
 ### O estado anterior, medido
 
@@ -5215,7 +5215,7 @@ sendo medir `scrollHeight` por frame — duas correções às cegas já falharam
 **Status:** concluído em 2026-08-09, em dois repositórios:
 `feat/api-contract-tests` no `Refund-api` e `feat/contract-test` no
 `Refund-FrontEnd`. Decisões na
-[ADR-007](../decisions/ADR-007-contract-testing.md).
+[ADR-007](decisions/ADR-007-contract-testing.md).
 
 ### Metade já existia
 
@@ -5328,7 +5328,7 @@ silêncio**. Está escrito no topo dos três arquivos envolvidos, de propósito.
 ## Item 26 — Cobertura como diagnóstico (2026-08-09)
 
 **Status:** concluído em 2026-08-09, na branch `feat/coverage` dos dois
-repositórios. Decisões na [ADR-008](../decisions/ADR-008-coverage.md).
+repositórios. Decisões na [ADR-008](decisions/ADR-008-coverage.md).
 
 ### O item foi reapresentado do zero
 
@@ -5427,7 +5427,7 @@ para código já testado.
 
 **Status:** concluído em 2026-08-09, na branch `feat/rate-limiting` do
 `Refund-api`. Só backend. Decisões na
-[ADR-009](../decisions/ADR-009-abuse-controls.md).
+[ADR-009](decisions/ADR-009-abuse-controls.md).
 
 ### O item manda modelar antes de codar, e o modelo achou coisa
 
@@ -5524,7 +5524,7 @@ com as duas, assinar só com a nova) é o que permitiria.
 **Status:** concluído em 2026-08-09, na branch `feat/orphan-sweep` do
 `Refund-api`. **Cumprido pela metade, explicitamente**, e a metade que ficou de
 fora foi decisão. Decisões na
-[ADR-010](../decisions/ADR-010-orphan-sweep.md).
+[ADR-010](decisions/ADR-010-orphan-sweep.md).
 
 ### O item se autolimita, e isso muda a primeira pergunta
 
@@ -5692,7 +5692,7 @@ segunda pessoa.
 
 **Status:** concluído em 2026-08-09, na branch `feat/container` do
 `Refund-api`. **Fecha o último bloqueio do primeiro deploy.** Decisões na
-[ADR-011](../decisions/ADR-011-container.md).
+[ADR-011](decisions/ADR-011-container.md).
 
 ### A apresentação foi refeita, pela segunda vez na trilha
 
@@ -5783,7 +5783,7 @@ coverage e httpx**, código que nunca roda servindo requisição.
 
 **Status:** concluído em 2026-08-09, em duas branches: `perf/measured-index` no
 `Refund-api` e `perf/self-host-font` no `Refund-FrontEnd`. **Fecha a trilha.**
-Linha de base em [`performance-budget.md`](../performance-budget.md).
+Linha de base em [`performance-budget.md`](performance-budget.md).
 
 ### A apresentação foi refeita, pela terceira vez
 

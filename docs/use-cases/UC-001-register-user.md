@@ -27,7 +27,12 @@ Criar uma conta para acessar as funcionalidades de reembolso.
 - Se nome, e-mail ou senha forem inválidos, a API rejeita a entrada e o
   frontend exibe a mensagem recebida; nenhuma conta é criada.
 - Se o e-mail já estiver cadastrado, o repositório rejeita a duplicidade e a
-  API informa o erro; nenhuma conta é criada.
+  API informa o erro; nenhuma conta é criada. **A mensagem é explícita de
+  propósito**, mesmo revelando que aquele e-mail existe: sem ela, quem já tem
+  conta recebe um erro que não explica nada. O risco de enumeração é mitigado
+  pelo limite de tentativas (BR-023), não pela omissão.
+- Se o mesmo cliente exceder o limite de tentativas na janela vigente, a API
+  responde `429` sem processar o cadastro (BR-023).
 
 ## Pós-condições
 
@@ -42,6 +47,7 @@ Criar uma conta para acessar as funcionalidades de reembolso.
 - [BR-002](../business-rules.md#br-002--unicidade-do-e-mail)
 - [BR-003](../business-rules.md#br-003--papel-inicial-do-usuário)
 - [BR-004](../business-rules.md#br-004--proteção-da-senha)
+- [BR-023](../business-rules.md#br-023--limite-de-tentativas-em-autenticação-e-cadastro)
 
 ## Evidências
 

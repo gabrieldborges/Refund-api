@@ -39,6 +39,9 @@ Registrar uma despesa e seu comprovante como solicitação de reembolso.
 
 ## Fluxos alternativos e erros
 
+- Se o corpo declarar tamanho acima de `MAX_REQUEST_BODY_BYTES`, a API responde
+  `413` **antes de ler o conteúdo** (BR-024). É anterior à checagem de 4MB do
+  arquivo: aquela roda com o upload já em memória.
 - Se o cabeçalho estiver ausente ou não usar `Bearer`, a API responde `401`.
 - Se o JWT for inválido ou estiver expirado, a API responde `401`; o frontend
   limpa os dados locais de sessão e direciona para `/login`.
@@ -81,6 +84,7 @@ Registrar uma despesa e seu comprovante como solicitação de reembolso.
 - [BR-011](../business-rules.md#br-011--propriedade-da-solicitação)
 - [BR-020](../business-rules.md#br-020--acesso-ao-comprovante)
 - [BR-021](../business-rules.md#br-021--acesso-à-foto-de-perfil)
+- [BR-024](../business-rules.md#br-024--teto-de-tamanho-da-requisição)
 
 ## Evidências
 

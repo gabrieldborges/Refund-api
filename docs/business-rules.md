@@ -270,3 +270,59 @@ o `status` como um todo (nenhum `ENUM` nem `CHECK`);
 `src/controllers/refund_payer_controller_test.py::test_admin_pays_an_approved_refund`
 comprova que a resposta de sucesso traz `status: "paid"` sem expor
 `payment_filename`.
+
+## BR-023 — Limite de tentativas em autenticação e cadastro
+
+Um mesmo cliente tem um número máximo de tentativas por janela de tempo em
+`POST /auth/login` e `POST /auth/register`. Excedido o limite, a API responde
+`429` sem processar a tentativa. Os valores são configuração
+(`LOGIN_RATE_LIMIT`, `REGISTER_RATE_LIMIT`, `RATE_LIMIT_WINDOW_SECONDS`), não
+constantes de código.
+
+**Duas ameaças, uma regra.** No login, a [BR-005](#br-005--resposta-genérica-no-login-inválido)
+impede descobrir *quais* e-mails existem, mas nada impedia tentar dez mil senhas
+contra um e-mail já conhecido — e como a senha é verificada com bcrypt
+([BR-004](#br-004--proteção-da-senha)), cada tentativa é cara **para o
+servidor**, o que torna o login também um alvo de exaustão de recursos.
+
+No cadastro a ameaça é outra: ele responde `Email already registered`, que é
+exatamente o que a BR-005 se recusa a revelar no login. **A mensagem foi
+mantida de propósito** — sem ela, quem já tem conta recebe um erro que não
+explica nada. O limite não elimina a enumeração, torna a enumeração **em massa**
+impraticável: dez e-mails seguem possíveis, dez mil não.
+
+**A contagem é por endereço de rede, nunca por e-mail.** Contar por e-mail
+deixaria qualquer pessoa trancar a conta de uma vítima conhecida, queimando a
+cota de propósito — trocaria risco de força bruta por negação de serviço.
+
+**Evidências:** `src/main/middlewares/rate_limit.py` implementa janela
+deslizante (balde de relógio daria o dobro da cota em cada fronteira) e
+identifica o cliente pelo endereço do peer, nunca por `X-Forwarded-For`, que um
+cliente escolhe; `src/main/routes/auth_routes.py` aplica o limite antes de
+qualquer trabalho; `src/test_integration/api_test.py::test_repeated_login_attempts_are_eventually_refused`
+e `::test_bulk_registration_attempts_are_refused` comprovam o `429` por HTTP,
+e `::test_the_two_limits_are_independent` que esgotar um não bloqueia o outro.
+Decisão e limites em [ADR-009](decisions/ADR-009-abuse-controls.md).
+
+## BR-024 — Teto de tamanho da requisição
+
+Uma requisição cujo `Content-Length` declarado exceda `MAX_REQUEST_BODY_BYTES`
+é recusada com `413` **antes** de o corpo ser lido.
+
+Isto não substitui o limite de 4MB por arquivo
+([BR-009](#br-009--formato-e-tamanho-do-comprovante)) — é anterior a ele. Os
+validators conferem o tamanho do arquivo depois que a rota já fez
+`await file.read()`, ou seja, com o conteúdo **inteiro em memória**. O teto
+existe para que um corpo de 2GB seja recusado sem nunca chegar lá.
+
+**Limitação conhecida:** a checagem lê o tamanho *declarado*. Uma requisição
+`chunked` não envia esse cabeçalho e passa, sendo pega apenas pela BR-009 —
+depois de bufferizar, que é o que este teto evita. Fechar isso exigiria contar
+bytes no stream ASGI.
+
+**Evidências:** `src/main/middlewares/request_guards.py` recusa por
+`Content-Length` e responde em `application/problem+json` como todo erro
+([ADR-005](decisions/ADR-005-problem-details.md));
+`src/test_integration/api_test.py::test_an_oversized_body_is_refused_before_it_is_buffered`
+comprova o `413`, e `::test_a_normal_upload_is_unaffected` que um envio normal
+segue passando.

@@ -11,7 +11,7 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-08-07.
+Atualizado em: 2026-08-09.
 
 ## Visão geral
 
@@ -46,16 +46,20 @@ velha sem nenhum aviso. O `git ls-remote` é a única das quatro consultas que
 fala com o servidor; as outras leem o disco. Se as duas discordarem, o
 `ls-remote` é que está certo.
 
-O que era verdade na última verificação (**2026-08-07**), como ponto de
+O que era verdade na última verificação (**2026-08-09**), como ponto de
 partida e não como afirmação durável:
 
 - **`Refund-api`** — `main` e `origin/main` sincronizados. Branches locais
-  antigas já mescladas ainda existem (`feat/authenticated-file-serving`,
-  `feat/refund-payment-and-stats`, `feat/refund-query-and-avatar`); nenhuma é
-  trabalho pendente.
-- **`Refund-FrontEnd`** — `main` e `origin/main` sincronizados. **Nenhuma
-  branch de trabalho pendente**; sobra apenas
-  `backup/claude-session-2026-07-13`, que nunca foi branch de trabalho.
+  antigas já mescladas continuam existindo; nenhuma é trabalho pendente.
+- **`Refund-FrontEnd`** — `main` e `origin/main` sincronizados, sem branch de
+  trabalho pendente além de `backup/claude-session-2026-07-13`, que nunca foi
+  uma.
+
+**Esta data já esteve errada de novo.** Em 2026-08-09 ela dizia 2026-08-07, com
+**quinze commits** depois — encontrado ao auditar a documentação, não por
+alguém tropeçar. É a sétima ocorrência do mesmo padrão, e reforça o que este
+bloco já dizia: **rode os comandos acima; não acredite nesta data.**
+
 
 **Correção registrada:** até 2026-08-07 este documento afirmava, nos itens 15
 e 16, que aquelas branches não tinham sido mescladas. Já tinham. O bloco de
