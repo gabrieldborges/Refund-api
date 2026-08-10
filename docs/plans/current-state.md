@@ -107,6 +107,21 @@ como apodrecer. É a mesma lição que este bloco aplica aos SHAs desde a primei
 ocorrência, agora numa nona forma: **quando uma frase pode envelhecer, descreva
 o mecanismo em vez de afirmar o estado.**
 
+**DÉCIMA E DÉCIMA PRIMEIRA OCORRÊNCIAS, achadas pela revisão de branch inteira
+do mesmo ciclo que fechou a nona.** O `docs/roadmap.md` (seção "Em análise")
+continuava afirmando que o projeto roda Python 3.9 e que a imagem de produção
+é construída sobre ela — falso desde os primeiros commits deste mesmo ciclo. O
+`.github/workflows/ci.yml` comentava, no presente, uma pendência dos shebangs
+do `.venv` que esta própria seção já registra como **FECHADA COMO SUBPRODUTO**
+(ver abaixo). As duas nasceram do ciclo de Python 3.13 e sobreviveram à
+varredura de pendências que o motivou: a varredura leu o `Dockerfile`, este
+documento e o `AGENTS.md`, mas não passou por um roadmap de produto nem por um
+workflow de CI — nenhum dos dois parecia, a priori, um lugar onde uma
+afirmação sobre versão de Python pudesse ter ficado para trás. Corrigidas na
+onda final de correções antes de oferecer a branch para merge (2026-08-10). A
+lição de escopo: **uma varredura de "arquivos que mudaram" não é a mesma coisa
+que uma varredura de "arquivos que citam o fato que mudou"** — os dois exigem
+buscas diferentes, e só a segunda pega isso.
 
 **Correção registrada:** até 2026-08-07 este documento afirmava, nos itens 15
 e 16, que aquelas branches não tinham sido mescladas. Já tinham. O bloco de
@@ -1824,6 +1839,54 @@ completo e obrigatório está em
     devia. Container construído e rodando: `/ready` **200 → 503 (banco parado)
     → 200 (banco de volta)**, container `Up` e saudável o tempo todo, `import
     pytest` falhando dentro da imagem e nenhum `.env` nela.
+
+- **Onda final de correções — revisão de branch inteira do ciclo de Python
+  3.13, ANTES do merge.** Três achados Importantes, zero Crítico, na mesma
+  branch `chore/python-313-upgrade` (2026-08-10, ainda não mesclada).
+  - **`docs/roadmap.md` e `.github/workflows/ci.yml` eram a décima e a décima
+    primeira ocorrência** do padrão descrito no bloco de estado dos
+    repositórios acima — texto que era verdade quando escrito e parou de ser
+    em silêncio. Ver o registro lá; a tally foi atualizada.
+  - **Cinco pacotes órfãos da era 3.9 saíram do manifesto de produção, por
+    decisão do Gabriel:** `async-timeout`, `exceptiongroup`,
+    `importlib_metadata` e `zipp` do `requirements.txt`, e `tomli` do
+    `requirements-dev.txt`. Todos entravam só sob marcadores de ambiente
+    inativos no 3.13 (`python_version < "3.11"` e variantes) ou eram
+    transitivos de outro item da própria lista. Não bastou confiar num
+    `pip install --dry-run`: o `.venv` foi **recriado do zero**
+    (`rm -rf .venv && python3.13 -m venv .venv && pip install -r
+    requirements-dev.txt`), `pip check` saiu limpo, nenhum dos cinco voltou
+    (`pip list | grep -iE` pelos cinco nomes, zero resultado), as duas suítes
+    bateram os mesmos números de sempre (**335 passed/72 deselected** e
+    **72 passed**), `pylint src` saiu **0**, e a imagem foi reconstruída e
+    **iniciada de verdade** — `/health` 200, `/ready` 200, `HEALTHCHECK` do
+    Docker `healthy` — porque os cinco pacotes removidos estavam dentro dela.
+  - **A LIÇÃO QUE IMPORTA: `backports.asyncio.runner` já tinha saído do
+    `requirements.txt` de produção neste mesmo ciclo (Task 1), mas por um
+    motivo que não ensina nada sobre os outros quatro.** Ele saiu porque **o
+    `pip` recusou instalá-lo** — a distribuição declara `Requires-Python
+    <3.11` e falha sozinha em 3.13. Ninguém teve que procurar; o erro
+    apareceu na cara. Os quatro órfãos que sobraram até esta onda
+    (`async-timeout`, `exceptiongroup`, `importlib_metadata`, `zipp`, mais o
+    `tomli` do arquivo de dev) **instalam sem reclamar** em 3.13 — o marcador
+    de ambiente simplesmente nunca é satisfeito, e o `pip` não avisa que uma
+    linha do manifesto virou letra morta. Uma falha que se remove sozinha não
+    ensina nada sobre as que não se removem; exige varredura deliberada, que é
+    exatamente o que a revisão de branch inteira fez e o que a task 1, sozinha,
+    não tinha como fazer.
+  - **`ci.yml` também mudou de conteúdo, não só a tally.** O comentário que
+    justificava não criar venv na CI citava, no presente, os shebangs antigos
+    do `.venv` local — uma pendência que este mesmo documento já registra como
+    fechada como subproduto (ver a entrada abaixo, "shebangs de um caminho
+    antigo"). A frase foi **removida** em vez de reescrita no passado: a
+    justificativa que sobra (runner descartável, nada mais instalado nele) já
+    é suficiente sozinha, e uma frase a menos é uma frase a menos para
+    apodrecer de novo.
+  - Verificação desta onda: `pytest` **335 passed / 72 deselected**, integração
+    **72 passed**, `pylint src` **exit 0**, `pip check` limpo, imagem
+    reconstruída e **rodando** (`/health` 200, `/ready` 200, healthcheck
+    `healthy`). Relatório completo em
+    `.superpowers/sdd/2026-08-09-python-upgrade-and-dependencies/final-fixes-report.md`.
 
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime

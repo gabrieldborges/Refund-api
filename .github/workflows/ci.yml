@@ -39,8 +39,6 @@ jobs:
       #
       # No virtualenv is created. The runner is disposable and nothing else
       # lives on it, so the isolation a venv provides locally is already there.
-      # This also sidesteps the stale shebangs in the local .venv, which force
-      # `python3 -m pytest` there — on CI the plain commands work.
       # requirements-dev.txt puxa o requirements.txt e acrescenta as
       # ferramentas de teste e lint, que NÃO entram na imagem (Item 30).
       - run: pip install -r requirements-dev.txt
