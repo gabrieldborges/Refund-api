@@ -1676,8 +1676,12 @@ completo e obrigatório está em
   corrigido na hora, de propósito. Sugestão de ordem, do mais grave ao menos:
   1. **Python 3.9 sem correção de segurança**, e a imagem de produção é
      construída sobre ele. O `boto3` já encerrou o suporte.
-  2. **14 vulnerabilidades do Dependabot** no `Refund-api` (5 high), nunca
-     investigadas.
+  2. **37 vulnerabilidades do Dependabot** no `Refund-api` (18 high, 11
+     moderate, 8 low), nunca investigadas. Eram 14 (5 high) em 2026-08-07 e
+     são 37 dois dias depois — o número **não parou de crescer**, e como
+     nenhuma dependência foi adicionada nesse intervalo, o crescimento é de
+     alertas novos sobre as mesmas versões antigas. Isso muda a prioridade
+     relativa: o item 1 é mais grave, mas este é o que piora sozinho.
   3. **Branch protection desligado** — decisão registrada, revisar se houver
      uma segunda pessoa.
   4. **3 arquivos órfãos** aguardando decisão (Item 28).
@@ -1722,7 +1726,9 @@ completo e obrigatório está em
 
   **Vale olhar fora da trilha:** o GitHub reportou **14 vulnerabilidades do
   Dependabot** no `Refund-api` (5 high, 5 moderate, 4 low) no push de
-  2026-08-07. Não foi investigado.
+  2026-08-07. Não foi investigado — e no push de 2026-08-09 já eram **37 (18
+  high, 11 moderate, 8 low)**, sem nenhuma dependência nova entre as duas
+  datas.
 
 ## Encerramento da sessão de 2026-07-31 → 2026-08-03
 

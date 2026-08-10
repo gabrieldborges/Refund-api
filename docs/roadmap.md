@@ -29,8 +29,9 @@ Os estados possíveis são:
 - **Subir a versão do Python.** O projeto roda 3.9, que já não recebe correção
   de segurança, e a imagem de produção é construída sobre ela; o `boto3` já
   anunciou o fim do suporte. É a pendência mais grave registrada, e
-  provavelmente destrava boa parte das 14 vulnerabilidades que o Dependabot
-  aponta no `Refund-api`.
+  provavelmente destrava boa parte das 37 vulnerabilidades que o Dependabot
+  aponta no `Refund-api` — eram 14 dois dias antes, sobre exatamente as
+  mesmas dependências.
 
 ## Aprovadas para planejamento
 Nenhuma intenção registrada.
