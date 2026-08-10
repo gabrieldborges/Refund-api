@@ -61,6 +61,23 @@ fictícios, então `pytest` funciona mesmo sem `.env` e nunca alcança o banco r
 A API sobe em `http://localhost:3333`.
 Documentação automática (Swagger) em `http://localhost:3333/docs`.
 
+## Endpoints de saúde
+
+São **duas perguntas diferentes**, e confundi-las tem consequência prática:
+
+| Endpoint | Pergunta | Se falhar, o orquestrador deve |
+|---|---|---|
+| `GET /health` | o processo está vivo? | **reiniciar** |
+| `GET /ready` | consegue atender? | **parar de mandar tráfego** |
+
+O `/health` não consulta nada, de propósito: se ele falhasse durante uma queda
+de banco, toda instância seria reiniciada em laço — uma indisponibilidade
+recuperável viraria apagão. O `/ready` consulta o banco e responde `503`
+enquanto ele não estiver acessível, voltando a `200` sozinho quando voltar.
+
+Pela mesma razão, o `HEALTHCHECK` do `Dockerfile` aponta para `/health`, nunca
+para `/ready`.
+
 ## Varredura de arquivos órfãos
 
 Arquivo órfão é um arquivo em disco (ou no bucket) que **nenhuma linha do banco
