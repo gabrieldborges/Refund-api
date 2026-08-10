@@ -6,8 +6,10 @@ import json
 import logging
 import sys
 import pytest
+from fastapi.testclient import TestClient
 from src.configs.settings import settings
-from src.main.middlewares.request_id import current_request_id
+from src.main.middlewares.request_id import _current_request_id
+from src.main.server.server import app
 from .logging_config import HumanFormatter, JsonFormatter, RequestIdFilter, configure_logging
 
 
@@ -74,13 +76,29 @@ def test_non_ascii_stays_readable():
     assert payload["msg"] == "Almoço"
 
 
-# The filter is what guarantees EVERY line carries the id — a line that only
-# sometimes has it cannot be told apart from one where somebody forgot.
+# The filter's job is to CONSULT the contextvar, not to invent its own value
+# or hardcode one. A record compared against current_request_id() a SECOND
+# time (the previous version of this test) proves nothing: both reads see
+# whatever the contextvar already holds, so the assertion passes even if the
+# filter statement were `record.request_id = "-"` outright — confirmed by
+# actually replacing it with that and watching the old test pass anyway (see
+# task-5-report.md). Setting a KNOWN, non-default value directly on the
+# contextvar — with no middleware and no request involved — isolates the
+# filter's own claim: given this value is current, does the filter read it?
+# Whether that value SURVIVES an ASGI boundary is a different claim, proved
+# separately by test_a_real_requests_access_log_line_matches_its_response_header
+# below.
 def test_the_filter_stamps_the_current_request_id():
-    record = a_record()
+    token = _current_request_id.set("req-known")
+    try:
+        record = a_record()
 
-    assert RequestIdFilter().filter(record) is True
-    assert record.request_id == current_request_id()
+        assert RequestIdFilter().filter(record) is True
+        assert record.request_id == "req-known"
+    finally:
+        # Reset rather than leaving the contextvar set — a value it leaked
+        # into another test would be indistinguishable from that test's own.
+        _current_request_id.reset(token)
 
 
 def test_outside_a_request_the_id_is_a_dash():
@@ -142,3 +160,37 @@ def test_the_handler_has_the_request_id_filter_installed(restore_logging):  # py
 
     handler = logging.getLogger().handlers[0]
     assert any(isinstance(f, RequestIdFilter) for f in handler.filters)
+
+
+# THE ASSEMBLY, not the part. test_the_filter_stamps_the_current_request_id
+# above proves the filter reads whatever the contextvar currently holds — with
+# the value set directly, no middleware and no request involved. It says
+# nothing about whether the value is still there once it actually needs to be:
+# RequestIdMiddleware.dispatch sets it from inside a BaseHTTPMiddleware, and
+# the only real reader is a DIFFERENT middleware's log call (AccessLogMiddleware),
+# on the other side of that boundary. Only a real request through the fully
+# assembled app exercises that path.
+#
+# capsys, not caplog: caplog attaches its own handler directly to the root
+# logger, bypassing every handler-level filter — including the RequestIdFilter
+# this test exists to prove is actually installed and reading the right value.
+# Capturing real stdout goes through the exact handler configure_logging()
+# wires in production, filter included.
+def test_a_real_requests_access_log_line_matches_its_response_header(
+    restore_logging, capsys
+):  # pylint: disable=unused-argument
+    # Rebind the handler to the stdout capsys is capturing right now — the one
+    # server.py built at import time is still bound to the ORIGINAL sys.stdout,
+    # which this fixture cannot see.
+    configure_logging()
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
+    access_lines = [line for line in lines if line.get("msg") == "request"]
+
+    # A pass with nothing captured would be a false pass: it would mean this
+    # request never actually went through the installed filter.
+    assert access_lines, "expected the access-log line for this request; none was captured"
+    assert access_lines[-1]["request_id"] == response.headers["x-request-id"]
