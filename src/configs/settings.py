@@ -116,7 +116,8 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def check_the_url_can_be_parsed(cls, value: str) -> str:
-        """Parse the URL here so a malformed one cannot reach a running app.
+        """Parse the URL and require an async driver, so neither mistake reaches
+        a running app.
 
         This exists because the engine is built lazily (see
         database_connection_handler.build_engine). Creating the engine used to
@@ -124,16 +125,35 @@ class Settings(BaseSettings):
         parsed this string — deferring it to the first connection would have
         moved a malformed URL from "the process refuses to start" to "the app
         boots and 500s on the first request", which is the exact failure mode
-        this whole item exists to remove.
+        this whole item exists to remove. A PaaS that injects DATABASE_URL
+        writes the libpq form, `postgresql://`, which SQLAlchemy resolves to a
+        synchronous driver this project does not install — that parses fine
+        too, and without the second check would boot healthy and die with
+        ModuleNotFoundError on the first query instead.
 
-        make_url only parses. It builds no pool and touches no network, so the
-        check stays cheap and stays at the configuration boundary, where every
-        other value is already validated.
+        make_url only parses; get_dialect() only resolves the dialect class.
+        Neither builds a pool or touches a network, so the check stays cheap
+        and stays at the configuration boundary, where every other value is
+        already validated.
         """
         try:
-            make_url(value)
+            url = make_url(value)
+            dialect = url.get_dialect()
         except ArgumentError as error:
             raise ValueError(f"is not a valid SQLAlchemy URL: {error}") from error
+
+        # create_async_engine needs an ASYNC dialect, and nothing before this
+        # checked. get_dialect() only resolves the dialect CLASS — it works
+        # even when the DBAPI is not installed, builds no pool and touches no
+        # network, so the check stays at the configuration boundary like every
+        # other value here.
+        if not dialect.is_async:
+            raise ValueError(
+                f"uses the synchronous driver '{url.drivername}'. This application "
+                "builds an async engine, so the URL needs an async driver — write "
+                "postgresql+asyncpg://... instead of postgresql://..."
+            )
+
         return value
 
     @field_validator("cors_origins", mode="before")

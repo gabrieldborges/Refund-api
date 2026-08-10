@@ -250,3 +250,46 @@ def test_the_s3_secret_does_not_appear_in_the_repr():
     )
 
     assert "super-secret-s3-value" not in repr(settings)
+
+
+# A PaaS that injects DATABASE_URL writes the libpq form, `postgresql://`,
+# which SQLAlchemy resolves to psycopg2 — a SYNCHRONOUS driver this project
+# does not install. make_url parses it happily and the engine is lazy, so
+# before this guard the application booted healthy and raised
+# ModuleNotFoundError on the first query. That is the exact failure mode this
+# whole item exists to remove.
+def test_a_synchronous_driver_aborts_startup():
+    with pytest.raises(ValidationError) as error:
+        Settings(
+            _env_file=None,
+            database_url="postgresql://user:pass@host:5432/db",
+            jwt_secret="s",
+        )
+
+    assert "database_url" in str(error.value)
+
+
+# The message has to say what to do. Whoever pastes a URL from a provider's
+# panel has no reason to know that the driver part of the scheme matters.
+def test_the_driver_error_names_the_fix():
+    with pytest.raises(ValidationError) as error:
+        Settings(
+            _env_file=None,
+            database_url="postgresql://user:pass@host:5432/db",
+            jwt_secret="s",
+        )
+
+    assert "asyncpg" in str(error.value)
+
+
+# An unknown driver must fail as a URL problem, not as an AttributeError from
+# somewhere deeper.
+def test_an_unknown_driver_aborts_startup():
+    with pytest.raises(ValidationError) as error:
+        Settings(
+            _env_file=None,
+            database_url="postgresql+nosuchdriver://user:pass@host:5432/db",
+            jwt_secret="s",
+        )
+
+    assert "database_url" in str(error.value)
