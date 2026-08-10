@@ -11,6 +11,8 @@ frontend e pela API.
   item da trilha.
 - [Progresso de aprendizado](learning-path-progress.md) — diário cumulativo com
   comparações, exemplos antes/depois e conclusões de cada item.
+- [Retrospectiva de processo](retrospectiva-processo.md) — onde houve
+  retrabalho, o que o causou e o que fazer diferente no próximo projeto.
 
 ## Produto
 - [Visão do produto](vision.md)
