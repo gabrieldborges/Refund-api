@@ -33,10 +33,11 @@ fictícios, então `pytest` funciona mesmo sem `.env` e nunca alcança o banco r
 ## Rodando localmente
 
 **Requer Python 3.13** — a mesma versão do CI e da imagem (`python:3.13-slim`).
-O piso real é `>= 3.10`: abaixo dele o `pip` não instala este
-`requirements.txt`, porque **toda** versão fixada aqui exige 3.10 ou mais. Vale
-conferir antes de criar o venv, já que em muitos sistemas o `python3` do PATH
-ainda é uma versão antiga:
+O piso é `>= 3.10`, e ele vem de nove pacotes fixados que declaram
+`Requires-Python: >=3.10` (entre eles `fastapi`, `starlette`, `urllib3` e
+`pytest`); abaixo disso o `pip` recusa o conjunto. Vale conferir antes de criar
+o venv, já que em muitos sistemas o `python3` do PATH ainda é uma versão
+antiga:
 
 ```bash
 python3 --version   # precisa ser 3.10+; o projeto usa 3.13

@@ -82,6 +82,31 @@ dizer como conferir se ainda é uma.** Um caminho de arquivo, um comando, um
 `grep` — algo que a próxima sessão possa rodar em segundos em vez de reconstruir
 o contexto para decidir se o texto ainda vale.
 
+**NONA OCORRÊNCIA, e ela é de um tipo pior — nasceu falsa.** O commit que
+registrou a oitava (o fechamento do ciclo de Python 3.13) afirmava, no relato
+daquele ciclo, que o diretório do ledger de execução **"foi removido no
+fechamento"**. Ele não tinha sido removido, e não seria por quem escreveu a
+frase — a remoção é do controlador, e acontece **depois**. A afirmação era
+falsa no instante em que foi commitada. Pega na revisão da própria task e
+corrigida ali.
+
+A diferença importa. As oito anteriores **nasceram verdadeiras e morreram em
+silêncio**; contra elas, a defesa é reverificar. Esta não teve instante de
+verdade nenhum, e a defesa contra ela é outra: **não escrever no passado um
+fato que ainda não aconteceu.** A causa foi copiar a forma das entradas dos
+ciclos anteriores — onde "foi removido no fechamento" é legítimo, porque para
+aqueles a remoção já tinha ocorrido — sem notar que o tempo verbal não
+transferia para um ciclo ainda em fechamento.
+
+**A correção não foi acertar o tempo verbal, e é isso que vale levar.** Trocar
+"foi removido" por "será removido" só teria trocado uma frase que já era falsa
+por uma que ficaria falsa depois. A frase foi reescrita para descrever o
+**processo** — onde o ledger vive enquanto o ciclo está aberto, e o que passa a
+ser o registro depois — de modo que ela é verdadeira nos dois estados e não tem
+como apodrecer. É a mesma lição que este bloco aplica aos SHAs desde a primeira
+ocorrência, agora numa nona forma: **quando uma frase pode envelhecer, descreva
+o mecanismo em vez de afirmar o estado.**
+
 
 **Correção registrada:** até 2026-08-07 este documento afirmava, nos itens 15
 e 16, que aquelas branches não tinham sido mescladas. Já tinham. O bloco de
@@ -1669,10 +1694,14 @@ completo e obrigatório está em
   NÃO MESCLADO.** Primeiro ciclo depois do fim da trilha, e o primeiro item da
   varredura de pendências combinada em 2026-08-08. Branch
   `chore/python-313-upgrade` do `Refund-api`, executada em 8 tasks com revisão
-  por task. O ledger de execução ficava em
-  `.superpowers/sdd/2026-08-09-python-upgrade-and-dependencies/` e **foi
-  removido no fechamento**, conforme o fluxo — o registro é este bloco, o
-  [diário](../learning-path-progress.md) e o histórico do Git.
+  por task. O ledger de execução vive em
+  `.superpowers/sdd/2026-08-09-python-upgrade-and-dependencies/` **enquanto o
+  ciclo está aberto**, e o fluxo prevê que o controlador o remova no
+  fechamento; depois disso o registro **é** este bloco, o
+  [diário](../learning-path-progress.md) e o histórico do Git. Escrito assim de
+  propósito: a frase é verdadeira com o diretório em disco e continua
+  verdadeira depois que ele sai. Para saber qual dos dois estados vale agora,
+  rode `ls .superpowers/sdd/` — **não deduza pela existência desta linha**.
   **O merge é decisão do Gabriel**; para saber onde a branch está, rode os
   comandos do bloco de estado dos repositórios, não acredite nesta linha.
   - **AS PENDÊNCIAS 1 E 2 DA ORDEM DE VARREDURA ERAM UMA SÓ.** Esta é a
@@ -2947,8 +2976,10 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   eventualmente força a ação.
 
 - **A saída dos testes deixou de ser limpa: `StarletteDeprecationWarning`.**
-  Depois do major, `starlette/testclient.py:48` avisa para usar `httpx2`, e o
-  aviso aparece nas duas suítes (o `1 warning` que acompanha os 335 e os 72).
+  Depois do major, o `TestClient` avisa para usar `httpx2`, e o aviso aparece
+  nas duas suítes — é o `1 warning` que acompanha os 335 e os 72. Ele é
+  reportado em `fastapi/testclient.py:1` (o reexport), não no arquivo do
+  Starlette de onde vem; procurar pela origem no `starlette/` não acha.
   Não afeta resultado nenhum. Fica registrado porque saída de teste suja é
   como um aviso **real** passa despercebido — e este projeto acabou de
   registrar, logo acima, um ciclo inteiro que existiu porque um warning **não**

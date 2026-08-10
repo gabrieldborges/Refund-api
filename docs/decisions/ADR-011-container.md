@@ -75,7 +75,8 @@ transformando algo recuperável em apagão.
 - ~~**A imagem é construída sobre Python 3.9, que já não recebe correções de
   segurança.**~~ **ENDEREÇADO na branch `chore/python-313-upgrade`
   (2026-08-10, não mesclada):** os dois estágios usam `python:3.13-slim`, e a
-  imagem foi construída e rodada nessa base sem engordar (366 → 360 MB). Esta
+  imagem foi construída e rodada nessa base — e **encolheu**, de 366 para
+  **360 MB**. Esta
   consequência foi **o argumento mais concreto que motivou aquele ciclo**, e a
   dívida que ela descrevia era maior do que parecia aqui: o Python 3.9 também
   prendia o `urllib3` na linha vulnerável, através de um marcador de ambiente
