@@ -45,6 +45,8 @@ COPY --chown=refund:refund src ./src
 
 USER refund
 
+# Documents the DEFAULT port. With $PORT set, the process listens there
+# instead; EXPOSE does not publish anything, so it does not need to follow.
 EXPOSE 3333
 
 # LIVENESS only. /ready is the database check, and it is deliberately NOT used
@@ -57,7 +59,7 @@ EXPOSE 3333
 # healthcheck would put a network tool in the runtime image for no other
 # reason.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3333/health', timeout=2).status == 200 else 1)"
+    CMD python -c "import os,urllib.request,sys; port=os.environ.get('PORT','3333'); sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=2).status == 200 else 1)"
 
 # NO SECRETS HERE, and none anywhere above. Every value the app needs arrives
 # as an environment variable at run time and is validated at startup by
@@ -69,4 +71,9 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # database row survives. Deploy it with STORAGE_BACKEND=s3. That is the whole
 # point of Item 22, and a container is where the ephemeral disk stops being
 # theoretical.
-CMD ["uvicorn", "src.main.server.server:app", "--host", "0.0.0.0", "--port", "3333"]
+# Shell form so ${PORT} expands, and `exec` so uvicorn REPLACES the shell
+# instead of becoming its child — without it the shell is PID 1, SIGTERM stops
+# at the shell, and the platform's graceful shutdown becomes a kill after
+# timeout. The default keeps `docker run` with no PORT working exactly as
+# before.
+CMD ["sh", "-c", "exec uvicorn src.main.server.server:app --host 0.0.0.0 --port ${PORT:-3333}"]
