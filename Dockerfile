@@ -1,14 +1,14 @@
 # Packages the API so it runs the same way everywhere, instead of depending on
 # somebody rebuilding the environment by hand. The README's seven local steps
 # are one `docker run` here — and the class of failure that produced them is
-# recorded in this project: a venv that was not activated, a venv with stale
-# shebangs, and a CI that has to pin python-version because the local
-# interpreter is older than the runner's default.
+# recorded in this project: a venv that was not activated, and a venv carrying
+# shebangs from a path the project had moved away from. Both were environment
+# drift that an image cannot have.
 
 # ---------------------------------------------------------------- build stage
 # Two stages so the compilers and pip's caches stay OUT of what ships. The
 # final image copies the finished virtualenv and nothing else from here.
-FROM python:3.9-slim AS builder
+FROM python:3.13-slim AS builder
 
 # gcc is needed to build the wheels that have no prebuilt one for slim, and
 # this is exactly the kind of thing that must not travel to the runtime image.
@@ -25,7 +25,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # -------------------------------------------------------------- runtime stage
-FROM python:3.9-slim
+FROM python:3.13-slim
 
 # NOT root. A process that gets compromised is then confined to what this user
 # can touch, rather than owning the container. --system because nobody logs in

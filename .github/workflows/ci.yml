@@ -22,14 +22,15 @@ jobs:
       - uses: actions/checkout@v5
 
       # Python is pinned to the version used locally. A CI on a different minor
-      # would be verifying something nobody runs — and this project's local
-      # interpreter is 3.9, older than the runner default.
+      # would be verifying something nobody runs. It was pinned to 3.9 for a
+      # different reason — the local interpreter was older than the runner
+      # default — and stayed pinned after 3.13 for the first one.
       #
       # `cache: pip` keys on requirements.txt, so an unchanged dependency set
       # is not re-downloaded on every push.
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.9'
+          python-version: '3.13'
           cache: pip
 
       # Python has no direct equivalent of `npm ci`. requirements.txt pins every
@@ -101,7 +102,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.9'
+          python-version: '3.13'
           cache: pip
 
       # requirements-dev.txt puxa o requirements.txt e acrescenta as
