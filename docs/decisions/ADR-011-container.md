@@ -17,6 +17,12 @@ tendo de **fixar `python-version: '3.9'`** porque o interpretador local é mais
 velho que o padrão do runner, e — em 2026-08-08 — a aplicação **não subindo
 porque o venv não estava ativado**.
 
+*(Contexto histórico, preservado como estava quando a decisão foi tomada. As
+duas primeiras cicatrizes deixaram de existir em 2026-08-10: o venv foi
+recriado ao subir para o Python 3.13 e o CI fixa `python-version: '3.13'`. A
+decisão de conteinerizar não dependia delas — o argumento é reprodutibilidade,
+que continua valendo.)*
+
 Nenhum serviço de hospedagem sabe seguir sete passos de README.
 
 ## Decisão
@@ -66,10 +72,16 @@ transformando algo recuperável em apagão.
 - **Rodar com `STORAGE_BACKEND=local` num container perde todo comprovante a
   cada reinício**, em silêncio — a linha do banco sobrevive. É o Item 22 se
   pagando, e está escrito no próprio Dockerfile.
-- **A imagem é construída sobre Python 3.9, que já não recebe correções de
-  segurança.** O `boto3` já avisa que encerrou o suporte a 3.9. Construir
-  imagem de produção sobre isso é dívida real, e é o argumento mais concreto
-  até aqui para subir de versão.
+- ~~**A imagem é construída sobre Python 3.9, que já não recebe correções de
+  segurança.**~~ **ENDEREÇADO na branch `chore/python-313-upgrade`
+  (2026-08-10, não mesclada):** os dois estágios usam `python:3.13-slim`, e a
+  imagem foi construída e rodada nessa base sem engordar (366 → 360 MB). Esta
+  consequência foi **o argumento mais concreto que motivou aquele ciclo**, e a
+  dívida que ela descrevia era maior do que parecia aqui: o Python 3.9 também
+  prendia o `urllib3` na linha vulnerável, através de um marcador de ambiente
+  do `botocore`. Ver o relato no
+  [estado atual](../plans/current-state.md) e no
+  [diário](../learning-path-progress.md).
 - Migrations continuam **fora** do startup do container (ADR-002): `alembic
   upgrade head` é passo de deploy, não do boot. Um container que migra ao subir
   faz N réplicas migrarem em paralelo.

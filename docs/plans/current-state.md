@@ -11,7 +11,7 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-08-09.
+Atualizado em: 2026-08-10.
 
 ## Visão geral
 
@@ -59,6 +59,28 @@ partida e não como afirmação durável:
 **quinze commits** depois — encontrado ao auditar a documentação, não por
 alguém tropeçar. É a sétima ocorrência do mesmo padrão, e reforça o que este
 bloco já dizia: **rode os comandos acima; não acredite nesta data.**
+
+**OITAVA OCORRÊNCIA, e ela amplia o padrão.** Este documento descrevia as duas
+branches do Item 31 (`perf/measured-index` e `perf/self-host-font`) como
+**"Não mescladas"**. As duas estavam mescladas — `212c9c8` na `main` do
+`Refund-api` e `b26385e` na do `Refund-FrontEnd`, esta última sendo
+literalmente o HEAD daquela `main`. Foi encontrada pelo Gabriel ao escrever a
+[retrospectiva de processo](../retrospectiva-processo.md), e corrigida no ciclo
+de Python 3.13 (2026-08-10), junto de outras três pendências que a triagem
+achou mortas.
+
+O que a oitava acrescenta às sete anteriores: até aqui o padrão era lido como
+um problema de **SHAs**. Não é. Vale para qualquer afirmação de estado —
+**branch mesclada ou não, item concluído ou não, arquivo ainda existente ou
+não**. As três outras pendências mortas encontradas na mesma triagem confirmam:
+uma citava um arquivo que o Item 22 apagou, outra um problema de acessibilidade
+já corrigido, e a terceira uma divergência de contrato que não existe mais. As
+quatro nasceram verdadeiras. Nenhuma avisou quando deixou de ser.
+
+A regra que sai daí, e que vale para quem escrever aqui: **uma pendência deve
+dizer como conferir se ainda é uma.** Um caminho de arquivo, um comando, um
+`grep` — algo que a próxima sessão possa rodar em segundos em vez de reconstruir
+o contexto para decidir se o texto ainda vale.
 
 
 **Correção registrada:** até 2026-08-07 este documento afirmava, nos itens 15
@@ -1451,13 +1473,31 @@ completo e obrigatório está em
   - Verificação: `pytest` **317 + 47 de integração** (partiu de 32),
     `pylint` exit 0; frontend **304** (partiu de 294), `tsc` 0, lint 0/0.
 
-- **A CÓPIA DO CONTRATO ENTRE OS DOIS REPOS É MANUAL — pendência estrutural.**
-  O CI do backend falha se a API mudou e `contract/` não foi regerado; o do
-  frontend falha se os schemas discordam do arquivo. **Nenhum dos dois percebe
-  um contrato regerado que nunca foi copiado.** Destinos:
-  `contract/refunds.json` → `src/features/refunds/contract/`;
+- **A CÓPIA DO CONTRATO ENTRE OS DOIS REPOS É MANUAL — pendência estrutural,
+  e ela CONTINUA VALENDO.** O CI do backend falha se a API mudou e `contract/`
+  não foi regerado; o do frontend falha se os schemas discordam do arquivo.
+  **Nenhum dos dois percebe um contrato regerado que nunca foi copiado.**
+  Destinos: `contract/refunds.json` → `src/features/refunds/contract/`;
   `contract/app.json` → `src/test/contract/`. Mesma forma do problema dos SHAs
   que este documento registrou seis vezes: nasce verdadeiro e morre em silêncio.
+
+  **O QUE NÃO É VERDADE: não há divergência ativa.** Os **quatro arquivos**
+  (os dois pares) foram conferidos em 2026-08-10 e estão **byte a byte
+  iguais**. Foi a quarta pendência que a triagem daquele dia achou morta — mas
+  morta só na parte que **afirmava um estado**. O mecanismo manual, que é a
+  parte que descreve **como o problema volta**, segue registrado de propósito:
+  ele é uma armadilha permanente, não um fato datado. Confira com:
+
+  ```bash
+  diff Refund-api/contract/refunds.json \
+       Refund-FrontEnd/src/features/refunds/contract/refunds.json
+  diff Refund-api/contract/app.json \
+       Refund-FrontEnd/src/test/contract/app.json
+  ```
+
+  A distinção vale para quem escrever aqui: **pendência que afirma um estado
+  envelhece; pendência que descreve um mecanismo, não.** Prefira a segunda
+  forma, e quando a primeira for inevitável, deixe o comando que a refuta.
 
 - **Fase 4, Item 26 — Cobertura como diagnóstico: CONCLUÍDO.**
   Branch `feat/coverage` nos dois repositórios, **empilhada sobre a do Item 25
@@ -1585,14 +1625,22 @@ completo e obrigatório está em
     processo na 3333. O log de acesso denunciou.
   - Verificação: `pytest` **334**, integração **70**, `pylint` exit 0.
 
-- **A imagem é construída sobre Python 3.9, sem correções de segurança.** O
-  `boto3` já avisa que encerrou o suporte. Construir imagem de produção sobre
-  isso é dívida real, e é o argumento mais concreto acumulado para subir de
-  versão — junta-se à pendência do boto3.
+- ~~**A imagem é construída sobre Python 3.9, sem correções de segurança.**~~
+  **RESOLVIDO na branch `chore/python-313-upgrade` (2026-08-10, não mesclada):**
+  o `Dockerfile` usa `python:3.13-slim` nos dois estágios, e a imagem foi
+  construída e rodada nessa base. Confira com
+  `grep -n "FROM python" Dockerfile`. O registro original, porque a dívida foi
+  exatamente o que motivou o ciclo: o `boto3` já avisava que encerrou o
+  suporte; construir imagem de produção sobre um Python sem correção de
+  segurança é dívida real, e era o argumento mais concreto acumulado para subir
+  de versão.
 
 - **Fase 5, Item 31 — Performance orientada por medição: CONCLUÍDO. FECHA A
   TRILHA.** Branches `perf/measured-index` (`Refund-api`) e
-  `perf/self-host-font` (`Refund-FrontEnd`). **Não mescladas.** Linha de base
+  `perf/self-host-font` (`Refund-FrontEnd`). ~~**Não mescladas.**~~
+  **MESCLADAS** — `212c9c8` e `b26385e`; confira com
+  `git branch --contains 212c9c8` em cada repo. O texto antigo era a **oitava**
+  ocorrência do padrão descrito no bloco de estado dos repositórios. Linha de base
   em [`performance-budget.md`](../performance-budget.md); detalhes no
   [diário](../learning-path-progress.md).
   - **A resposta do item foi PARAR.** A atribuição por dependência mostra
@@ -1616,6 +1664,137 @@ completo e obrigatório está em
     Lighthouse contra `npm run dev`, e comparar modos diferentes.
   - Verificação: `pytest` **334**, integração **72**, `pylint` exit 0;
     frontend **305**, `tsc` 0, lint 0/0. LCP Desktop **0,6s**.
+
+- **Ciclo de varredura — Python 3.13 e dependências: CONCLUÍDO na branch,
+  NÃO MESCLADO.** Primeiro ciclo depois do fim da trilha, e o primeiro item da
+  varredura de pendências combinada em 2026-08-08. Branch
+  `chore/python-313-upgrade` do `Refund-api`, executada em 8 tasks com revisão
+  por task. O ledger de execução ficava em
+  `.superpowers/sdd/2026-08-09-python-upgrade-and-dependencies/` e **foi
+  removido no fechamento**, conforme o fluxo — o registro é este bloco, o
+  [diário](../learning-path-progress.md) e o histórico do Git.
+  **O merge é decisão do Gabriel**; para saber onde a branch está, rode os
+  comandos do bloco de estado dos repositórios, não acredite nesta linha.
+  - **AS PENDÊNCIAS 1 E 2 DA ORDEM DE VARREDURA ERAM UMA SÓ.** Esta é a
+    descoberta que justificou o ciclo inteiro, e ela estava escrita errada aqui
+    como dois itens separados ("Python 3.9 sem correção de segurança" e "37
+    alertas do Dependabot"). A evidência: **toda versão corrigida exige
+    `>= 3.10`**, e o `botocore` prendia o `urllib3` na linha vulnerável `1.26`
+    através de um **marcador de ambiente** — `urllib3<1.27; python_version <
+    "3.10"` — e não por uma escolha de ninguém. Ou seja, a vulnerabilidade era
+    **segurada pelo interpretador**. Não havia como fechar o item 2 sem fechar
+    o item 1; tentar corrigir alerta por alerta teria falhado na resolução.
+  - **A cascata é forçada, nesta ordem:** Python → FastAPI → Starlette. Subir
+    o `urllib3` sozinho não resolve, e subir o Python é o que destrava todo o
+    resto.
+  - **O que mudou de versão:** Python **3.9.6 → 3.13** (local 3.13.15, CI
+    3.13.14, imagem `python:3.13-slim`); `fastapi` 0.128.8 → **0.141.1**;
+    `starlette` 0.49.3 → **1.6.0** (um **MAJOR**); `urllib3` 1.26.20 →
+    **2.7.0**; `python-multipart` 0.0.20 → **0.0.32**; `python-dotenv` 1.2.1 →
+    **1.2.2**; `pytest` 8.4.2 → **9.1.1**; `pytest-asyncio` 1.2.0 → **1.4.0**;
+    `pylint` 3.3.9 → **4.0.7**; `astroid` 3.3.11 → **4.0.4**.
+  - **`backports.asyncio.runner` saiu do `requirements.txt` de produção**, onde
+    nunca deveria ter estado: é transitivo do `pytest-asyncio`, ou seja, uma
+    dependência **de teste** que estava sendo instalada na imagem. Some sozinho
+    no 3.13, porque `asyncio.Runner` é nativo desde o 3.11.
+  - **Uma mudança de comportamento, aceita por decisão do Gabriel.** O Python
+    3.13 renomeou `HTTPStatus(422).phrase` de "Unprocessable Entity" para
+    **"Unprocessable Content"** (RFC 9110). O `title` do envelope de erro deriva
+    do registry **de propósito** (ADR-005), então o valor mudou junto. Raio de
+    alcance conferido antes de decidir: o frontend **não lê** `title`, o
+    `contract/app.json` guarda só um `title` de 404, e **uma** asserção foi
+    afetada. A asserção foi atualizada.
+  - **A imagem NÃO engordou:** **366 MB → 360 MB** (`docker images` DISK
+    USAGE, o número comparável ao do Item 30). Vale saber, porque custou
+    confusão: `docker image inspect --format '{{.Size}}'` reportou 78 MB para a
+    mesma imagem — com o snapshotter containerd os dois números medem coisas
+    diferentes, e só o DISK USAGE é comparável à linha de base antiga.
+  - **DUAS PREVISÕES DO PLANO ESTAVAM ERRADAS, as duas pessimistas.** Ficam
+    registradas como erros de previsão, não como sucessos:
+    1. O **major do Starlette** exigiu **zero** mudança de código de aplicação.
+       O plano tratava esse major como o risco central do ciclo.
+    2. O **`pylint` 4 + `astroid` 4 emitiram ZERO mensagens novas.** O plano
+       tinha orçado uma task de triagem que não teve o que triar. Como "nenhuma
+       mensagem" é indistinguível de "o portão parou de funcionar", a
+       credibilidade foi estabelecida por três caminhos independentes: um
+       arquivo-sonda deliberadamente ruim pelo mesmo binário saiu com **exit
+       4**; o `200 modules analysed` com cache limpo bateu exatamente com
+       `find src -name '*.py' | wc -l`; e o `.pylintrc` não tem `ignore-paths`,
+       `disable=all` nem filtro de confiança. **O assunto do commit `6d6e3fe`
+       diz "close what it found" e sugere achados que não existiram** — a
+       mensagem ficou como está (rebase interativo não está disponível neste
+       ambiente); este parágrafo é o registro durável correto.
+  - **A armadilha do `astroid`:** o `pylint 4.0.7` aceita
+    `astroid >=4.0.4,<4.1.0-dev0`, e o `astroid` 4.3.0 — mais novo — está
+    **fora** dessa faixa. "Mais recente" e "compatível" não são a mesma coisa;
+    o par certo é `4.0.7` + `4.0.4`.
+  - **As duas quebras deliberadas foram observadas.** A quebra A (registrar o
+    exception handler na `HTTPException` do FastAPI em vez da do Starlette)
+    manteve a suíte mockada **verde** e deixou a de integração **vermelha** em
+    `test_an_unknown_route_is_also_a_problem_document` — a rede sobreviveu ao
+    major. A quebra B está no item seguinte, porque revelou mais do que
+    pretendia.
+  - **O ACHADO MAIS IMPORTANTE DO CICLO: um teste que nunca foi um teste.**
+    `test_the_filter_stamps_the_current_request_id` afirmava
+    `record.request_id == current_request_id()` **logo depois** de o filtro ter
+    escrito `current_request_id()` naquele campo, e nunca definia um id — fora
+    de uma requisição os dois lados valem `"-"`, então ele passava até contra
+    um filtro que devolvesse `"-"` cravado. Confirmado fazendo exatamente isso.
+    Não é apodrecimento causado pelo major: **ele nunca foi rede, em versão
+    nenhuma do Starlette.**
+
+    O tamanho do buraco: `current_request_id()` tem **exatamente um** consumidor
+    em todo o código — esse filtro. Então a promessa inteira do Item 24 (o
+    `request_id` da resposta aparecer no log) descansava nesse teste mais um de
+    integração que compara corpo com header, **ambos lidos de `request.state`**,
+    um atributo comum e portanto imune a aninhamento de middleware. **Ninguém
+    nunca tinha provado que o valor atravessa a fronteira do
+    `BaseHTTPMiddleware`.** É a **quinta** ocorrência de "testei a peça, não a
+    montagem" — a [retrospectiva](../retrospectiva-processo.md) conta quatro
+    (Itens 14, 23, 24 e 27) porque esta foi encontrada depois de ela ser
+    escrita. É também a **primeira** fechada com teste permanente em vez de
+    conferência manual.
+  - **O teste novo prova mais do que foi pedido.**
+    `test_a_real_requests_access_log_line_matches_its_response_header` faz uma
+    requisição de verdade e compara a linha de log de acesso com o header da
+    resposta. A revisão o sondou com **quatro defeitos deliberados**: contextvar
+    não setada (só o teste novo falha — logo os dois não são redundantes),
+    filtro cravando `"-"` (os dois falham), filtro não estampando nada (o novo
+    falha) e — o decisivo — **mover o `RequestIdMiddleware` de mais externo
+    para mais interno**, que o novo teste **pega**. Ou seja: a **ORDEM dos
+    middlewares agora tem teste**, onde antes tinha só um comentário em prosa
+    em `src/main/server/server.py:59-64`.
+  - **EXCEÇÃO DELIBERADA À REGRA DE 2026-08-08, e por quê.** A regra diz que
+    pendência achada no meio de um item é para ser **registrada, não corrigida
+    na hora**. O teste tautológico foi **corrigido na hora**, por decisão do
+    Gabriel. O motivo: o propósito declarado daquela task era **provar que a
+    rede está armada**; deixar uma mentira conhecida na suíte ao lado de uma
+    verdade nova é incoerente com o próprio objetivo da task. Está registrado
+    como exceção com a razão para que uma leitura futura não a interprete como
+    a regra sendo ignorada — a regra continua valendo.
+  - **TRÊS DEFEITOS ESTAVAM NO PLANO, não na implementação**, e foram achados
+    durante a execução. Detalhes no [diário](../learning-path-progress.md):
+    a verificação do container apontaria para o **Neon** enquanto o passo que
+    "provava" o `/ready` em 503 parava um banco **local e diferente** — um falso
+    positivo escrito no plano; o serviço do compose chama-se **`postgres-test`**,
+    não `postgres`; e o critério de pronto "Dependabot devolve 0" era
+    **inalcançável dentro do ciclo** (ver abaixo).
+  - **A branch foi REBASEADA e REVERIFICADA.** A `origin/main` andou durante o
+    ciclo (o `21920b3` do Gabriel, que trouxe a
+    [retrospectiva de processo](../retrospectiva-processo.md)). A branch foi
+    rebaseada para preservar a convenção de fast-forward do projeto:
+    `54cda88 → 5bf4e2e`, 9 commits, sem conflito. **Reverificada depois**, pelo
+    mesmo motivo que este documento já registrou na sessão de 2026-08-05:
+    rebase produz uma árvore contra a qual teste nenhum jamais rodou.
+  - Verificação final (2026-08-10, com a saída salva em arquivo **antes** de
+    lida): `pytest` **335 passed / 72 deselected** em **três rodadas**,
+    integração **72 passed**, `pylint src` **exit 0**. O 335 é o 334 anterior
+    **mais o teste novo**. CI **verde nos dois jobs** sob 3.13, lido na saída e
+    não no tique: `collected 407 items` com `72 deselected` no job `verify` e
+    `335 deselected` no `integration` — cada job rodou exatamente a metade que
+    devia. Container construído e rodando: `/ready` **200 → 503 (banco parado)
+    → 200 (banco de volta)**, container `Up` e saudável o tempo todo, `import
+    pytest` falhando dentro da imagem e nenhum `.env` nela.
 
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
@@ -1669,23 +1848,44 @@ completo e obrigatório está em
   verificada. Quem retomar a trilha deve continuar acumulando aqui e planejar
   um ciclo próprio de varredura quando o `learning_path.md` acabar.
 
+  **UMA EXCEÇÃO DELIBERADA, em 2026-08-10, com a razão registrada.** No ciclo
+  de Python 3.13, um teste tautológico descoberto no meio da task foi
+  **corrigido na hora** em vez de registrado aqui — decisão do Gabriel. O
+  motivo é específico e não generaliza: aquela task existia **para provar que a
+  rede de testes está armada**, e deixar uma mentira conhecida na suíte ao lado
+  de uma verdade nova contradiz o objetivo declarado da própria task. A regra
+  continua valendo; esta linha existe para que a exceção não seja lida como a
+  regra sendo ignorada.
+
 - **A TRILHA ACABOU.** Itens 1 a 31 concluídos, as cinco fases fechadas.
 
   **O próximo passo combinado em 2026-08-08 é a VARREDURA DE PENDÊNCIAS** —
   esta seção acumulou o que foi encontrado ao longo do caminho e nunca
   corrigido na hora, de propósito. Sugestão de ordem, do mais grave ao menos:
-  1. **Python 3.9 sem correção de segurança**, e a imagem de produção é
-     construída sobre ele. O `boto3` já encerrou o suporte.
-  2. **37 vulnerabilidades do Dependabot** no `Refund-api` (18 high, 11
-     moderate, 8 low), nunca investigadas. Eram 14 (5 high) em 2026-08-07 e
-     são 37 dois dias depois — o número **não parou de crescer**, e como
-     nenhuma dependência foi adicionada nesse intervalo, o crescimento é de
-     alertas novos sobre as mesmas versões antigas. Isso muda a prioridade
-     relativa: o item 1 é mais grave, mas este é o que piora sozinho.
-  3. **Branch protection desligado** — decisão registrada, revisar se houver
+  1. ~~**Python 3.9 sem correção de segurança** + **37 alertas do
+     Dependabot**~~ — **ERAM UM ITEM SÓ, e foram ENDEREÇADOS na branch
+     `chore/python-313-upgrade` (2026-08-10, não mesclada).** Esta lista os
+     tratava como as pendências 1 e 2, separadas. Não eram: **toda versão
+     corrigida exige `>= 3.10`**, e o `botocore` prendia o `urllib3` na linha
+     vulnerável `1.26` através do marcador de ambiente
+     `urllib3<1.27; python_version < "3.10"` — a vulnerabilidade era segurada
+     **pelo interpretador**, não por uma escolha. Sem subir o Python não havia
+     como fechar os alertas; subindo, eles caem juntos. Ver o relato do ciclo
+     na seção de progresso e a pendência de contagem pós-merge abaixo.
+  2. **Branch protection desligado** — decisão registrada, revisar se houver
      uma segunda pessoa.
-  4. **3 arquivos órfãos** aguardando decisão (Item 28).
+  3. **3 arquivos órfãos** aguardando decisão (Item 28).
+  4. **10 alertas do Dependabot no `Refund-FrontEnd`** — o repositório passou o
+     projeto inteiro com o Dependabot **desligado**; agora está ligado e tem
+     número. Ver a pendência abaixo.
   5. O resto desta seção.
+
+  **A lição que essa fusão deixa, e que vale para as próximas varreduras:**
+  duas pendências listadas separadamente podem ser **uma causa e um sintoma**.
+  Esta lista carregou as duas por dias como itens independentes, e a relação só
+  apareceu quando alguém foi ler **por que** a versão vulnerável estava fixada.
+  Antes de estimar dois itens, vale perguntar se um deles não é consequência do
+  outro.
 
   **O que a trilha NÃO entregou, e continua verdadeiro:** não existe deploy. Os
   cinco bloqueios foram endereçados, mas escolher e configurar um provedor não
@@ -1728,7 +1928,10 @@ completo e obrigatório está em
   Dependabot** no `Refund-api` (5 high, 5 moderate, 4 low) no push de
   2026-08-07. Não foi investigado — e no push de 2026-08-09 já eram **37 (18
   high, 11 moderate, 8 low)**, sem nenhuma dependência nova entre as duas
-  datas.
+  datas. **INVESTIGADO em 2026-08-10**, no ciclo de Python 3.13: os 37 são
+  **19 advisories distintos contados duas vezes**, e o crescimento de 14 para
+  37 era mesmo alerta novo sobre versão velha. Ver a pendência de contagem
+  pós-merge.
 
 ## Encerramento da sessão de 2026-07-31 → 2026-08-03
 
@@ -2318,16 +2521,18 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   ciclo rodou as verificações naquele intervalo. Corrigido pelo `4e53be4`. A
   lição de processo: **medir o ponto de partida antes de abrir uma branch**, ou
   o portão de verificação de todas as tasks seguintes não significa nada.
-- **Uma diretiva de lint em `src/hooks/useObjectUrl.ts`.**
+- ~~**Uma diretiva de lint em `src/hooks/useObjectUrl.ts`.**~~ **MORTA — o
+  arquivo não existe.** O **Item 22** (object storage e URLs assinadas) o
+  apagou junto com seu teste: sem Blob no cliente, não há object URL para criar
+  nem revogar. Confira com
+  `ls Refund-FrontEnd/src/hooks/useObjectUrl.ts` (não encontra). Encontrada na
+  triagem de 2026-08-10; é uma das quatro pendências que a oitava ocorrência do
+  padrão trouxe à tona. O registro original, porque a observação sobre a regra
+  continua útil se alguém reintroduzir o padrão:
   `// eslint-disable-next-line react-hooks/set-state-in-effect` sobre o
-  `setUrl(null)`. Vale saber como a regra se comporta: ela reporta **no máximo
-  uma violação por corpo de efeito**, então a diretiva silencia o efeito
-  **inteiro** — um `setState` acrescentado mais abaixo naquele mesmo efeito não
-  seria checado. A alternativa proposta na revisão (comparar identidade do blob)
-  esbarra na mesma regra, então trocaria correção por correção, não por um lint
-  mais limpo. Há também uma **janela de um render** em que o hook devolve a URL
-  antiga logo depois de o blob mudar, antes de o efeito rodar; aceita
-  conscientemente.
+  `setUrl(null)`. A regra reporta **no máximo uma violação por corpo de
+  efeito**, então a diretiva silencia o efeito **inteiro** — um `setState`
+  acrescentado mais abaixo naquele mesmo efeito não seria checado.
 
 - ~~**Acessibilidade: labels não associadas ao input.**~~ RESOLVIDO no Item 7:
   `InputText` agora associa `<label htmlFor>`/`id` e o erro via `aria-describedby`.
@@ -2551,9 +2756,18 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   `isPending: true` indefinidamente. A prop é `string` obrigatória e hoje só a
   página de detalhe a preenche, então não há caminho real até lá — mas é uma
   armadilha para o próximo consumidor.
-- **O nome acessível do botão de tela cheia é sem contexto** ("Ver em tela
-  cheia"). Só passa a incomodar se o componente for renderizado mais de uma vez
-  na mesma página — que é exatamente o que uma lista com comprovantes faria.
+- ~~**O nome acessível do botão de tela cheia é sem contexto** ("Ver em tela
+  cheia").~~ **MORTA — já resolvida.** O `ReceiptPreview` decide a cópia por
+  uma tabela `RECEIPT_COPY` indexada pelo `kind`, com **duas chaves distintas**:
+  `receipt.viewFullscreen` ("Ver comprovante em tela cheia") e
+  `receipt.viewPaymentFullscreen` ("Ver comprovante de pagamento em tela
+  cheia"). Há inclusive um comentário no
+  `Refund-FrontEnd/src/features/refunds/components/ReceiptPreview.tsx` nomeando
+  **esta armadilha exata** como a razão da tabela existir. Confira com
+  `grep -rn "viewPaymentFullscreen" Refund-FrontEnd/src`. Encontrada na triagem
+  de 2026-08-10 — segunda das quatro. O cenário que a motivava continua sendo o
+  caso certo de se preocupar: duas prévias na mesma página tornam um "Ver em
+  tela cheia" sem qualificação indistinguível para um leitor de tela.
 - **`AuthContext.test.tsx`: um dos três testes novos já passava antes.** O que
   restaura uma sessão válida não é vazio (guarda o caminho feliz do
   `storedUserSchema`), mas a prova de que o `id` realmente se propaga descansa
@@ -2626,13 +2840,17 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   rodar. A única forma honesta é um **subprocesso** que instale o bloqueio e só
   então importe a app.
 
-- **O boto3 já passou da data em que anunciou o fim do suporte a Python 3.9.**
-  A versão instalada (1.42.97) emite `PythonDeprecationWarning` dizendo
-  "no longer support Python 3.9 starting April 29, 2026" — data já passada em
-  2026-08-07. Funciona hoje, mas prende o quanto a dependência pode avançar, e
-  polui a saída da suíte de integração com 9 avisos. **Não foi silenciado de
-  propósito:** é sinal real de que o projeto precisa subir de Python, não
-  ruído. O CI e o `.venv` estão em 3.9 porque foi assim que o projeto começou.
+- ~~**O boto3 já passou da data em que anunciou o fim do suporte a Python
+  3.9.**~~ **FECHADA como SUBPRODUTO em 2026-08-10:** os **9
+  `PythonDeprecationWarning`** da suíte de integração são agora **0**, medidos
+  antes e depois. A decisão de **não silenciar o aviso** foi o que fez este
+  item funcionar: ele era sinal, e o sinal foi obedecido. Vale registrar como o
+  contraexemplo mais claro do projeto para "silencie o warning e siga" — um
+  aviso suprimido em 2026-08-07 teria removido o argumento que motivou este
+  ciclo. O registro original: a versão instalada (1.42.97) emitia
+  `PythonDeprecationWarning` dizendo "no longer support Python 3.9 starting
+  April 29, 2026", data já passada em 2026-08-07; o CI e o `.venv` estavam em
+  3.9 porque foi assim que o projeto começou.
 - **REGRESSÃO INTRODUZIDA E CORRIGIDA: o `X-Frame-Options: DENY` do Item 27
   quebrou o preview de PDF.** Relatado pelo Gabriel em 2026-08-09, do
   navegador. O header foi aplicado a **toda** resposta, inclusive `/files/` —
@@ -2669,10 +2887,13 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   um handler próprio antes do CORSMiddleware ou substituí-lo — e vale pesar se
   compensa, porque um erro de CORS é lido no console do navegador, não pelo
   cliente HTTP.
-- **O `.venv` do `Refund-api` tem shebangs de um caminho antigo**
-  (`.../React/Refund-api`). Consequência prática: `pytest` e `pylint` só rodam
-  como `.venv/bin/python3 -m pytest` / `-m pylint`, nunca pelos executáveis
-  diretos. É problema de ambiente, não de código — **vale recriar o venv**.
+- ~~**O `.venv` do `Refund-api` tem shebangs de um caminho antigo**
+  (`.../React/Refund-api`).~~ **FECHADA como SUBPRODUTO em 2026-08-10.** Subir
+  para o Python 3.13 **obrigava** a recriar o venv, e o venv novo nasceu com os
+  shebangs apontando para este repositório. `.venv/bin/pytest` e
+  `.venv/bin/pylint` voltaram a funcionar direto. Confira com
+  `head -1 .venv/bin/pytest`. Registrada aqui como pendência de ambiente desde
+  antes da trilha acabar; nunca foi de código.
 - **Sobrou mais um usuário de teste no banco:** `task1-verify@example.com`
   (id 15), criado na verificação do fast-forward do backend. Não existe endpoint
   de exclusão de usuário. Junta-se a `admin.validacao@example.com` e
@@ -2683,3 +2904,63 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   token de 3 partes → `GET /refunds` com esse token respondendo 200). Sem
   reembolsos associados; descartável como os demais, e igualmente sem endpoint
   de exclusão.
+
+- **CONFERIR A CONTAGEM DO DEPENDABOT DEPOIS DO MERGE — passo pós-merge, e é
+  a única parte do ciclo de Python 3.13 que não pôde ser concluída dentro
+  dele.** O critério de pronto original do plano dizia
+  `gh api dependabot/alerts?state=open` devolvendo **0**. Ele é **inalcançável
+  numa branch**: o Dependabot avalia a **branch padrão**, e os pins vivem em
+  `chore/python-313-upgrade`. Confirmado — `default_branch` é `main` e a
+  contagem **continua 37**. **Não trate isso como falha das correções**; elas
+  simplesmente ainda não estão na `main`.
+
+  **O que ESTÁ provado, deterministicamente e recalculado duas vezes por
+  caminhos independentes:**
+  - os **37** alertas brutos são **19 advisories distintos contados duas
+    vezes**, porque o `requirements-dev.txt` começa com `-r requirements.txt` e
+    o Dependabot conta por manifesto;
+  - os **19** estão **todos** satisfeitos pelas versões fixadas nesta branch;
+  - o teste "pin >= primeira versão corrigida" é **válido aqui**, e isso foi
+    verificado em vez de suposto: cada um dos 19 `vulnerable_version_ranges` é
+    um **intervalo único e limitado**, cujo limite superior é exatamente o
+    `first_patched_version` — não há faixa disjunta nem duas linhas de correção
+    paralelas, que é o caso em que essa comparação daria falso verde;
+  - o `requirements.txt` é um **fecho transitivo completo** (equivalente a um
+    lock), então nenhum pacote poderia ser estruturalmente ignorado.
+
+  **Verificar que a contagem chega a zero é um passo pós-merge**, para o
+  Gabriel, com `gh api /repos/:owner/:repo/dependabot/alerts?state=open` depois
+  que a branch entrar na `main`. Até lá, este documento **não afirma zero**.
+
+- **O `Refund-FrontEnd` passou o projeto inteiro com o Dependabot DESLIGADO —
+  ninguém estava olhando.** Ligado em 2026-08-10 (a API respondia 403
+  "disabled" antes disso). **Primeira varredura: 10 alertas, 9 high e 1
+  medium** — `brace-expansion` ×3, `js-yaml` ×2, `nanoid` ×2, `postcss` ×2,
+  `react-router` ×1. **Nada foi corrigido, de propósito:** o escopo daquela
+  task era transformar um ponto cego em um número, não abrir uma segunda frente
+  de atualização dentro de um ciclo de backend. Entra na varredura de
+  pendências como item próprio.
+
+  Vale notar a assimetria que isso expõe: o `Refund-api` acumulou 37 alertas
+  **visíveis e ignorados**; o `Refund-FrontEnd` acumulou 10 **invisíveis**. O
+  segundo é o pior dos dois estados, porque não produz nem o incômodo que
+  eventualmente força a ação.
+
+- **A saída dos testes deixou de ser limpa: `StarletteDeprecationWarning`.**
+  Depois do major, `starlette/testclient.py:48` avisa para usar `httpx2`, e o
+  aviso aparece nas duas suítes (o `1 warning` que acompanha os 335 e os 72).
+  Não afeta resultado nenhum. Fica registrado porque saída de teste suja é
+  como um aviso **real** passa despercebido — e este projeto acabou de
+  registrar, logo acima, um ciclo inteiro que existiu porque um warning **não**
+  foi silenciado.
+
+- **`host.docker.internal` é específico do Docker Desktop e não está
+  documentado no repo.** A verificação do container aponta o container para o
+  PostgreSQL do `docker-compose` do host por esse nome. Em Docker Engine puro
+  no Linux ele não resolve sem `--add-host=host.docker.internal:host-gateway`.
+  Quem repetir a verificação em outra máquina precisa saber.
+
+- **`logging_config_test.py` roda `json.loads` sobre cada linha de stdout.** Um
+  `print` solto no caminho de requisição vira `JSONDecodeError` em vez de uma
+  falha de asserção legível. Falha alto, então não é risco de correção — é
+  custo de diagnóstico para quem esbarrar.

@@ -81,8 +81,8 @@ def test_non_ascii_stays_readable():
 # time (the previous version of this test) proves nothing: both reads see
 # whatever the contextvar already holds, so the assertion passes even if the
 # filter statement were `record.request_id = "-"` outright — confirmed by
-# actually replacing it with that and watching the old test pass anyway (see
-# task-5-report.md). Setting a KNOWN, non-default value directly on the
+# actually replacing it with that and watching the old version of this test
+# pass anyway. Setting a KNOWN, non-default value directly on the
 # contextvar — with no middleware and no request involved — isolates the
 # filter's own claim: given this value is current, does the filter read it?
 # Whether that value SURVIVES an ASGI boundary is a different claim, proved

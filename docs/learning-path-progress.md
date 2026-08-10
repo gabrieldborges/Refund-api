@@ -5873,3 +5873,290 @@ depender de um terceiro estar no ar para aparecer.
   duas coisas, e o registro precisa dizer as duas.
 - Quando a medição mostra que não há gordura, **a resposta é parar**. Foi o
   mesmo desfecho do Item 28.
+
+## Ciclo de varredura — Python 3.13 e dependências (2026-08-10)
+
+**Status:** concluído na branch `chore/python-313-upgrade` do `Refund-api`, em
+8 tasks com revisão por task. **Não mesclado** — o merge é decisão do Gabriel.
+Primeiro ciclo depois do fim da trilha, e o primeiro item da varredura de
+pendências. O retrato do que mudou está no
+[estado atual](plans/current-state.md); aqui fica o que se aprendeu e não cabe
+lá.
+
+### As pendências 1 e 2 eram uma só, e a evidência é uma linha de metadado
+
+O `current-state.md` listava, na ordem da varredura, "Python 3.9 sem correção
+de segurança" como pendência 1 e "37 alertas do Dependabot" como pendência 2.
+Eu ia atacar as duas. Elas são **a mesma**.
+
+A evidência não está em nenhum texto de advisory — está no metadado do
+`botocore`:
+
+```
+urllib3>=1.25.4,<1.27; python_version < "3.10"
+urllib3>=1.25.4,<2.6;  python_version >= "3.10"
+```
+
+Isso é um **marcador de ambiente**: uma condição que o resolvedor de pacotes
+avalia contra o interpretador em uso para decidir **qual** restrição aplicar.
+No Python 3.9, a primeira linha vale, e ela tranca o `urllib3` abaixo de 1.27 —
+ou seja, na linha `1.26`, que é a vulnerável. Não havia decisão a rever, não
+havia pin nosso a afrouxar, não havia `pip install --upgrade` que resolvesse:
+**a versão vulnerável era consequência da versão do interpretador.**
+
+Generalizando, e é o que vale levar: quando uma dependência se recusa a subir,
+a pergunta certa não é "quem fixou isso?" e sim "**sob que condição** isso está
+fixado?". Marcadores de ambiente prendem versões de um jeito que não aparece em
+nenhum arquivo do seu repositório.
+
+O mesmo raciocínio explica a **cascata forçada**:
+
+```
+Python 3.9 → 3.13   destrava   FastAPI 0.141.1
+FastAPI 0.141.1     exige      Starlette 1.6.0  (um MAJOR)
+Python >= 3.10      libera     urllib3 2.7.0
+```
+
+Nenhum dos três degraus é opcional, e a ordem não é escolha. Toda versão
+corrigida dos 19 advisories exige `>= 3.10`. Era um item só, com três nomes.
+
+### Um major que não custou nada, e um lint que não achou nada
+
+O plano previu que o major do Starlette seria o risco central e que o `pylint`
+4 daria trabalho de triagem. **As duas previsões estavam erradas, e as duas
+para o lado pessimista.** O major exigiu **zero** mudança de código de
+aplicação; o `pylint` 4 emitiu **zero** mensagens novas.
+
+Registro isso como erro de previsão, e não como sucesso, porque a lição é sobre
+**calibragem**: "major" é um número na versão, não uma medida do que o *seu*
+código usa. O que este projeto consome do Starlette é a superfície estável —
+middleware, `Request`, `Response`, exception handlers. As mudanças que
+justificaram o major não tocavam nada disso.
+
+Mas "não achou nada" tem um problema próprio: **é indistinguível de "o portão
+parou de funcionar"**. Um `pylint` que não olha para lugar nenhum também sai
+com zero mensagens. Foi por isso que a credibilidade do resultado foi
+estabelecida por três caminhos independentes, nenhum deles sendo "confie no
+número":
+
+| Como | O que provou |
+|---|---|
+| arquivo-sonda deliberadamente ruim pelo mesmo binário | **exit 4** — o portão ainda fecha |
+| `200 modules analysed` (cache limpo) vs `find src -name '*.py' \| wc -l` | **200** — olhou para todos os arquivos |
+| leitura do `.pylintrc` | sem `ignore-paths`, `disable=all` ou filtro de confiança |
+
+**Quando uma verificação passa sem esforço, prove que ela ainda verifica.**
+
+### A armadilha do `astroid`: "mais novo" não é "compatível"
+
+O `pylint` é construído sobre o `astroid`, e a faixa aceita pelo `pylint 4.0.7`
+é `astroid >=4.0.4,<4.1.0-dev0`. O `astroid` **4.3.0** existe e é mais novo — e
+está **fora** dessa faixa. Instalar o mais recente dos dois quebra o par.
+
+O erro que isso evita é sutil porque parece cuidado: atualizar tudo para o
+último disponível soa mais seguro que escolher versões. Em pares
+biblioteca/motor (`pylint`/`astroid`, e o mesmo vale para
+`pytest`/`pytest-asyncio`), o pin certo é o que o **par** aceita, não o maior
+número que existe.
+
+### O que as quebras deliberadas mostraram
+
+O ciclo tinha duas quebras deliberadas — introduzir um defeito conhecido e
+**observar a suíte ficar vermelha** — porque depois de um major a pergunta
+"os testes passam?" é menos interessante que "os testes ainda **pegam**?".
+
+**Quebra A:** registrar o exception handler na `HTTPException` do FastAPI em
+vez da do Starlette (o bug real do Item 23). A suíte mockada ficou **verde** e
+a de integração ficou **vermelha** em
+`test_an_unknown_route_is_also_a_problem_document` — exatamente o resultado que
+o Item 25 previu por escrito quando construiu os testes por HTTP. A rede
+sobreviveu ao major.
+
+**Quebra B** era para provar que o `request_id` atravessa o
+`BaseHTTPMiddleware`. Ela provou outra coisa.
+
+### O achado do ciclo: um teste que nunca foi um teste
+
+`test_the_filter_stamps_the_current_request_id` fazia isto:
+
+```python
+record = a_record()
+RequestIdFilter().filter(record)          # o filtro escreve current_request_id()
+assert record.request_id == current_request_id()   # ...e o teste lê de novo
+```
+
+Os dois lados leem **a mesma contextvar**, e o teste nunca definia um id. Fora
+de uma requisição, `current_request_id()` devolve `"-"`, então a asserção é
+`"-" == "-"`. Ela passa contra um filtro que faça `record.request_id = "-"`
+cravado — confirmado trocando o código por isso e vendo o teste continuar
+verde.
+
+Não é apodrecimento causado pelo major: **ele nunca foi rede, em versão nenhuma
+do Starlette.** A forma do defeito é uma tautologia — uma asserção cujos dois
+lados vêm da mesma fonte.
+
+**O buraco era maior que o teste.** `current_request_id()` tem *exatamente um*
+consumidor em todo o código: esse filtro. Então a promessa inteira do Item 24 —
+"o `request_id` que a resposta devolve é o que aparece no log" — descansava
+sobre esse teste mais um de integração que compara **corpo** com **header**,
+ambos lidos de `request.state`. E `request.state` é um atributo comum de
+objeto: ele atravessa qualquer aninhamento de middleware sem esforço, então
+aquele teste é **imune** justamente ao risco que se queria cobrir. Ninguém
+nunca tinha provado a única coisa que importava.
+
+É a **quinta** ocorrência de "testei a peça, não a montagem". A
+[retrospectiva de processo](retrospectiva-processo.md) conta quatro (Itens 14,
+23, 24 e 27) porque esta apareceu depois de ela ser escrita. É também a
+**primeira fechada com teste permanente** em vez de conferência manual — nas
+quatro anteriores, quem achou foi rodar a coisa de verdade, e a garantia
+continuou dependendo de alguém rodar de novo.
+
+**O teste novo**,
+`test_a_real_requests_access_log_line_matches_its_response_header`, faz uma
+requisição de verdade e compara a linha de log de acesso com o header da
+resposta. A revisão o sondou com **quatro defeitos deliberados**:
+
+| Defeito injetado | Teste antigo | Teste novo |
+|---|---|---|
+| contextvar não setada | passa | **falha** |
+| filtro crava `"-"` | **falha** | **falha** |
+| filtro não estampa nada | passa | **falha** |
+| `RequestIdMiddleware` movido de externo para interno | passa | **falha** |
+
+A primeira linha prova que os dois testes **não são redundantes** — cada um
+cobre uma afirmação diferente. A última é a mais valiosa e não estava prevista:
+a **ordem dos middlewares** era garantida apenas por um comentário em prosa em
+`src/main/server/server.py:59-64`. Comentário não fica vermelho. Agora fica.
+
+**A lição sobre a forma:** um teste em que o valor esperado é **calculado pelo
+mesmo caminho** que o valor observado não testa nada. O antídoto é escrever o
+esperado **à mão** — no caso, `_current_request_id.set("req-known")` e
+`assert record.request_id == "req-known"`. Um literal não mente.
+
+### Uma exceção deliberada a uma regra do projeto
+
+A regra de 2026-08-08 diz que pendência achada no meio de um item é para ser
+**registrada, não corrigida na hora**. O teste tautológico foi corrigido na
+hora, por decisão do Gabriel.
+
+O motivo é específico e não generaliza: aquela task existia **para provar que a
+rede está armada**. Adicionar uma verdade nova ao lado de uma mentira conhecida,
+e registrar a mentira para depois, contradiz o objetivo declarado da própria
+task. A regra segue valendo — é registrada como exceção, com a razão, para que
+uma leitura futura não a leia como precedente.
+
+### Três defeitos estavam no PLANO, não na implementação
+
+Vale mais que os três defeitos: **o plano é código também, e ninguém o revisa.**
+
+1. **Um falso positivo escrito no plano.** O passo que "provava" o `/ready`
+   respondendo 503 subia o container com a `DATABASE_URL` do `.env` — que
+   aponta para o **Neon** — e depois parava o PostgreSQL **local** do
+   `docker-compose`. Parar um banco não afeta um container conectado a outro:
+   o `/ready` continuaria em 200 e o passo "passaria" tendo provado nada. Foi
+   corrigido apontando o container para o banco local descartável, e o
+   resultado real foi a sequência **200 → 503 → 200**, com o container vivo o
+   tempo todo. Os três valores importam: um 503 isolado não distingue "o
+   readiness funciona" de "o container morreu".
+2. **O serviço do compose chama-se `postgres-test`, não `postgres`.** Trivial,
+   e encontrado só porque alguém rodou o comando em vez de lê-lo.
+3. **Um critério de pronto inalcançável.** "`gh api dependabot/alerts` devolve
+   0" não podia ser satisfeito dentro do ciclo, porque o Dependabot avalia a
+   **branch padrão** e os pins estão numa branch de trabalho.
+
+Os três têm a mesma forma: **um passo que parece verificação e não verifica**.
+O plano foi escrito com cuidado e revisado; nenhum dos três apareceu na
+leitura. Apareceram na execução. É o mesmo padrão de "testei a peça, não a
+montagem", aplicado a documento em vez de código — e sugere a contramedida
+correspondente: ao escrever um passo de verificação, pergunte **o que
+aconteceria se o sistema estivesse quebrado**. Se a resposta for "o passo
+passaria do mesmo jeito", o passo não é verificação.
+
+### Sobre o critério que virou passo pós-merge
+
+O Dependabot avalia a branch padrão, então a contagem **continua 37** e vai
+continuar até o merge. **Isso não é falha das correções.** O que foi provado
+dentro do ciclo, sem depender de rescan:
+
+- os 37 são **19 advisories distintos contados duas vezes**, porque o
+  `requirements-dev.txt` faz `-r requirements.txt` e a contagem é por
+  manifesto;
+- os 19 estão **todos** satisfeitos pelos pins da branch;
+- e — o passo que separa uma prova de uma coincidência — cada
+  `vulnerable_version_range` é um **intervalo único e limitado** cujo limite
+  superior é exatamente o `first_patched_version`. Só sob essa condição
+  "pin >= corrigida" é um teste de fechamento válido; com faixas disjuntas ou
+  duas linhas de correção paralelas, a mesma comparação daria falso verde.
+  Além disso, o `requirements.txt` é um fecho transitivo completo, então nenhum
+  pacote poderia ser estruturalmente ignorado.
+
+**Verificar que a contagem chega a zero é passo pós-merge, e está registrado
+como pendência.** Não afirmamos zero.
+
+### O ponto cego do outro repositório
+
+O `Refund-FrontEnd` passou o projeto inteiro com o **Dependabot desligado** — a
+API respondia 403. Ligado agora, a primeira varredura devolveu **10 alertas, 9
+high e 1 medium**. Nada foi corrigido; o escopo era transformar um ponto cego
+em um número.
+
+A assimetria vale registrar: o `Refund-api` tinha 37 alertas **visíveis e
+ignorados**; o frontend tinha 10 **invisíveis**. O segundo estado é pior,
+porque não produz nem o incômodo que eventualmente força a ação. "Zero alertas"
+e "nenhuma varredura" são a mesma tela.
+
+### O rebase, e por que ele exigiu reverificar
+
+A `origin/main` andou durante o ciclo (o `21920b3` do Gabriel, que trouxe a
+retrospectiva de processo). A branch foi rebaseada para preservar a convenção
+de fast-forward: `54cda88 → 5bf4e2e`, 9 commits, sem conflito.
+
+E foi **reverificada inteira depois** — pelo mesmo motivo que este diário já
+registrou na sessão de 2026-08-05: **rebase produz uma árvore contra a qual
+nenhum teste jamais rodou.** "Não houve conflito" significa que o Git conseguiu
+juntar os textos, não que o programa resultante funciona. São perguntas
+diferentes, e só uma delas o Git responde.
+
+### Verificação
+
+| Verificação | Resultado |
+|---|---|
+| `pytest` (3 rodadas, saída salva antes de lida) | **335 passed / 72 deselected** nas três |
+| `pytest -m integration` | **72 passed** |
+| `pylint src; echo $?` | **exit 0** |
+| CI, job `verify` | `collected 407`, 72 deselected, **335 passed** |
+| CI, job `integration` | `collected 407`, 335 deselected, **72 passed** |
+| quebra A (handler na classe errada) | mockada verde, **integração vermelha** |
+| quebra B (4 sondas no teste novo) | as 4 pegas, incluindo a ordem dos middlewares |
+| container: `/ready` | **200 → 503 → 200**, container vivo o tempo todo |
+| `import pytest` na imagem / `.env` na imagem | falha / ausente |
+| imagem (DISK USAGE) | **366 → 360 MB** |
+| `PythonDeprecationWarning` do boto3 | **9 → 0** |
+| Dependabot `Refund-api` | 37 brutos = **19 distintos**, 19 satisfeitos; contagem real é pós-merge |
+| Dependabot `Refund-FrontEnd` | ligado; **10 alertas** (9 high, 1 medium) |
+
+O 335 é o 334 anterior **mais o teste novo** — a única mudança de contagem do
+ciclo, e ela tem nome.
+
+### O que lembrar
+
+- **Quando uma dependência não sobe, pergunte sob que CONDIÇÃO ela está
+  fixada.** Um marcador de ambiente prende versões sem aparecer em nenhum
+  arquivo seu.
+- **Duas pendências na lista podem ser uma causa e um sintoma.** Estas ficaram
+  dias como itens 1 e 2 separados.
+- **"Major" mede a promessa da biblioteca, não o seu uso dela.** Duas previsões
+  pessimistas do plano caíram.
+- **Verificação que passa sem esforço precisa provar que ainda verifica.** Zero
+  mensagens e portão quebrado são indistinguíveis pelo resultado.
+- **"Mais recente" não é "compatível"** — o par `pylint`/`astroid` é o exemplo.
+- **Uma asserção cujos dois lados vêm da mesma fonte não é um teste.** Escreva
+  o valor esperado à mão.
+- **Um comentário em prosa não fica vermelho.** A ordem dos middlewares foi
+  garantida por um durante todo o Item 24.
+- **Ao escrever um passo de verificação, pergunte o que ele faria se o sistema
+  estivesse quebrado.** Se passaria igual, não é verificação — foi assim que
+  três defeitos entraram no plano.
+- **Rebase limpo não é árvore testada.** O Git juntou textos; ninguém rodou
+  nada.
+- **Um warning obedecido em vez de silenciado pagou este ciclo inteiro.**
