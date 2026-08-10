@@ -39,7 +39,11 @@ def test_detail_is_always_a_string():
 # The title comes from the status registry rather than being written by hand at
 # 38 call sites.
 def test_the_title_comes_from_the_status_code():
-    assert body_of(problem_response(422, "x", "/", "r"))["title"] == "Unprocessable Entity"
+    # Python 3.13 renamed the 422 phrase in the stdlib's HTTPStatus registry,
+    # from "Unprocessable Entity" to "Unprocessable Content" (RFC 9110). The
+    # title here is meant to track that registry, not a value pinned by us —
+    # so this string follows the interpreter's, on purpose.
+    assert body_of(problem_response(422, "x", "/", "r"))["title"] == "Unprocessable Content"
     assert body_of(problem_response(401, "x", "/", "r"))["title"] == "Unauthorized"
     assert body_of(problem_response(500, "x", "/", "r"))["title"] == "Internal Server Error"
 
