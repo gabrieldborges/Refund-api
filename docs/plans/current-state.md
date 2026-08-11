@@ -3338,14 +3338,21 @@ deploy nenhuma delas fazia sentido.
 
 - **A saída dos testes deixou de ser limpa: `StarletteDeprecationWarning`.**
   Depois do major, o `TestClient` avisa para usar `httpx2`, e o aviso aparece
-  nas duas suítes — é o `1 warning` que acompanha os 340 e os 72 (ver
-  `:2068` acima, que já registra a suíte mockada em 340). Ele é
+  nas duas suítes — é o `1 warning` que acompanha os 341 e os 72 (ver
+  `:2085` acima, que já registra a suíte mockada em 341). Ele é
   reportado em `fastapi/testclient.py:1` (o reexport), não no arquivo do
   Starlette de onde vem; procurar pela origem no `starlette/` não acha.
   Não afeta resultado nenhum. Fica registrado porque saída de teste suja é
   como um aviso **real** passa despercebido — e este projeto acabou de
   registrar, logo acima, um ciclo inteiro que existiu porque um warning **não**
   foi silenciado.
+  **Esta mesma frase já foi a prova do padrão que ela descreve.** Ela dizia
+  335, foi corrigida para 340 no commit `ec29ce1` — e ficou obsoleta **dentro
+  do mesmo commit**, porque a outra correção daquela onda (`S3_REGION`
+  obrigatória, `:2071` acima) acrescentou um teste e moveu o total real para
+  341 antes que o commit fechasse. Duas correções da mesma onda mexeram no
+  mesmo fato por direções diferentes; a que rodou por último venceu, e a
+  primeira só foi notada certa por um instante.
 
 - **`host.docker.internal` é específico do Docker Desktop e não está
   documentado no repo.** A verificação do container aponta o container para o
