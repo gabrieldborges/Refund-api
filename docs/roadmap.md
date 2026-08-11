@@ -17,9 +17,13 @@ Os estados possíveis são:
   validada, object storage, container, CI), mas **escolher e configurar um
   provedor nunca foi feito** — e não é código. Enquanto não houver, "publicado"
   neste projeto significa publicado no GitHub.
-- **Foto de perfil na interface.** O backend serve avatar desde 2026-07-29 e
+- ~~**Foto de perfil na interface.** O backend serve avatar desde 2026-07-29 e
   `has_avatar` é sempre `false` porque nenhuma tela renderiza um. É o único
-  item de produto ainda não implementado.
+  item de produto ainda não implementado.~~ **CONCLUÍDO em 2026-08-11.** A foto
+  aparece na sidebar, na lista de Time e na página do membro, e a pessoa define a
+  própria por um diálogo aberto no cabeçalho da sidebar. `has_avatar` deixou de ser
+  sempre falso: ele é o que decide se o cliente pede a URL assinada, e é por isso
+  que a lista de Time não faz uma requisição 404 por linha.
 - **Agregado por status cruzando usuários.** Não existe endpoint que some por
   status para *todos* os usuários, então o card de dinheiro da Home mostra, para
   o admin, o total solicitado em vez de aprovado + pago. **Absorvida pelo Ciclo 2

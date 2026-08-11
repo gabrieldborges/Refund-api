@@ -323,6 +323,19 @@ estática traria a árvore do nivo de volta ao bundle de entrada sem erro nenhum
 verificação é o **tamanho da entrada** no `npm run build`, não a existência de um
 chunk separado — o chunk existe de qualquer forma.
 
+**Três features no frontend**, e nenhuma importa a outra: `refunds`, `team` e
+`profile`. A `profile` nasceu com a foto de perfil — ela tem endpoints, ramo de cache e
+mutações próprios, e é lida por três telas que não têm mais nada em comum: a sidebar da
+shell, o diretório de Time e a página do membro.
+
+O avatar chega à tabela de Time por **slot**, não por import: o
+`eslint-plugin-boundaries` recusou `team` importando `profile`, e quem compõe as duas é
+a página. Foi a regra funcionando, não um obstáculo.
+
+`has_avatar` decide se o cliente pede a URL assinada. A API responde 404 tanto para
+"sem foto" quanto para "usuário inexistente", então sem esse campo uma lista de dez
+linhas sem foto seria dez requisições que falham.
+
 As três telas prometidas na sidebar estão entregues: `/dashboard`, `/team` (admin) e
 `/calendar`. Nenhum item tem selo "em breve", e `NavItem.enabled` segue existindo,
 documentado no arquivo, como a máquina do selo para a próxima promessa.

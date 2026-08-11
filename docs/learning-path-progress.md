@@ -6886,3 +6886,101 @@ diff antes de seguir**, mesmo quando o comando diz "Created" e não "Updated".
 - **Quando um teste que conta chega a zero, reveja se contar ainda era a pergunta.**
 - Uma ferramenta de scaffolding pode escrever fora do lugar: `git diff` antes de
   seguir.
+
+## Ciclo de feature — Foto de perfil, e três correções de uso (2026-08-11)
+
+Fecha o último item de produto aberto do [roadmap](roadmap.md): o backend servia avatar
+desde 2026-07-29 e nenhuma tela renderizava um. Entrou junto a correção de três
+defeitos encontrados usando as telas.
+
+Suítes: frontend **433 → 453**. Backend inalterado — nada disso precisou de API nova.
+
+### Lição 1 — Pular não é avançar
+
+O botão "Próxima pendente" ficava em pingue-pongue entre duas solicitações. A consulta
+já era global e ordenada da mais antiga — essa parte estava certa. O defeito era o
+cálculo: "próxima" era *a primeira da fila que não é a atual*.
+
+Com a fila `[B, C, D]`: em B devolve C, e em C devolve **B**, porque B é a primeira e
+não é a atual. Para sempre. E como vizinhos numa fila por data costumam ser do mesmo
+solicitante, o sintoma lido foi "só vai para o pendente daquele usuário".
+
+O teste que existia dizia `skips the refund currently open`. **Pular a atual e avançar
+depois dela são coisas diferentes**, e a asserção só cobria a primeira. Agora "próxima"
+é a seguinte à posição atual, e no fim da fila não há nenhuma — o botão desabilita, que
+é o que significa trabalhar uma fila até o fim.
+
+### Lição 2 — Um teste pode manter um defeito no lugar
+
+O link "Ver todas as solicitações de X na Home" apontava para `/?name=<pessoa>`. Nunca
+funcionou: o `name` da listagem filtra o nome da **solicitação**, não o da pessoa.
+
+E havia um teste verde afirmando exatamente esse `href`. Ele não estava errado sobre o
+código — estava errado sobre o que o código deveria fazer, e por isso protegia o
+defeito de qualquer refatoração. Removi com o motivo escrito no lugar dele.
+
+O link agora vai para o cadastro da pessoa, e **saiu do painel compartilhado**: na
+página do membro do time ele seria um link para a própria página. Mesmo raciocínio que
+já tinha posto as setas de navegação no invólucro em vez de no núcleo.
+
+### Lição 3 — Reimplementar um componente do registry custa o que ele fazia de graça
+
+Escolher um dia no calendário não dava retorno visual nenhum. Meu `DayButton`
+reimplementava o do shadcn do zero, e com isso perdeu o atributo
+`data-selected-single` e as classes que se penduram nele.
+
+O marcador de **hoje** sobreviveu — ele vem da célula, não do botão. Foi essa
+assimetria que apontou a causa.
+
+A correção foi **envolver** o `CalendarDayButton` do registry em vez de substituí-lo:
+seleção, foco e teclado voltam a ser dele, e só o badge de contagem é nosso.
+`components` numa lib não é sempre "escreva o seu" — muitas vezes é "componha com o
+que existe".
+
+### Lição 4 — A fronteira pegou o import antes de mim
+
+Pus `UserAvatar` dentro da `UsersTable`, e o `eslint-plugin-boundaries` recusou:
+`features/team` não pode importar `features/profile`. Irmãs são proibidas.
+
+A saída foi um **slot** que a página preenche — e a página é camada `app`, a única com
+permissão para compor duas features. A regra não foi obstáculo; ela apontou onde a
+composição pertence, e é o mesmo padrão que já tinha resolvido o `headerActions` do
+painel.
+
+### Lição 5 — Um componente novo na shell muda quem a shell é
+
+Ao mostrar a foto, a sidebar passou a consumir server state. **Dezesseis testes dela
+caíram de uma vez**, todos com "No QueryClient set" — porque os testes da shell nunca
+precisaram de um.
+
+Não era defeito do código: era a shell mudando de natureza. Mas vale saber que o custo
+de colocar uma query num componente de layout é todo teste que o monta.
+
+### Lição 6 — jsdom não carrega imagem, como não faz layout
+
+O `AvatarImage` do Radix só monta **depois** que a imagem carrega. No jsdom imagem
+nunca carrega, então o fallback fica visível independentemente da URL.
+
+Então nenhum teste afirma o `<img>` renderizado: eles afirmam **qual usuário foi
+consultado**. É a mesma classe de limitação do nivo não desenhar marca nenhuma sem
+layout engine — e a mesma resposta: afirme o encanamento, não o pixel.
+
+### Verificação
+
+- Frontend: `typecheck`, `lint` (0 avisos), `vitest` (453), `build`.
+- Bundle: a entrada foi de 175,73 para **176,95 kB gzip** — os 1,2 kB são o Avatar do
+  Radix e a feature nova, e eles caem na entrada porque a sidebar é parte da shell e
+  carrega junto.
+
+### O que lembrar
+
+- **"Pular X" e "avançar depois de X" não são a mesma asserção.** Um teste que só cobre
+  a primeira deixa passar um ciclo infinito.
+- **Um teste verde pode estar segurando um defeito.** Quando um comportamento errado
+  tem teste, corrigir exige remover o teste — e dizer por quê.
+- **Envolva o componente do registry em vez de reescrevê-lo**, ou pague de novo o que
+  ele já resolvia.
+- **`has_avatar` no payload não é redundância**: é o que evita uma requisição 404 por
+  linha, porque a API responde igual para "sem foto" e "sem usuário".
+- Uma query dentro de um componente de layout custa um provider em todo teste que o
+  monta.
