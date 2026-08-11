@@ -37,6 +37,7 @@ without lying about its shape.
 """
 import json
 import pathlib
+from datetime import datetime
 import pytest
 
 
@@ -94,9 +95,18 @@ VOLATILE = {
 # prove — that January through December are all present, in order.
 CONTRACT_YEAR = 2000
 
+# The day the suite runs. The calendar captures are relative to it, because a refund
+# created by this test lands today and no other date would have rows.
+TODAY = datetime.now().date().isoformat()
+
 
 def normalise_field(key, value):
     if key == "month" and isinstance(value, str) and "-" in value:
+        return f"{CONTRACT_YEAR}-{value.split('-', 1)[1]}"
+    # Same reasoning as `month`: `date` is derived from the day the test runs, so
+    # only the YEAR is replaced. The day and month stay, which keeps the days of a
+    # captured month distinct from one another.
+    if key == "date" and isinstance(value, str) and value.count("-") == 2:
         return f"{CONTRACT_YEAR}-{value.split('-', 1)[1]}"
     if key == "year" and isinstance(value, int):
         return CONTRACT_YEAR
@@ -134,6 +144,15 @@ def capture_refunds(client, headers, admin_headers, user_id):
         # branches on nothing else to know which one it got.
         "refundSummary": client.get("/refunds/summary", headers=headers).json(),
         "refundSummaryAsAdmin": client.get("/refunds/summary", headers=admin_headers).json(),
+        # The calendar's two shapes. The daily counts and the listing narrowed to a
+        # single day — the second is what proves created_from == created_to returns
+        # that whole day rather than nothing.
+        "refundDailyCounts": client.get(
+            "/refunds/daily-counts", params={"month": TODAY[:7]}, headers=headers
+        ).json(),
+        "refundListByDay": client.get(
+            "/refunds", params={"created_from": TODAY, "created_to": TODAY}, headers=headers
+        ).json(),
     }
 
 

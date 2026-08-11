@@ -20,6 +20,137 @@
     "count": 1,
     "type": "Refund"
   },
+  "refundDailyCounts": {
+    "days": [
+      {
+        "count": 0,
+        "date": "2000-08-01"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-02"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-03"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-04"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-05"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-06"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-07"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-08"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-09"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-10"
+      },
+      {
+        "count": 1,
+        "date": "2000-08-11"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-12"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-13"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-14"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-15"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-16"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-17"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-18"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-19"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-20"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-21"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-22"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-23"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-24"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-25"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-26"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-27"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-28"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-29"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-30"
+      },
+      {
+        "count": 0,
+        "date": "2000-08-31"
+      }
+    ],
+    "month": "2000-08",
+    "scope": "user",
+    "type": "RefundDailyCounts"
+  },
   "refundDetail": {
     "attributes": {
       "amount_in_cents": 4590,
@@ -38,6 +169,30 @@
     "type": "Refund"
   },
   "refundList": {
+    "attributes": [
+      {
+        "amount_in_cents": 4590,
+        "category": "food",
+        "created_at": "2026-01-01T12:00:00",
+        "id": 1,
+        "name": "Almoço com cliente",
+        "status": "pending",
+        "user": {
+          "has_avatar": false,
+          "id": 1,
+          "name": "Ana"
+        }
+      }
+    ],
+    "count": 1,
+    "page": 1,
+    "per_page": 10,
+    "sum_amount_in_cents": 4590,
+    "total": 1,
+    "total_pages": 1,
+    "type": "Refund"
+  },
+  "refundListByDay": {
     "attributes": [
       {
         "amount_in_cents": 4590,

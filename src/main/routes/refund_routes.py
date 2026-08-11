@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, Form, UploadFile, File, Query, Body
 from fastapi.responses import JSONResponse
@@ -5,6 +6,7 @@ from src.views.http_types.http_request import HttpRequest
 from src.main.composer.refund_creator_composer import refund_creator_composer
 from src.main.composer.refund_lister_composer import refund_lister_composer
 from src.main.composer.refund_summary_composer import refund_summary_composer
+from src.main.composer.refund_daily_counts_composer import refund_daily_counts_composer
 from src.main.composer.refund_finder_composer import refund_finder_composer
 from src.main.composer.refund_deleter_composer import refund_deleter_composer
 from src.main.composer.refund_reviewer_composer import refund_reviewer_composer
@@ -57,11 +59,18 @@ async def list_refunds(
     # page and per_page already behave. Unlike `status`, there is no whitelist
     # to express, so this project's 422 envelope buys nothing here.
     user_id: Optional[int] = Query(None),
+    # Typed as `date` so FastAPI parses and rejects the format, which is why this
+    # slice needs no whitelist for them. Inclusive on both ends from the caller's
+    # point of view: the repository turns created_to into "< to + 1 day", so asking
+    # for one day returns that whole day.
+    created_from: Optional[date] = Query(None),
+    created_to: Optional[date] = Query(None),
     token_info: dict = Depends(get_current_user),
 ):
     http_request = HttpRequest(
         query={"page": page, "per_page": per_page, "name": name,
-               "status": status, "sort": sort, "order": order, "user_id": user_id},
+               "status": status, "sort": sort, "order": order, "user_id": user_id,
+               "created_from": created_from, "created_to": created_to},
         token_info=token_info,
     )
     view = refund_lister_composer()
@@ -90,6 +99,27 @@ async def summarize_refunds(
         token_info=token_info,
     )
     view = refund_summary_composer()
+    response = await view.handle(http_request)
+    return JSONResponse(content=response.body, status_code=response.status_code)
+
+
+# DECLARED BEFORE "/{refund_id}", same reason as /summary: FastAPI matches in
+# declaration order, so with the id route first "/refunds/daily-counts" would be read
+# as an id, fail int coercion and answer 422.
+@refund_routes.get("/daily-counts")
+async def count_refunds_by_day(
+    # Free-form str: the validator behind this checks the YYYY-MM shape AND that the
+    # month is 01-12, and answers in this project's {"detail": "..."} envelope
+    # instead of FastAPI's native one.
+    month: str = Query(...),
+    user_id: Optional[int] = Query(None),
+    token_info: dict = Depends(get_current_user),
+):
+    http_request = HttpRequest(
+        query={"month": month, "user_id": user_id},
+        token_info=token_info,
+    )
+    view = refund_daily_counts_composer()
     response = await view.handle(http_request)
     return JSONResponse(content=response.body, status_code=response.status_code)
 

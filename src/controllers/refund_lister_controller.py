@@ -1,4 +1,5 @@
 import math
+from datetime import date
 from typing import Optional
 from src.models.repositories.interfaces.refunds_repository_interface import RefundsRepositoryInterface
 from src.controllers.interfaces.refund_lister_controller_interface import (
@@ -22,6 +23,8 @@ class RefundListerController(RefundListerControllerInterface):
         sort: Optional[str] = None,
         order: Optional[str] = None,
         filter_user_id: Optional[int] = None,
+        created_from: Optional[date] = None,
+        created_to: Optional[date] = None,
     ) -> dict:
         # Authorization rule lives here, not in the repository: an admin can see
         # everyone's refunds, a standard user only their own. An admin may also
@@ -33,6 +36,7 @@ class RefundListerController(RefundListerControllerInterface):
         refunds, total, total_amount = await self.__refunds_repository.select_refunds(
             page=page, per_page=per_page, name=name, user_id=filter_user_id,
             status=status, sort=sort, order=order,
+            created_from=created_from, created_to=created_to,
         )
 
         return self.__format_response(refunds, total, total_amount, page, per_page)

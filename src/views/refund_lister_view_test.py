@@ -29,7 +29,8 @@ async def test_refund_lister_view_forwards_query_and_token_info_to_the_controlle
     assert response.status_code == 200
     mock_controller.list.assert_awaited_once_with(
         page=2, per_page=20, name="Ana", user_id=7, role="standard",
-        status=None, sort=None, order=None, filter_user_id=None
+        status=None, sort=None, order=None, filter_user_id=None,
+        created_from=None, created_to=None,
     )
 
 
@@ -46,7 +47,8 @@ async def test_refund_lister_view_defaults_name_to_none_when_absent(mock_control
 
     mock_controller.list.assert_awaited_once_with(
         page=1, per_page=10, name=None, user_id=7, role="admin",
-        status=None, sort=None, order=None, filter_user_id=None
+        status=None, sort=None, order=None, filter_user_id=None,
+        created_from=None, created_to=None,
     )
 
 

@@ -42,6 +42,7 @@ async def test_standard_user_lists_only_their_own_refunds(mock_repository):
     mock_repository.select_refunds.assert_awaited_once_with(
         page=1, per_page=10, name=None, user_id=7,
         status=None, sort=None, order=None,
+        created_from=None, created_to=None,
     )
 
 
@@ -56,6 +57,7 @@ async def test_admin_lists_every_users_refunds(mock_repository):
     mock_repository.select_refunds.assert_awaited_once_with(
         page=1, per_page=10, name=None, user_id=None,
         status=None, sort=None, order=None,
+        created_from=None, created_to=None,
     )
 
 
@@ -68,6 +70,7 @@ async def test_list_forwards_the_name_search_term(mock_repository):
     mock_repository.select_refunds.assert_awaited_once_with(
         page=1, per_page=10, name="Ana", user_id=7,
         status=None, sort=None, order=None,
+        created_from=None, created_to=None,
     )
 
 
@@ -180,6 +183,7 @@ async def test_list_forwards_status_sort_and_order_to_the_repository(mock_reposi
     mock_repository.select_refunds.assert_awaited_once_with(
         page=1, per_page=10, name=None, user_id=None,
         status="pending", sort="amount_in_cents", order="asc",
+        created_from=None, created_to=None,
     )
 
 
