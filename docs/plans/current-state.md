@@ -298,9 +298,9 @@ sendo escrito pelo `ThemeEffect` a partir da store Zustand (Item 12).
 Topbar). Ícones são só do `lucide-react`; o único SVG local é o `Receipt.svg`
 da marca.
 
-Ao redor: `pages/` (prefixo `Page`), `features/refunds/` com fachada pública
-(Item 8), `stores/` (Zustand), `hooks/`, `context/` (Auth via Context +
-`localStorage`), `lib/` (Axios com interceptors) e `schemas/` (Zod). Server
+Ao redor: `pages/` (prefixo `Page`), `features/refunds/` e `features/team/`, cada
+uma com fachada pública (Item 8), `stores/` (Zustand), `hooks/`, `context/` (Auth
+via Context + `localStorage`), `lib/` (Axios com interceptors) e `schemas/` (Zod). Server
 state via TanStack Query; formulário e responses consumidos validados com Zod. O
 React Router usa Data Mode com loaders, páginas lazy e erro de rota; busca e
 paginação da Home vivem em search params validados. As camadas
@@ -309,6 +309,21 @@ paginação da Home vivem em search params validados. As camadas
 
 `src/components/{atoms,molecules}` **não existem mais** — foram substituídos por
 `src/components/ui` no ciclo do restyle.
+
+**Duas features, e elas não se falam.** O `eslint-plugin-boundaries` proíbe uma
+feature importar a irmã, então a página do membro do time (`PageTeamMember`) é
+quem compõe as duas: pega o usuário de `features/team` e o painel de
+estatísticas de `features/refunds`. A composição de features acontece sempre na
+camada `app`, porque é a única com permissão para isso.
+
+O painel compartilhado é o `RefundStatsPanel` (rosca por status + as
+solicitações de uma pessoa), usado pela tela de revisão através do
+`RequesterPanel` e pela página do membro direto. Ele **não** renderiza `Card`
+nem título: quem monta decide o invólucro, e é isso que evita o nome duplicado
+na página do membro. Ele também é o único caminho pelo qual o gráfico entra na
+aplicação — o `RefundDonutChart` não é exportado por nenhuma fachada, porque uma
+reexportação estática traria os 74 kB gzip do chunk do nivo de volta ao bundle de
+entrada sem erro nenhum ([orçamento](../performance-budget.md)).
 
 ## Trilha de aprendizado — onde estamos
 

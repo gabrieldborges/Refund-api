@@ -105,7 +105,32 @@ não negociáveis:
   `AuthUser`. A página do membro do time compõe duas features **na camada
   `app`**, que é a única com permissão para isso.
 
-## Ciclo 1 — Time (admin)
+## Ciclo 1 — Time (admin) — **CONCLUÍDO em 2026-08-11**
+
+Spec: [`2026-08-11-team-directory-design.md`](../superpowers/specs/2026-08-11-team-directory-design.md).
+Plan: [`2026-08-11-team-directory.md`](../superpowers/plans/2026-08-11-team-directory.md).
+
+**Duas coisas que este panorama errou, descobertas ao ler o código na hora de
+construir.** Ficam registradas porque as duas eram afirmações plausíveis:
+
+1. **O ciclo não precisava de `user_lister_validator`.** Os limites de `page` e
+   `per_page` são impostos pelo `Query(ge=..., le=...)` do FastAPI na rota. O
+   `refund_lister_validator` existe só para as listas brancas de `status`, `sort`
+   e `order`, que o FastAPI expressaria com o envelope de erro dele em vez do
+   `{"detail": "..."}` do projeto. Sem lista branca, um validator seria forma
+   copiada sem conteúdo.
+2. **O reuso do `RequesterPanel` não era direto.** Ele exige `currentRefundId` —
+   âncora do destaque e das setas — e desenha o nome no próprio `CardHeader`, que
+   duplicaria o nome na página do membro. O núcleo foi extraído para
+   `RefundStatsPanel`, com um id opcional e um slot `ReactNode` para as ações do
+   cabeçalho.
+
+E duas que os testes pegaram: o `CardTitle` do shadcn é uma `div` sem `asChild`,
+então o nome nunca era um heading enquanto o painel abaixo tinha um `h3`; e os
+testes de estado de erro exerciam um caminho inalcançável, porque o
+`ensureQueryData` do loader rejeita antes de o componente renderizar.
+
+### O plano original do Ciclo 1, para referência
 
 ### Backend
 

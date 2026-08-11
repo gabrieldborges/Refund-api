@@ -6481,3 +6481,113 @@ não interpretar a primeira implantação falha como defeito.
   sem a variável configurada reproduzia o defeito do host global de novo, sem
   aviso de startup. Vale reconferir os campos vizinhos de um validador sempre
   que uma correção passa a depender de um deles.
+
+## Ciclo de feature — Diretório do time (2026-08-11)
+
+Ciclo 1 do [panorama das três telas](plans/2026-08-11-tres-telas-panorama.md).
+Spec e plan em `docs/superpowers/`. Entregou `GET /users`, `GET /users/{id}`, a
+feature `team` no frontend e as telas `/team` e `/team/:id`, só para admin.
+
+Suítes: backend **341 → 371** (mais 72 de integração), frontend **318 → 372**.
+
+### Lição 1 — Nem toda fatia precisa de todas as camadas
+
+O plano previa um `user_lister_validator` "por simetria" com o de refunds. Ao
+ler o código, não havia o que validar: `page` e `per_page` já são recusados pelo
+`Query(ge=..., le=...)` do FastAPI na rota, e o validator de refunds existe
+apenas para as **listas brancas** de `status`, `sort` e `order` — que o FastAPI
+recusaria com o envelope de erro dele em vez do `{"detail": "..."}` do projeto.
+Como a ordenação dos usuários é fixa, não havia conjunto de valores permitidos a
+expressar.
+
+**Copiar a forma de uma fatia que funciona não é o mesmo que copiar a razão
+dela.** A razão foi escrita dentro da view, para ninguém "corrigir" a ausência
+depois.
+
+### Lição 2 — Montar um dict é mais seguro que apagar chaves
+
+A linha de `users` carrega o hash bcrypt ao lado do nome e do e-mail. O
+`serialize_user` monta um **dict novo nomeando cada campo público**, em vez de
+devolver a linha sem algumas chaves.
+
+A diferença só aparece no futuro: apagando chaves, uma coluna adicionada a
+`users` passaria a vazar sozinha, sem ninguém decidir isso. O teste afirma o
+**conjunto exato** de chaves, não só a ausência de `password`, pela mesma razão.
+
+### Lição 3 — Recusar antes de consultar, não depois
+
+Os dois controllers checam o papel **antes** de tocar o banco. Não é só
+economia: recusar depois executaria trabalho para uma requisição que nunca foi
+permitida, e o tempo de resposta ainda diria, aproximadamente, quantos usuários
+existem. Os testes afirmam que o mock do repositório **nunca foi chamado**, e não
+apenas que a exceção subiu.
+
+### Lição 4 — Dois códigos de recusa diferentes, de propósito
+
+A listagem responde **403**; a consulta individual, **404** com mensagem idêntica
+byte a byte à de um id inexistente. A assimetria é a regra (BR-025): uma listagem
+não recebe nem revela nada sobre um id específico, então pode ser honesta; a
+consulta individual, se respondesse 403, confirmaria que aquele id existe.
+
+Verificado contra o servidor real: os dois corpos diferem apenas em `instance`
+(o caminho que o próprio cliente pediu) e `request_id`. Nenhum dos dois revela
+algo que o cliente já não soubesse.
+
+### Lição 5 — Slot em vez de flag booleana
+
+O `RequesterPanel` não podia ser reaproveitado direto: exigia `currentRefundId` e
+desenhava o nome no próprio cabeçalho. O núcleo virou `RefundStatsPanel`, que
+recebe um id **opcional** e um slot `ReactNode`.
+
+Os dois eliminam o `if` do componente, mas fazem coisas diferentes: **um booleano
+de aparência mantém a decisão dentro do componente e cresce em número a cada tela
+nova; um slot devolve a decisão a quem chama.** É composição em vez de
+configuração. E o painel deixou de renderizar `Card` e título — quem monta decide
+o invólucro, que é o que resolveu o nome duplicado.
+
+### Lição 6 — `CardTitle` do shadcn é uma `div`
+
+O nome da pessoa nunca foi um heading: o `CardTitle` do registry é uma `div` sem
+`asChild`, e o painel abaixo tinha um `h3`. Ou seja, um `h3` sem nada acima dele.
+O `<h2>` aninhado dentro do `CardTitle` resolve sem tocar no código do registry —
+a `div` segue dando o estilo, o `h2` dá a semântica. Corrigido nas duas telas que
+renderizam o painel.
+
+**Um componente de design system dá aparência; ele não garante semântica.**
+
+### Lição 7 — Um teste pode cobrir um caminho inalcançável
+
+Os testes de estado de erro das duas páginas falharam, e o motivo não era o
+componente: o loader faz `ensureQueryData`, que **rejeita** num 500, então a rota
+lança para o `ContentError` e o `isError` do componente nunca renderiza. O ramo
+existe, mas só é alcançado quando a query falha **depois** de o loader ter
+passado — um refetch em segundo plano.
+
+Os testes passaram a stubar o loader, com a razão escrita ao lado. **Um teste que
+falha pode estar acusando a premissa do teste, não o código.**
+
+### Verificação
+
+- Backend: `pytest` (371), `pytest -m integration` (72), `pylint src` saindo 0.
+- Frontend: `typecheck`, `lint` (0 avisos), `vitest` (372), `build`.
+- Ponta a ponta contra a API real e PostgreSQL: 403 na listagem para padrão, 404
+  indistinguível na consulta, 401 sem token, 422 em `per_page=101`, ordem por
+  nome, busca parcial case-insensitive e nenhum `password` no corpo.
+- Bundle: o donut segue em chunk próprio, 74,21 kB gzip. O `index` **parece** 46
+  kB menor, mas não é ganho: o Rollup passou a extrair chunks compartilhados
+  (`ui`, `button`) que a entrada continua carregando. Somando tudo, a saída
+  cresceu ~4 kB — as páginas e as chaves novas.
+
+### O que lembrar
+
+- **`pylint` saiu 8 com nota 10.00/10 três vezes neste ciclo.** Uma por R0801
+  entre as interfaces de repositório (forma da linguagem, desabilitada com o
+  motivo), uma por R0801 entre três testes (duplicação real, resolvida com um
+  `conftest.py` local, como o `AGENTS.md` prescreve) e uma por R0914 no teste de
+  contrato (resolvida extraindo funções). Ler o código de saída não é
+  formalidade.
+- **Um `tail` num pipe engole o código de saída.** `pylint src | tail` reporta o
+  status do `tail`. Redirecione para arquivo e leia `$?`.
+- Duas features irmãs não se importam entre si; quem compõe é a página.
+- O gráfico não pode ser reexportado por fachada nenhuma, e o teste disso é uma
+  linha da saída do `npm run build`.
