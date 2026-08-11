@@ -6160,3 +6160,262 @@ ciclo, e ela tem nome.
 - **Rebase limpo não é árvore testada.** O Git juntou textos; ninguém rodou
   nada.
 - **Um warning obedecido em vez de silenciado pagou este ciclo inteiro.**
+
+## Ciclo — Primeiro deploy (Railway + S3) (2026-08-10)
+
+**Status:** concluído nas branches `feat/first-deploy` (`Refund-api`) e
+`feat/serve-static` (`Refund-FrontEnd`), em 9 tasks. **O projeto está no ar
+pela primeira vez.** O retrato — URLs, decisões, pendências novas — está no
+[estado atual](plans/current-state.md); aqui fica o que se aprendeu e não cabe
+lá.
+
+Este ciclo tem uma natureza que nenhum anterior teve: **metade dele não é
+código**. As tasks 1–3 e 9 são de agente; as 4–8 exigiam o console da AWS e o
+painel da Railway, e foram feitas pelo Gabriel. O agente preparou valores e
+conferiu evidências, sem nunca ver uma credencial.
+
+### A lição do ciclo, e ela é a quinta vez com a mesma forma
+
+**Testei a peça, não a montagem.** Já são cinco, e vale listá-las porque a
+repetição é o argumento:
+
+| # | O que passava | O que quebrava |
+|---|---|---|
+| 1 | testes de repository mockados | o singleton de sessão sob concorrência |
+| 2 | testes do workflow de aprovação | `paid` não era terminal |
+| 3 | testes do Item 24 afirmando o header presente | o `X-Frame-Options` quebrando o `<object>` do PDF |
+| 4 | `test_the_filter_stamps_the_current_request_id` | nada — a asserção era tautológica |
+| 5 | **os 9 testes de integração do S3 contra o MinIO** | **a URL assinada contra a AWS de verdade** |
+
+O quinto é o mais instrutivo dos cinco, porque a lacuna não era preguiça nem
+descuido. Três daqueles nove testes são **especificamente sobre URL assinada**
+— que ela baixa sem credencial, que o objeto não se lê sem a assinatura, que
+ela expira. Ou seja, o assunto estava coberto, e ainda assim o defeito passou:
+**o MinIO não tem endpoint regional para errar.** Nenhum teste adicional contra
+ele teria encontrado o problema, por mais bem escrito que fosse. A diferença
+não estava no teste — estava no **dublê**.
+
+**Nota sobre o número, e ela é do mesmo tema.** O ledger deste ciclo dizia "32
+testes de integração". São **9**, recontados ao escrever este texto com
+`grep -c "def test_" src/test_integration/s3_storage_test.py`, e nenhum outro
+arquivo de integração toca o MinIO. Um número plausível escrito de memória
+sobreviveu ao ciclo inteiro sem ninguém conferir — exatamente o padrão que o
+`current-state.md` cataloga desde a primeira ocorrência. **Se dá para contar,
+conte.**
+
+Generalizando, e é o que vale levar: um teste de integração prova que a peça
+funciona contra **o substituto que você escolheu**, e o substituto foi
+escolhido justamente por ser mais simples que o original. As arestas que ele
+não tem são exatamente as que você não vai testar, e você não fica sabendo
+quais são. Antes de confiar numa suíte de integração, vale perguntar: **em que
+o dublê é mais simples que o real, e o que isso torna invisível?**
+
+### Defeito 1 — `serve` em `devDependencies`, e três portões que não pegaram
+
+O frontend é servido em produção por `serve -s dist`. O pacote `serve` foi
+colocado em **`devDependencies`**, com um raciocínio que soa correto: é uma
+ferramenta de tempo de execução do servidor, não um import que entra no bundle
+do navegador.
+
+O raciocínio está errado, e o erro é de categoria: **`serve` É o servidor de
+produção**. A prova prática é que plataformas podam dependências de
+desenvolvimento sempre que `NODE_ENV=production` — que é o padrão delas. O
+build passa, o comando de start morre com `serve: not found`, e o serviço nunca
+sobe. Foi exatamente o que aconteceu: o serviço do frontend **nunca implantou
+com sucesso e por isso nunca recebeu um domínio**.
+
+**O que torna isso valioso registrar não é o erro, é quantos portões ele
+atravessou:**
+
+1. o **controlador** (eu) instruiu a colocação errada no plano da task;
+2. o **implementador** seguiu a instrução;
+3. o **revisor** endossou o raciocínio por escrito ("serve-time tool, not a
+   browser-bundle import") — e não era um revisor desatento: ele sondou
+   empiricamente as outras quatro afirmações da task, reproduzindo o par
+   200/404 do `-s` por conta própria e lendo o diff inteiro do lockfile.
+
+Três leituras independentes, todas erradas pelo mesmo motivo, porque todas
+partiram da mesma pergunta: *"isso entra no bundle?"*. A pergunta certa era
+outra: *"isso precisa existir quando o comando de start rodar?"*.
+
+**O que pegou foi tentar implantar.** Nenhuma revisão de código encontraria
+isso, porque não há nada errado no código — o erro está numa seção de um
+manifesto, e só a plataforma se importa com a diferença.
+
+A correção foi mover para `dependencies`, e a verificação **não foi ler o
+diff**: os dois manifestos foram copiados para um diretório descartável, onde
+rodou `npm ci --omit=dev` (254 pacotes) seguido de `npm ls serve --omit=dev` e
+`serve --version` → `14.2.6`. Ou seja, provou-se que o binário está **alcançável
+e executável com as dependências de desenvolvimento podadas**, que é exatamente
+o que a Railway faz.
+
+### Defeito 2 — a URL assinada do S3 endereçava o host GLOBAL
+
+**O sintoma foi o menos informativo possível:** um `<img>` que simplesmente não
+aparecia. O DevTools dizia apenas "this request was redirected", sem corpo,
+sem mensagem de erro, sem código útil.
+
+**A causa.** O `boto3`, configurado com `region_name` e **sem `config`**,
+assina a URL para a região certa mas endereça o **host global**,
+`bucket.s3.amazonaws.com`. A S3 responde a isso com um redirecionamento para o
+host regional — e a assinatura **cobre o cabeçalho `host`**
+(`X-Amz-SignedHeaders=host`), então ela deixa de bater assim que o host muda. A
+requisição redirecionada chega com uma assinatura que não corresponde, e falha.
+
+**O passo que transformou isso de mistério em defeito: reproduzir localmente,
+com credenciais falsas.** Assinar uma URL não faz chamada de rede — é só
+criptografia sobre strings. Então dava para gerar a URL na máquina local, com
+chaves inventadas, e **olhar o host que saía**. Isso é o que provou que o
+problema era **código**, e não uma configuração errada de bucket, de IAM ou de
+Railway. Sem esse passo, a investigação teria ido para o console da AWS, que é
+onde ela não estava.
+
+**A correção foi MEDIDA antes de ser escrita.** Havia duas candidatas
+plausíveis, e a intuição apontava para a errada:
+
+| Candidata | O que faz de verdade |
+|---|---|
+| `signature_version="s3v4"` — o palpite intuitivo | **nada**; já era o padrão |
+| `addressing_style="virtual"` | produz o **host regional** de saída, sem redirecionamento |
+
+Aplicar as duas "por segurança" teria funcionado e ensinado a lição errada.
+
+**E a correção é CONDICIONAL, por medição também.** O endereçamento virtual
+contra o MinIO produz `bucket.localhost:9100` — um nome que não resolve, porque
+o MinIO não tem DNS curinga. Aplicá-lo sem condição teria quebrado **os 72
+testes de integração**. Por isso o `Config` só entra quando `s3_endpoint_url`
+está vazio, ou seja, só na AWS de verdade:
+
+```python
+config = None if settings.s3_endpoint_url else Config(s3={"addressing_style": "virtual"})
+```
+
+Os dois testes novos seguem essa fronteira: um afirma que a região aparece no
+host quando o endpoint está vazio, o outro que o host continua sendo
+`localhost:9100` — e nunca `receipts-bucket.localhost:9100` — quando não está.
+
+### A armadilha do driver síncrono, e por que ela burlava a guarda do Item 17
+
+O Item 17 existe para que configuração errada derrube o **startup** em vez de
+virar erro na primeira requisição. Ele valida a `DATABASE_URL` com `make_url`.
+
+A Railway injeta a `DATABASE_URL` na forma libpq: `postgresql://...`. Isso é
+uma URL **perfeitamente válida** — o `make_url` faz o parse dela sem reclamar.
+O que o SQLAlchemy resolve a partir dela é o `psycopg2`, um driver **síncrono**
+que este projeto não instala. E o engine é construído **preguiçosamente**.
+
+O resultado é a combinação exata que o Item 17 existe para eliminar,
+reentrando por uma porta que ele não olhava:
+
+```
+URL válida  →  validação passa  →  engine ainda não construído
+            →  aplicação sobe, /health responde 200
+            →  primeira query: ModuleNotFoundError
+```
+
+A aplicação **boota saudável e morre no primeiro uso**. Pior: o `/health`
+responde 200 porque ele não consulta nada, de propósito — a decisão está certa
+e aqui ela contribui para o disfarce.
+
+**A correção fica na mesma fronteira e custa o mesmo:** `url.get_dialect()`
+resolve a **classe** do dialeto sem importar o DBAPI, então dá para perguntar
+`dialect.is_async` sem construir pool nem tocar a rede. A mensagem de erro diz
+o que escrever no lugar (`postgresql+asyncpg://`), porque um erro de
+configuração que não ensina a correção só move o problema.
+
+**A generalização:** uma validação de configuração pode ser correta e mesmo
+assim ter o alcance errado. "A URL faz parse?" e "a URL leva a um driver que
+temos?" são duas perguntas, e a segunda só apareceu quando **outra pessoa**
+passou a escrever o valor.
+
+### A armadilha do `VITE_API_URL` sem esquema
+
+O valor foi configurado como `refund-api-production-5a7c.up.railway.app`, sem o
+`https://`. O Axios trata uma `baseURL` sem esquema como **caminho relativo**,
+então toda requisição foi para a origem do **próprio frontend**.
+
+E ali mora a peça que fecha a armadilha: o `serve -s` responde **200 com o
+`index.html`** para qualquer rota que não seja um arquivo — é o fallback de SPA
+que nós mesmos ligamos, e ele é o comportamento certo. Então a aplicação não
+recebeu 404 nem erro de rede; recebeu **HTML com status 200** onde esperava
+JSON, e explodiu no parse.
+
+O sintoma na tela: "o login não funciona". A causa: uma string sem seis
+caracteres. **Duas decisões corretas — `baseURL` relativa é um recurso do
+Axios, e o fallback de SPA é um recurso do `serve` — se combinaram para produzir
+o erro mais confuso possível.**
+
+**Como foi diagnosticado, e vale como técnica:** `grep` no **bundle
+construído**, procurando o valor. O Vite **assa** as variáveis `VITE_*` no
+código no momento do build; elas não são lidas em tempo de execução. Isso quer
+dizer que (a) o valor está literalmente lá dentro, visível a quem tiver o
+arquivo, e (b) trocar a variável **exige rebuild** — mudar no painel e
+reiniciar não faz nada.
+
+### A afirmação sobre CORS de bucket que a verificação derrubou
+
+O `current-state.md` e a ADR-003 afirmavam que uma implantação com S3 "precisa
+liberar o domínio do frontend no CORS do bucket". **Não precisa** — não para
+esta UI.
+
+O motivo é uma distinção que é fácil de perder: **CORS governa o que o
+JavaScript da página consegue LER, não o que o navegador consegue BUSCAR.** Um
+`<img src>` e um `<object data>` mandam o navegador buscar o recurso e entregá-lo
+ao elemento; a página nunca toca os bytes, então não há preflight nem
+exigência de `Access-Control-Allow-Origin`. É exatamente por isso que o Item 22
+existe: a tag `<img>` não sabe mandar `Authorization: Bearer`, e também não
+esbarra em CORS.
+
+Este deploy confirmou na prática: **nenhum CORS de bucket foi configurado** e os
+comprovantes renderizam.
+
+A afirmação não foi apagada, foi **corrigida com a condição que a torna
+verdadeira de novo**: qualquer código que busque o arquivo por **JavaScript** —
+um `fetch`, um `axios.get` montando um Blob (que é o que este frontend fazia
+**antes** do Item 22), um `<canvas>` lendo pixels, um download com nome
+próprio. Nesses casos o CORS do bucket volta a ser obrigatório.
+
+**A lição de documentação:** a afirmação nasceu de um raciocínio genérico
+("é cross-origin, logo precisa de CORS") aplicado sem conferir **como** o
+recurso é buscado. Ela sobreviveu a várias leituras porque é plausível. Só a
+implantação a testou.
+
+### O impasse circular das URLs, e por que ele só existe uma vez
+
+O backend precisa da `CORS_ORIGINS` com o domínio do frontend; o frontend
+precisa da `VITE_API_URL` com o domínio do backend. Nenhum dos dois domínios
+existe antes de o serviço correspondente ser criado — então, na primeira
+implantação, cada lado precisa de um valor que só existe depois que o outro
+lado sobe.
+
+Não há truque: a saída é **implantar, colher o domínio gerado, configurar a
+variável e implantar de novo**. O que vale registrar é que isso é uma
+propriedade do **primeiro** deploy e de mais nenhum — a partir do segundo os
+dois domínios já existem e o problema desaparece. Vale saber de antemão para
+não interpretar a primeira implantação falha como defeito.
+
+### O que lembrar
+
+- **Um dublê de teste esconde exatamente as arestas que ele não tem.** Pergunte
+  em que ele é mais simples que o real, porque é lá que a suíte é cega.
+- **Uma pergunta errada compartilhada derrota portões independentes.** Três
+  leituras erraram o `serve` porque as três perguntaram "isso entra no bundle?"
+  em vez de "isso precisa existir no start?".
+- **Reproduza localmente antes de acusar a infraestrutura.** Assinar uma URL é
+  criptografia sobre strings — credenciais falsas bastam, e foi isso que provou
+  que o defeito era código.
+- **Meça a correção antes de escrevê-la.** Das duas candidatas plausíveis, a
+  intuitiva (`signature_version`) não fazia nada.
+- **Uma correção de produção que não é condicional pode quebrar o
+  desenvolvimento.** O endereçamento virtual contra o MinIO teria derrubado 72
+  testes.
+- **Uma validação de configuração pode estar correta e ter o alcance errado.**
+  "Faz parse?" não é "leva a um driver que temos?".
+- **Duas decisões corretas podem se combinar num sintoma mentiroso.** `baseURL`
+  relativa mais fallback de SPA produziram "HTML com 200" onde se esperava JSON.
+- **CORS governa o que o JavaScript LÊ, não o que o navegador BUSCA.** `<img>` e
+  `<object>` não passam por ele.
+- **Variável `VITE_*` é assada no build.** Trocar no painel e reiniciar não faz
+  nada; exige rebuild.
+- **O primeiro deploy tem um impasse circular de URLs que nenhum deploy
+  seguinte tem.** Implantar, colher o domínio, configurar, implantar de novo.

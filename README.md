@@ -89,6 +89,58 @@ enquanto ele não estiver acessível, voltando a `200` sozinho quando voltar.
 Pela mesma razão, o `HEALTHCHECK` do `Dockerfile` aponta para `/health`, nunca
 para `/ready`.
 
+## Produção
+
+O projeto está implantado desde 2026-08-10. A API roda na **Railway**, em
+container construído a partir do `Dockerfile` deste repositório; o banco é o
+**PostgreSQL da Railway**; os arquivos ficam num **bucket S3 da AWS**; e o
+frontend é servido estático por outro serviço da Railway (ver o `README.md` do
+`Refund-FrontEnd`).
+
+Para saber se está no ar agora — e não pela existência desta seção:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://refund-api-production-5a7c.up.railway.app/health
+curl -s -o /dev/null -w '%{http_code}\n' https://refund-api-production-5a7c.up.railway.app/ready
+```
+
+`/health` é liveness e `/ready` consulta o banco; os dois em 200 significam
+processo vivo **e** banco alcançável.
+
+### Variáveis de produção — NOMES, nunca valores
+
+Nenhum valor de produção mora neste repositório. A lista abaixo é o que precisa
+existir no ambiente do provedor; os defaults e o formato de cada uma estão no
+[`.env.example`](.env.example).
+
+| Variável | Por que ela importa em produção |
+|---|---|
+| `DATABASE_URL` | **precisa do dialeto `postgresql+asyncpg`** — ver o aviso abaixo |
+| `JWT_SECRET` | obrigatória; assina o login **e** as URLs de arquivo do backend `local` |
+| `ENVIRONMENT` | com `production`, o startup recusa `CORS_ORIGINS` com `*`, `localhost` ou `127.0.0.1` |
+| `CORS_ORIGINS` | precisa conter o domínio do frontend implantado |
+| `PUBLIC_BASE_URL` | o domínio público da própria API |
+| `STORAGE_BACKEND` | **`s3` em produção** — com `local`, todo arquivo evapora no redeploy |
+| `S3_BUCKET`, `S3_REGION` | o bucket e a região dele |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | credenciais do usuário de IAM restrito ao bucket |
+| `S3_ENDPOINT_URL` | **deixe VAZIA na AWS de verdade**; só se preenche para MinIO ou outro provedor compatível |
+| `LOG_LEVEL`, `JWT_ALGORITHM`, `JWT_EXPIRATION_HOURS`, `FILE_URL_TTL_SECONDS` | têm default; só configure para mudar o default |
+
+O `PORT` **não** é configurado por você: a plataforma injeta, e o container
+escuta nele. Sem `PORT`, o default de 3333 continua valendo, então
+`docker run` local funciona igual.
+
+**A `DATABASE_URL` que o provedor injeta vem errada para este projeto.** Ela
+chega na forma libpq (`postgresql://...`), que o SQLAlchemy resolve para um
+driver **síncrono** que não está instalado aqui. Como a URL faz parse sem
+reclamar e o engine é preguiçoso, a aplicação **subia saudável e morria na
+primeira query**. Desde 2026-08-10 o `Settings` recusa o startup nesse caso, e
+o erro diz o que escrever: `postgresql+asyncpg://...`.
+
+**Antes do primeiro acesso, aplique as migrations** (`alembic upgrade head`) e
+promova o primeiro admin (`python -m init.promote_admin <email>`, sobre uma
+conta já cadastrada) — o cadastro público sempre cria `standard` (BR-003).
+
 ## Varredura de arquivos órfãos
 
 Arquivo órfão é um arquivo em disco (ou no bucket) que **nenhuma linha do banco
@@ -123,7 +175,8 @@ que ninguém sabe como trocar não é trocado.
 foram assinados com a chave antiga e passam a falhar na verificação, então todo
 usuário é deslogado. Não há rotação sem interrupção hoje — suportar duas chaves
 ao mesmo tempo (verificar com a antiga e a nova, assinar só com a nova) é o que
-permitiria, e não existe.
+permitiria, e não existe. **Desde 2026-08-10 isso deixou de ser hipotético:**
+existe produção, então existem sessões reais para derrubar.
 
 Trocar também **invalida as URLs assinadas de arquivo em voo** (Item 22), que
 são assinadas com a mesma chave. Como elas expiram em 5 minutos, o efeito
@@ -134,11 +187,20 @@ só então revogue a antiga — nessa ordem, ou há uma janela em que nenhum upl
 funciona.
 
 **`DATABASE_URL`.** Rotação de senha do banco derruba as conexões do pool. Com
-uma instância, reiniciar o processo depois de trocar é suficiente.
+uma instância, reiniciar o processo depois de trocar é suficiente. Repare que o
+valor rotacionado precisa manter o dialeto `postgresql+asyncpg`: o provedor
+devolve a forma libpq, e o startup recusa a forma síncrona.
 
 **Quando trocar:** ao suspeitar de exposição, ao desligar o acesso de alguém que
-teve os valores, e antes do primeiro deploy real — os valores atuais nasceram
-em desenvolvimento e já circularam em terminal.
+teve os valores, e **sempre que um valor de desenvolvimento tiver sido
+promovido a produção**. Esta seção listava um terceiro gatilho — "antes do
+primeiro deploy real, porque os valores atuais nasceram em desenvolvimento e já
+circularam em terminal" —, que o deploy de 2026-08-10 passou. **Qual valor de
+produção é novo e qual foi reaproveitado do desenvolvimento não está registrado
+aqui, e não dá para deduzir**: só quem configurou o painel sabe. Quem quiser a
+garantia deve rotacionar, não conferir — o custo de rotacionar
+desnecessariamente é uma sessão derrubada; o de não rotacionar um valor
+reaproveitado é um segredo de produção que já circulou em terminal.
 
 ## Testes
 

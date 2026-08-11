@@ -11,7 +11,14 @@ Emendada em 2026-07-29: primeiro para cobrir também as fotos de
 perfil dos usuários; em seguida, no mesmo ciclo, para encerrar o acesso
 público aos arquivos. Emendada novamente em 2026-07-30 para cobrir um
 terceiro tipo de arquivo, o comprovante de pagamento — ver os amendamentos
-ao final da seção de Decisão.
+ao final da seção de Decisão. Emendada em 2026-08-10 (primeiro deploy) para
+registrar qual backend roda em produção e para **corrigir uma consequência que
+estava errada** — a de CORS no bucket.
+
+**O título desta ADR não descreve mais a produção**, e fica como está de
+propósito: ele nomeia a decisão original, que o amendamento do Item 22 revisou
+e o de 2026-08-10 exerceu. O disco local continua sendo o caminho de
+desenvolvimento.
 
 ## Contexto
 
@@ -176,6 +183,58 @@ os que vazariam a existência de um reembolso a quem não tem direito de saber.
 Restaurar o quarto custaria um `HEAD` por URL contra o S3 — a maior parte do que
 este item economiza.
 
+**Amendamento (2026-08-10, primeiro deploy):** os dois backends deixam de ser
+hipótese e passam a ter cada um o seu lugar.
+
+- **Produção roda com `STORAGE_BACKEND=s3`, num bucket da AWS.** Um bucket de
+  propósito geral (não um *Directory bucket* / S3 Express One Zone, que força um
+  sufixo `--x-s3` no nome e tem comportamento diferente de URL assinada), com
+  *Block Public Access* ligado — o acesso é sempre por URL assinada, nunca por
+  objeto público. O usuário de IAM é restrito a esse bucket:
+  `GetObject`/`PutObject`/`DeleteObject` sobre o ARN dos objetos e `ListBucket`
+  sobre o ARN do bucket, que é o mínimo de que os três tipos de arquivo e a
+  varredura de órfãos precisam.
+- **O caminho `local` continua sendo o de desenvolvimento**, e continua
+  assinando com JWT curto, como o amendamento do Item 22 definiu. Os testes de
+  integração seguem contra o MinIO.
+
+**Uma correção de código que só a AWS de verdade revelou.** O `boto3`,
+configurado com `region_name` e sem `config`, assina a URL para a região certa
+mas endereça o **host global** (`bucket.s3.amazonaws.com`); a S3 redireciona
+para o host regional e a assinatura, que cobre o cabeçalho `host`, deixa de
+bater. O `S3FileStorage` passa a forçar `addressing_style="virtual"` — mas
+**apenas quando `s3_endpoint_url` está vazio**, ou seja, só na AWS de verdade:
+contra o MinIO o endereçamento virtual produziria `bucket.localhost:9100`, um
+nome que não resolve — o endereçamento virtual sem condição teria derrubado os
+72 testes de integração. Os **9** testes de integração contra o MinIO não
+podiam ver esse defeito, mesmo com três deles sendo especificamente sobre URL
+assinada, porque **o MinIO não tem endpoint regional para errar**.
+
+**CORRIGINDO UMA CONSEQUÊNCIA QUE ESTAVA ERRADA — o CORS do bucket.** Esta ADR
+afirmava que uma implantação com `STORAGE_BACKEND=s3` "precisa configurar
+**CORS no bucket** para o domínio do frontend; caso contrário o navegador
+bloqueia o download cross-origin". **É falso para a UI como ela é hoje**, e a
+implantação de 2026-08-10 provou: **nenhum CORS de bucket foi configurado** e
+os comprovantes renderizam.
+
+O motivo é uma distinção fácil de perder: **CORS governa o que o JavaScript da
+página consegue LER, não o que o navegador consegue BUSCAR.** O
+`ReceiptPreview.tsx` do frontend renderiza por `<img src>` e `<object data>`;
+nos dois casos o navegador busca o recurso e o entrega ao elemento, e a página
+nunca toca os bytes — então não há preflight nem exigência de
+`Access-Control-Allow-Origin`. É a mesma propriedade que motiva o Item 22: uma
+tag `<img>` não sabe mandar `Authorization: Bearer`, e também não esbarra em
+CORS.
+
+**A condição que torna a afirmação verdadeira de novo**, e é para isso que ela
+fica escrita: qualquer código que busque o arquivo **por JavaScript** — um
+`fetch`, um `XMLHttpRequest`, um `axios.get` montando um Blob (que é exatamente
+o que este frontend fazia **antes** do Item 22), um `<canvas>` lendo pixels de
+uma imagem, ou um download que precise dar um nome próprio ao arquivo. Nesses
+casos o navegador passa a exigir o cabeçalho e o bucket precisa liberar a
+origem do frontend. **Quem escrever esse código deve tratar o CORS do bucket
+como parte da tarefa**, porque nada no startup nem na suíte vai avisar.
+
 ## Consequências
 
 - A solução é simples e não requer infraestrutura adicional de armazenamento.
@@ -196,10 +255,21 @@ este item economiza.
   ausência fez sete órfãos serem descobertos só ao listar o diretório.
 - O custo de N requisições autenticadas por página **deixa de existir**: o
   navegador volta a baixar direto e a cachear, agora por um link que expira.
-- Uma implantação com `STORAGE_BACKEND=s3` precisa configurar **CORS no bucket**
-  para o domínio do frontend; caso contrário o navegador bloqueia o download
-  cross-origin. Isso é configuração do provedor, não código deste repositório,
-  e não há como o startup verificar.
+- ~~Uma implantação com `STORAGE_BACKEND=s3` precisa configurar **CORS no
+  bucket** para o domínio do frontend.~~ **FALSO para a UI atual — derrubado
+  pela implantação de 2026-08-10**, que renderiza os comprovantes sem nenhum
+  CORS de bucket configurado. `<img src>` e `<object data>` não são requisições
+  governadas por CORS. Volta a ser verdadeiro no instante em que algum código
+  buscar o arquivo por JavaScript. Ver o amendamento acima.
+- **Produção depende da AWS**, com duas contrapartidas registradas: o plano
+  gratuito é **por tempo** (a data de término se lê no console da AWS, não
+  aqui), e depois dele o que pesa não é o armazenamento — são poucos arquivos e
+  pequenos — e sim a **transferência de saída**, já que cada arquivo exibido é
+  um download direto do bucket pelo navegador. É o desenho do Item 22, e o
+  custo dele.
+- **Não há backup nem versionamento dos arquivos** no bucket. Uma exclusão
+  acidental é definitiva. Aceito pela natureza de portfólio/demonstração do
+  projeto, e registrado para que a aceitação seja explícita.
 - O acesso autenticado trocava a URL pública cacheável pelo navegador por uma
   requisição com JWT por arquivo exibido; uma tela com N comprovantes ou
   avatares distintos faz N requisições autenticadas, não N downloads diretos.

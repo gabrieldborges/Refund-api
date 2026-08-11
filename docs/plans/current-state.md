@@ -11,7 +11,7 @@ item deve ser explicado, aprovado, implementado, verificado, documentado e
 commitado, e o [`learning-path-progress.md`](../learning-path-progress.md), que
 preserva exemplos e aprendizados dos itens concluídos.
 
-Atualizado em: 2026-08-10.
+Atualizado em: 2026-08-11.
 
 ## Visão geral
 
@@ -54,6 +54,14 @@ partida e não como afirmação durável:
 - **`Refund-FrontEnd`** — `main` e `origin/main` sincronizados, sem branch de
   trabalho pendente além de `backup/claude-session-2026-07-13`, que nunca foi
   uma.
+
+**Desde 2026-08-10 há uma diferença que nenhum ciclo anterior teve, e ela muda
+o que "apagar uma branch" custa.** Existem duas branches de trabalho não
+mescladas — `feat/first-deploy` (`Refund-api`) e `feat/serve-static`
+(`Refund-FrontEnd`) — e os serviços da Railway **implantam a partir delas**,
+não da `main`. Apagar uma delas com o serviço ainda apontado para lá quebra a
+produção. Ver a pendência dedicada na seção de pendências, que também diz onde
+conferir a referência de cada serviço (é no painel, não no repositório).
 
 **Esta data já esteve errada de novo.** Em 2026-08-09 ela dizia 2026-08-07, com
 **quinze commits** depois — encontrado ao auditar a documentação, não por
@@ -140,21 +148,57 @@ SHA de código citado *dentro* do relato de um ciclo. É o par
 `main`/`origin/main` que não sobrevive — ele muda toda vez que alguém trabalha,
 que é justamente quando ninguém está lendo este documento.
 
-**NÃO EXISTE PRODUÇÃO — verificado em 2026-08-03.** Este documento passou
-semanas tratando o deploy conjunto como o risco mais grave do projeto, e
-deixava em aberto se o deploy era automático a partir da `main` ou manual.
-**Não é nenhum dos dois: não há deploy nenhum.** "Os dois lados estão
-publicados" sempre significou publicados no **GitHub**, não implantados em
-lugar algum. A premissa de que existia uma produção nunca havia sido
-verificada; foi verificada agora, e é falsa. As evidências, e o que sobra de
-verdadeiro, estão na pendência de deploy, reescrita.
+**EXISTE PRODUÇÃO.** A primeira implantação do projeto aconteceu em
+2026-08-10, no ciclo `feat/first-deploy` / `feat/serve-static`. A frase que
+sobreviveu às cinco fases da trilha — *"não existe deploy"* — deixou de ser
+verdadeira.
 
-A divergência entre os contratos é real e as duas `main` continuam sem poder
-subir em momentos diferentes — mas isso é uma **restrição da primeira
-implantação**, não algo que quebra sozinho enquanto ninguém age.
+- API: `https://refund-api-production-5a7c.up.railway.app`
+- Frontend: `https://independent-fascination-production-feea.up.railway.app`
 
-O contrato novo (`user` aninhado), de dois ciclos atrás, segue mesclado dos
-dois lados; o que resta ali — e também no contrato `paid` — é **deploy**.
+**Este bloco descreve como conferir, não afirma que está no ar.** Um serviço
+implantado pode ser desligado, ficar sem crédito ou ser apagado no painel sem
+deixar rastro em arquivo nenhum — exatamente a assimetria que a verificação de
+2026-08-03 já tinha registrado no sentido oposto (um deploy pode existir
+inteiramente no painel do provedor). As duas perguntas continuam sendo duas:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://refund-api-production-5a7c.up.railway.app/health
+curl -s -o /dev/null -w '%{http_code}\n' https://refund-api-production-5a7c.up.railway.app/ready
+curl -s -o /dev/null -w '%{http_code}\n' https://independent-fascination-production-feea.up.railway.app/
+```
+
+`/health` é liveness e `/ready` consulta o banco: os dois em **200** é a
+evidência de que o processo está vivo **e** alcança o PostgreSQL. O que os
+comandos não respondem — se os serviços ainda estão conectados às branches
+certas, e se a conta ainda está paga — só o painel da Railway responde.
+
+**O que o texto anterior dizia continua sendo a explicação de por que os cinco
+bloqueios existiam**, e por isso não foi apagado: até 2026-08-03 este documento
+tratava o deploy conjunto como o risco mais grave do projeto e deixava em aberto
+se ele era automático a partir da `main` ou manual. **Não era nenhum dos dois:
+não havia deploy nenhum.** "Os dois lados estão publicados" sempre significou
+publicados no **GitHub**, não implantados em lugar algum. A premissa de que
+existia uma produção nunca tinha sido verificada; foi verificada em 2026-08-03,
+era falsa, e é dessa verificação que saiu a lista dos cinco bloqueios — os
+mesmos que os Itens 17, 22, 29 e 30 fecharam, e sem os quais este deploy não
+teria como acontecer.
+
+**O que voltou a ter dentes com a produção existindo.** Três avisos deste
+documento eram contingentes a um ambiente que não existia, e deixaram de ser:
+
+1. **A divergência de contrato entre os dois repositórios.** Os dois lados
+   subiram juntos na primeira implantação, então a divergência não mordeu — mas
+   a partir de agora existe um cliente real, e implantar um lado sem o outro
+   volta a poder quebrar a tela de quem está usando.
+2. **Trocar o `JWT_SECRET` desloga todo mundo.** Era um efeito sobre uma
+   população vazia; agora existem sessões reais. Ver a seção de rotação de
+   segredos do [`README.md`](../../README.md).
+3. **Uma mudança na forma da sessão salva desloga todo mundo uma vez.** Mesma
+   coisa: o mecanismo sempre esteve correto, faltava alguém para sofrê-lo.
+
+O contrato novo (`user` aninhado) e o contrato `paid` seguem mesclados e
+**implantados** dos dois lados.
 
 O produto vive em dois repositórios:
 
@@ -177,6 +221,14 @@ Visão, usuários e escopo estão em [`docs/vision.md`](../vision.md).
   `localhost:3333`; PostgreSQL no Neon via `DATABASE_URL`).
 - Frontend: ver `README.md` do `Refund-FrontEnd` (Vite em `localhost:5173`;
   espera a API em `localhost:3333`).
+
+Em produção a topologia é outra, e desde 2026-08-10 ela existe: os dois lados
+rodam na Railway (a API em container a partir do `Dockerfile`, o frontend
+servido estático por `serve -s dist`), o banco é o PostgreSQL da própria
+Railway e os arquivos ficam num bucket **S3 da AWS**
+(`STORAGE_BACKEND=s3`). Nenhum valor de configuração de produção mora neste
+repositório — apenas os **nomes** das variáveis, no
+[`.env.example`](../../.env.example) e no `README.md`.
 
 ## Arquitetura (resumo)
 
@@ -1888,6 +1940,90 @@ completo e obrigatório está em
     `healthy`). Relatório completo em
     `.superpowers/sdd/2026-08-09-python-upgrade-and-dependencies/final-fixes-report.md`.
 
+- **Ciclo — PRIMEIRO DEPLOY (Railway + S3): CONCLUÍDO NA BRANCH, o projeto
+  está no ar.** Branches `feat/first-deploy` (`Refund-api`, `2ee7add..057f339`)
+  e `feat/serve-static` (`Refund-FrontEnd`, `b26385e..1d77232`). Executado em 9
+  tasks de **natureza dividida**: as tasks 1–3 e 9 são de agente; as 4–8
+  exigiam console da AWS e painel da Railway e foram feitas pelo Gabriel, com o
+  agente preparando valores e conferindo evidências. Detalhes e lições no
+  [diário](../learning-path-progress.md).
+  **O merge é decisão do Gabriel**; para saber onde as branches estão, rode os
+  comandos do bloco de estado dos repositórios, não acredite nesta linha.
+
+  - **As decisões.** Railway para tudo (container da API + PostgreSQL +
+    frontend estático), **AWS S3** para os arquivos, e o projeto é
+    **portfólio/demonstração** por natureza — o que calibra tudo o que vem
+    abaixo: custo pequeno aceito, instância única aceita, ausência de backup
+    aceita **enquanto** essa natureza valer.
+  - **Três mudanças de código, e as três evitam uma falha real:**
+    1. **`Settings` recusa driver de banco síncrono** (`db93c0b`). A Railway
+       injeta a `DATABASE_URL` na forma libpq (`postgresql://`), que o
+       SQLAlchemy resolve para o `psycopg2` — **não instalado aqui**. O
+       `make_url` só faz parse e o engine é preguiçoso, então a aplicação
+       **subia saudável e morria na primeira query**: é o modo de falha que o
+       Item 17 existe para eliminar, reentrando pelo **driver** em vez de pela
+       URL. O `get_dialect()` resolve a classe do dialeto sem importar o DBAPI,
+       então a checagem não custa pool nem rede.
+    2. **O container escuta em `$PORT`** (`5f5ba01`), com `exec` para o uvicorn
+       continuar sendo PID 1 e o `SIGTERM` ainda chegar nele. Sem o `exec`, o
+       shell vira PID 1 e o desligamento gracioso da plataforma vira um kill
+       por timeout. O `HEALTHCHECK` passou a ler a mesma variável.
+    3. **O frontend serve o build com `serve -s dist`** (`1d77232`, no outro
+       repo). O `-s` **é** o fallback de history da SPA: sem ele, um F5 numa
+       rota profunda responde 404. Provado por quebra deliberada — mesmo build,
+       mesma rota, só a flag mudando: **200 com `-s`, 404 sem**.
+  - **DOIS DEFEITOS QUE SÓ O DEPLOY REVELOU**, e são a parte mais valiosa deste
+    registro. Estão contados no diário; em resumo: `serve` estava em
+    `devDependencies` (e plataformas podam dev deps sob `NODE_ENV=production`,
+    então o serviço do frontend **nunca subiu** e por isso nunca recebeu
+    domínio); e as **URLs assinadas do S3 endereçavam o host GLOBAL**, que a
+    AWS redireciona para o regional, quebrando a assinatura.
+  - **QUINTA VEZ COM A MESMA FORMA: testei a peça, não a montagem.** O caminho
+    do S3 tinha **9 testes de integração** contra o MinIO — incluindo três
+    especificamente sobre URL assinada (baixar sem credencial, não ler sem
+    assinatura, expirar) — e **nenhum deles podia ver** o defeito, porque **o
+    MinIO não tem endpoint regional para errar**. Só a AWS de verdade tinha o
+    problema, e só implantar podia revelá-lo. É a lição do ciclo inteiro, e ela
+    não é sobre S3: um teste de integração prova que a peça funciona contra o
+    **dublê** que você escolheu, e o dublê não tem as arestas que o original
+    tem.
+
+    **O número foi recontado, e o ledger deste ciclo estava errado.** Ele
+    registrava "32 testes de integração"; o repositório diz **9**. Confira com
+    `grep -c "def test_" src/test_integration/s3_storage_test.py` — nenhum
+    outro arquivo de integração toca o MinIO
+    (`grep -ln "S3FileStorage" src/test_integration/*.py` devolve só esse). Fica
+    registrado porque é o mesmo padrão que este documento persegue desde a
+    primeira ocorrência: **um número citado de memória, plausível, e falso**. A
+    lição do defeito não depende do número, mas o número é conferível, então
+    não há motivo para chutá-lo.
+  - **Verificado em produção pelo Gabriel, no navegador:** cadastro, login,
+    criar reembolso com comprovante, **o comprovante renderizando a partir de
+    uma URL assinada da AWS de verdade**, aprovar, marcar como pago com
+    comprovante de pagamento (um **segundo** caminho de upload e um **segundo**
+    prefixo de URL assinada), o histórico de revisões e um erro aparecendo na
+    tela. Ele se promoveu a admin com `init/promote_admin.py`.
+  - **Verificado de fora, por sonda:** `/health` **200**, `/ready` **200**
+    (ou seja, o banco é alcançado e a guarda do driver não disparou), o
+    fallback da SPA respondendo **200** numa rota profunda, e um **404
+    carregando `x-request-id`** — os Itens 23 e 24 vivos em produção. Um
+    `POST /auth/login` com conta inexistente devolveu `problem+json` **400
+    "Invalid credentials"**, o que prova duas coisas de uma vez: a query
+    **alcançou** a tabela `users` (logo o `alembic upgrade head` rodou; schema
+    ausente teria dado 500) e a decisão anti-enumeração continua valendo em
+    produção.
+  - **PostgreSQL da Railway é 18.4** (Debian 18.4-1.pgdg13+1) — o **mesmo major
+    e o mesmo minor** que o Neon reporta. A suíte de integração continua
+    espelhando produção; a [ADR-002](../decisions/ADR-002-postgresql-neon.md)
+    foi amendada registrando **concordância**, não divergência.
+  - **AS DUAS BRANCHES SÃO A FONTE DO DEPLOY — leia isto antes de apagar
+    qualquer coisa.** Os serviços da Railway foram criados apontando para
+    `feat/first-deploy` (API) e `feat/serve-static` (frontend), **não** para a
+    `main`. Ver a pendência dedicada na seção de pendências.
+  - Verificação: `pytest` **340 passed / 72 deselected** (partiu de 335: +3 da
+    guarda do driver, +2 do endereçamento do S3), `pytest -m integration`
+    **72 passed**, `pylint src` **exit 0**.
+
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
   `rated at 10.00/10` **e sai com código 8** quando emitiu qualquer mensagem —
@@ -1979,9 +2115,12 @@ completo e obrigatório está em
   Antes de estimar dois itens, vale perguntar se um deles não é consequência do
   outro.
 
-  **O que a trilha NÃO entregou, e continua verdadeiro:** não existe deploy. Os
-  cinco bloqueios foram endereçados, mas escolher e configurar um provedor não
-  é código e nunca foi feito.
+  ~~**O que a trilha NÃO entregou, e continua verdadeiro:** não existe deploy.~~
+  **DEIXOU DE VALER em 2026-08-10** — ver o ciclo do primeiro deploy na seção
+  de progresso. O registro original, porque o diagnóstico estava certo: os
+  cinco bloqueios foram endereçados pela trilha, mas escolher e configurar um
+  provedor não é código, e por isso continuou pendente até existir um ciclo
+  próprio para isso.
 
   **Nenhuma branch de trabalho pendente** — as cinco foram mescladas em
   2026-08-09; as quatro do backend estavam empilhadas, então um fast-forward
@@ -2112,6 +2251,87 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
 
 ## Pendências e riscos conhecidos
 
+### Pendências que nasceram com a produção (2026-08-10)
+
+Estas sete são novas e existem porque existe um ambiente implantado. Antes do
+deploy nenhuma delas fazia sentido.
+
+- **OS SERVIÇOS DA RAILWAY IMPLANTAM A PARTIR DAS BRANCHES, NÃO DA `main`.**
+  Esta é a mais importante da lista, e é a que morre em silêncio se ninguém
+  escrever. No fim deste ciclo, cada serviço rastreia a referência abaixo:
+
+  | Serviço | Repositório | Referência que ele rastreia |
+  |---|---|---|
+  | API (container) | `Refund-api` | `feat/first-deploy` |
+  | Frontend (estático) | `Refund-FrontEnd` | `feat/serve-static` |
+
+  **Como conferir, porque a tabela acima envelhece:** a referência de cada
+  serviço só existe no painel da Railway (serviço → Settings → Source). Não há
+  arquivo neste repositório que a declare, então nenhum `grep` responde — é a
+  mesma assimetria que a verificação de 2026-08-03 registrou ao concluir que
+  "um deploy pode ser configurado inteiramente no painel do provedor".
+
+  **O que fazer depois do merge:** repontar cada serviço para `main`. **A única
+  ordem errada é apagar a branch primeiro** — um serviço apontando para uma
+  branch apagada não tem de onde reconstruir, e a próxima implantação (inclusive
+  um restart automático da plataforma) quebra a produção. Duas ordens seguras,
+  e a escolha é do Gabriel: repontar para `main` **antes** de apagar as
+  branches, ou mesclar, repontar, e só então apagar.
+
+- **O plano gratuito da AWS TERMINA — é por tempo, não por consumo.** A conta
+  foi criada para este deploy e a camada gratuita tem prazo. **Não invente a
+  data:** leia-a no console da AWS (Billing and Cost Management → Free Tier),
+  que mostra o que expira e quando. Vale virar decisão antes de virar cobrança.
+  Depois do prazo, o **armazenamento** deste projeto custa centavos — são
+  poucos arquivos, pequenos —, mas quem cobra de verdade é a **transferência de
+  saída**: cada comprovante exibido é um download direto do bucket pelo
+  navegador, e é exatamente esse o desenho do Item 22.
+
+- **A Railway cobra.** Custo recorrente pequeno, **não zero**, e são três
+  cobranças no mesmo lugar (a API em container, o PostgreSQL e o serviço
+  estático do frontend). Confira no painel da Railway (Usage). Junto com o item
+  acima, é o total de custo do projeto — e a razão para ele ser aceitável é a
+  natureza de portfólio/demonstração.
+
+- **Nada valida que a `VITE_API_URL` é ABSOLUTA, e o modo de falha mente.**
+  Aconteceu neste deploy: o valor foi configurado **sem o esquema `https://`**.
+  O Axios trata uma `baseURL` sem esquema como **caminho relativo**, então toda
+  requisição foi parar na origem do próprio frontend — onde o `serve -s`
+  responde **200 com o `index.html`**. A aplicação recebeu HTML onde esperava
+  JSON e falhou imediatamente, e o sintoma na tela lê-se como "o login está
+  quebrado" em vez de "a configuração está errada". Diagnosticado com um `grep`
+  no bundle construído, procurando o valor que o Vite **assou** ali dentro.
+  **A correção pendente são três linhas** que rejeitem uma `VITE_API_URL` sem
+  esquema no startup do frontend — a mesma ideia do **Item 17**, que hoje só
+  existe no backend. Confira se ainda é pendência com
+  `grep -rn "VITE_API_URL" Refund-FrontEnd/src/`: hoje o valor é lido e usado,
+  nunca conferido.
+
+- **Instância única: o rate limit do Item 27 zera a cada restart.** Ele é
+  em memória e por processo — sempre foi, e está registrado assim desde o
+  próprio item. O que mudou é que agora isso vale **sobre algo real**: um
+  redeploy ou um restart da Railway devolve o contador a zero, e uma segunda
+  instância (se algum dia houver) teria um contador próprio. A decisão original
+  (não trazer Redis) continua coerente com a natureza do projeto; o registro
+  existe para que ninguém confunda o limite com uma garantia.
+
+- **NÃO HÁ BACKUP — nem do banco, nem dos arquivos.** Nenhum snapshot do
+  PostgreSQL da Railway, nenhum versionamento nem replicação no bucket S3. Uma
+  exclusão acidental, um `alembic downgrade` errado ou o encerramento de uma
+  conta levam o dado embora sem cópia. Aceito hoje pela natureza de
+  portfólio/demonstração, e listado aqui para que essa aceitação seja
+  **explícita** em vez de acidental.
+
+- **`alembic downgrade` agora ALCANÇA PRODUÇÃO.** Até este deploy era um
+  comando inofensivo numa máquina de desenvolvimento, usado o tempo todo para
+  provar que as migrations são reversíveis. Com uma `DATABASE_URL` de produção
+  no ambiente, o mesmo comando **destrói dado real** — e um `downgrade` que
+  remove coluna não tem volta, porque a reversão recria a coluna vazia, não o
+  conteúdo dela. Não há hoje nenhuma proteção contra isso; a proteção é saber
+  qual `DATABASE_URL` está no ambiente antes de digitar o comando.
+
+### Pendências anteriores
+
 - ~~**Nenhum arquivo será servido sem autenticação.**~~ RESOLVIDO em 2026-07-29,
   no ciclo próprio: os dois mounts foram removidos e substituídos por
   `GET /refunds/{id}/receipt` (dono ou admin) e `GET /users/{id}/avatar`
@@ -2193,10 +2413,10 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   reverificada, não seu tom reforçado.**
 
 - **O primeiro deploy tinha cinco bloqueios, e o contrato não era o principal.**
-  Levantados em 2026-08-03, ao verificar que não existe produção. **Os dois
-  primeiros foram fechados pelo Item 17 em 2026-08-07** (branch
-  `feat/typed-settings`, ainda não mesclada) e ficam registrados como
-  resolvidos; **restam três**:
+  Levantados em 2026-08-03, ao verificar que não existia produção. **OS CINCO
+  ESTÃO FECHADOS, e não só no papel: o deploy de 2026-08-10 exerceu todos.**
+  Ficam registrados porque a lista é o que explica por que a trilha e o deploy
+  nunca foram assuntos separados:
   1. ~~**CORS fixo em `localhost:5173`**~~ **RESOLVIDO no Item 17:**
      `allow_origins=settings.cors_origins`, configurável por `CORS_ORIGINS`, e
      um `model_validator` que recusa o startup se `ENVIRONMENT=production`
@@ -2204,32 +2424,48 @@ a altura `h-17.5`, o diretório `./@/` do CLI do shadcn, os polyfills de jsdom e
   2. ~~**Configuração por `os.getenv` sem validação**~~ **RESOLVIDO no Item 17:**
      `Settings(BaseSettings)` valida no startup e a aplicação não sobe com
      variável obrigatória ausente ou de tipo inválido.
-  3. ~~**Comprovantes em disco local**~~ **RESOLVIDO no Item 22 (2026-08-07,
-     branch não mesclada):** `STORAGE_BACKEND=s3` guarda os arquivos fora da
-     instância. **Ressalva:** uma implantação com S3 precisa liberar o domínio
-     do frontend no **CORS do bucket**, que é configuração de painel do
-     provedor — o startup não tem como verificar isso. O texto original, porque
-     o raciocínio continua útil: a maioria dos
-     PaaS tem filesystem efêmero, então **todo comprovante evapora a cada
-     redeploy**. É o **Item 22** (object storage e URLs assinadas). Note que
-     isto é pior que o risco de contrato: perde dado do usuário, em silêncio e
-     sem erro na tela.
-  4. **Sem `Dockerfile` nem build de produção** — **Item 30**.
-  5. **Sem CI que verifique antes de publicar** — **Item 29**. O episódio do
-     commit `2d07a8d`, que deixou a `main` do frontend quebrada em `tsc`,
-     `eslint` **e** `build` sem ninguém notar, é exatamente o que um CI teria
-     pego.
+  3. ~~**Comprovantes em disco local**~~ **RESOLVIDO no Item 22 e EXERCIDO em
+     2026-08-10:** `STORAGE_BACKEND=s3` guarda os arquivos fora da instância, e
+     em produção eles vivem num bucket da AWS. O texto original, porque o
+     raciocínio continua útil: a maioria dos PaaS tem filesystem efêmero, então
+     **todo comprovante evaporaria a cada redeploy**. Note que isto é pior que
+     o risco de contrato: perde dado do usuário, em silêncio e sem erro na
+     tela.
 
-  **Consequência para a trilha:** deploy e Learning Path não são assuntos
-  separados. Os Itens 17 e 22 são pré-requisitos técnicos do primeiro deploy, e
-  os Itens 29/30 são o deploy em si. Quem quiser implantar não precisa de um
-  projeto paralelo — precisa desses quatro itens da trilha. **O Item 17 está
-  feito**, o que confirma a tese: dois dos cinco bloqueios caíram como
-  subproduto de um item da trilha, não de um esforço separado de deploy.
+     **A RESSALVA DE CORS DO BUCKET ESTAVA ERRADA, e a implantação derrubou
+     ela.** Este item afirmava que uma implantação com S3 "precisa liberar o
+     domínio do frontend no **CORS do bucket**". **Não precisa** — não para a
+     UI como ela é hoje. O `ReceiptPreview.tsx` renderiza os arquivos por
+     `<img src>` e `<object data>`, e **nenhum dos dois é requisição governada
+     por CORS**: o navegador busca o recurso e o entrega ao elemento sem que o
+     JavaScript da página leia os bytes, então não há preflight nem exigência
+     de `Access-Control-Allow-Origin`. Este deploy confirma na prática:
+     **nenhum CORS de bucket foi configurado** e os comprovantes aparecem.
 
-  **Ressalva importante sobre o bloqueio 3.** Ele é o pior dos cinco e não foi
-  tocado: comprovante em disco efêmero **perde dado do usuário em silêncio, sem
-  erro na tela**. Os dois que caíram eram os de falha barulhenta.
+     **A condição que a tornaria verdadeira de novo, e é para isso que ela fica
+     escrita:** qualquer código que busque o arquivo **por JavaScript** —
+     `fetch`, `XMLHttpRequest`, um `axios.get` que monte um Blob (que é
+     exatamente o que este frontend fazia **antes** do Item 22), um `<canvas>`
+     lendo pixels de uma imagem, ou um download que precise renomear o arquivo.
+     Nesses casos o navegador passa a exigir o cabeçalho, e o bucket precisa
+     liberar a origem do frontend. Quem for escrever esse código deve tratar o
+     CORS do bucket como parte da tarefa.
+  4. ~~**Sem `Dockerfile` nem build de produção**~~ **RESOLVIDO no Item 30 e
+     EXERCIDO em 2026-08-10:** é a imagem deste `Dockerfile` que roda na
+     Railway, com o ajuste do `$PORT` feito no ciclo do deploy.
+  5. ~~**Sem CI que verifique antes de publicar**~~ **RESOLVIDO no Item 29.** O
+     episódio do commit `2d07a8d`, que deixou a `main` do frontend quebrada em
+     `tsc`, `eslint` **e** `build` sem ninguém notar, é exatamente o que um CI
+     teria pego.
+
+  **Consequência para a trilha, agora confirmada pelos fatos:** deploy e
+  Learning Path não eram assuntos separados. Os Itens 17 e 22 eram
+  pré-requisitos técnicos do primeiro deploy e os Itens 29/30 eram a
+  infraestrutura dele; os cinco bloqueios caíram como **subproduto de itens da
+  trilha**, não de um esforço paralelo de deploy. O que sobrou para o ciclo do
+  deploy foi o que nenhum item da trilha podia entregar: escolher um provedor,
+  criar as contas, e as três correções que só apareceram quando havia uma
+  plataforma real do outro lado.
 - ~~**`AuthContext.loadStoredUser` lê `localStorage` FORA do próprio
   `try`.**~~ **RESOLVIDO em 2026-08-05**, na branch `fix/auth-storage-access`
   do `Refund-FrontEnd` (commit `d9d8b6b`, **não mesclada**): a leitura entrou
