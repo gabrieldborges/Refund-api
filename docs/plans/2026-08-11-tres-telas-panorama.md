@@ -44,18 +44,16 @@ mudaria o escopo de um ciclo se fosse descoberta durante a implementação.
 4. **`GET /refunds` não filtra por data.** O calendário depende de um parâmetro
    que ainda não existe.
 
-### Dependência de branch, verificada em 2026-08-11
+### Dependência de branch — resolvida em 2026-08-11
 
-O donut, a paleta e o hook `usePrefersReducedMotion` de que o Ciclo 2 depende
-**ainda não estavam commitados** quando este panorama foi escrito: eram arquivos
-não rastreados na branch `feat/serve-static` do frontend, junto de mudanças em
-`Sidebar.tsx`, `RequesterPanel.tsx` e nos catálogos de locale.
+Quando a primeira versão deste panorama foi escrita, o donut, a paleta e o hook
+`usePrefersReducedMotion` **ainda não estavam commitados**: eram arquivos não
+rastreados na branch `feat/serve-static` do frontend. O Ciclo 2 dependia dela.
 
-Consequência prática: **o Ciclo 2 só começa depois que essa branch for mesclada.**
-Se ela mudar a forma das props de `RefundDonutChart` ou de `sliceColor`, o spec do
-Ciclo 2 é que se ajusta a elas — não o contrário.
+**A branch foi mesclada no mesmo dia e a dependência caiu.** Os três arquivos
+estão rastreados na `main` do frontend, e o Ciclo 2 pode começar sem espera.
 
-Por isso este documento cita as partes internas desses arquivos **por
+Ainda assim, este documento cita as partes internas desses arquivos **por
 identificador** (`CHROME`, `sliceColor`, o ramo `isError`) em vez de por número de
 linha. É a mesma lição que o [`current-state.md`](current-state.md) registra sobre
 os SHAs: a forma que não envelhece descreve *como encontrar* o estado, não afirma
@@ -213,10 +211,44 @@ de contrato. Atende a ideia **"agregado por status cruzando usuários"** do
 - `npm i @nivo/bar @nivo/line` — mesma família já adotada; `@nivo/core` e
   `@react-spring/web` já estão presentes.
 - **Rosca por status: reuso direto** de `RefundDonutChart`. As props `slices` e
-  `metric: "count" | "currency"` já atendem.
+  `metric: "count" | "currency"` já atendem, e sobreviveram intactas ao merge de
+  2026-08-11.
+  - **Armadilha, verificada na assinatura atual**: a chave passada em
+    `unitLabelKey` **precisa ter as variantes de plural do i18next**
+    (`_one` / `_other`). O total é interpolado como `count`, e sem elas uma
+    solicitação só aparece rotulada como "1 solicitações". Vale para cada rótulo
+    de unidade novo que o Dashboard introduzir, nos **dois** catálogos.
 - Novos `RefundBarChart.tsx` (barras horizontais por categoria),
   `RefundLineChart.tsx` (valor por mês) e `RefundStackedBarChart.tsx`
-  (status × mês), **dentro de `features/refunds`**, exportados pela fachada.
+  (status × mês), **dentro de `features/refunds`**.
+
+#### A restrição que decide o desenho: os gráficos não podem ser reexportados pela fachada
+
+O [orçamento de performance](../performance-budget.md), medido em 2026-08-11,
+registra que o chunk do donut é de **74,2 kB gzip — um terço de tudo o mais que a
+aplicação entrega** — e que uma **reexportação estática** de `RefundDonutChart`
+pela fachada (`features/refunds/index.ts`) traz esse chunk inteiro de volta para o
+bundle de entrada **sem erro nenhum**, só com um `index` mais gordo.
+
+Isso colide com a regra de fronteira: a camada `app` só pode alcançar a feature
+pelo `index.ts`. As duas convivem porque o que a fachada exporta é um
+**contêiner** que faz o `import()` dinâmico por dentro — é o que
+`RequesterPanel` já faz com o donut. O `lazy()` é o que cria o chunk; o
+`export { default as X } from './X'` é o que o destrói.
+
+Portanto, para o Dashboard: a fachada exporta **um contêiner de gráficos** que
+carrega os quatro sob demanda, e **nenhum arquivo de gráfico é reexportado
+diretamente**. Um único ponto de `import()` dinâmico também é melhor que quatro,
+porque os quatro gráficos compartilham `@nivo/core` e os pacotes `d3-*`.
+
+Duas consequências para o spec do Ciclo 2:
+
+- **Medir o bundle depois de adicionar `@nivo/bar` e `@nivo/line`.** Eles trazem
+  mais pacotes `d3-*`, então o chunk vai passar de 74 kB — o número atual é a
+  linha de base, não o teto. Atualizar o orçamento com o valor medido.
+- **A verificação é uma linha do `npm run build`**: enquanto houver um chunk
+  separado para os gráficos, a divisão está de pé. Se o `index` engordar ~74 kB
+  ou mais, alguém reexportou estaticamente.
 - Cada gráfico novo precisa repetir as **cinco lições já pagas** em
   `RefundDonutChart.tsx`. Elas não são estilo; cada uma corrige um defeito real:
   1. cor de cromo em hexadecimal por tema (a constante `CHROME`) — o Nivo pinta
@@ -231,7 +263,8 @@ de contrato. Atende a ideia **"agregado por status cruzando usuários"** do
   5. `React.lazy`, como no `RequesterPanel.tsx`, para a árvore do Nivo não
      entrar no bundle inicial.
 - Generalizar `lib/donutPalette.ts` para `lib/chartPalette.ts`, preservando
-  `PALETTE`, `NEGATIVE_COLOR` e `sliceColor`, de modo que os quatro gráficos
+  `PALETTE`, `NEGATIVE_COLOR`, `sliceColor` e `readableTextOn` (esta última
+  chegou no merge de 2026-08-11), de modo que os quatro gráficos
   compartilhem a paleta e `rejected` continue vermelho em todos — cor com
   significado não pode depender da posição no ranking. O módulo tem teste
   próprio; atualizar o import.
@@ -292,6 +325,10 @@ de contrato. Atende a ideia **"agregado por status cruzando usuários"** do
 
 - Frontend, na ordem do CI (`.github/workflows/ci.yml`, do mais barato ao mais
   caro): `npm run typecheck`, `npm run lint`, `npx vitest run`, `npm run build`.
+- **Nos ciclos 2 e 3, ler a saída do `npm run build`, não só o código de saída.**
+  Os gráficos precisam continuar num chunk próprio; se o `index` engordar ~74 kB
+  ou mais, alguém reexportou um gráfico estaticamente pela fachada e a divisão
+  caiu em silêncio. Ver [`performance-budget.md`](../performance-budget.md).
 - Backend: `pytest` e `pylint src; echo $?` — o código de saída, não a nota. Ao
   tocar repositories ou migrations, também `pytest -m integration` com o banco
   descartável de pé.
