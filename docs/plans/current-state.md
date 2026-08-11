@@ -316,6 +316,18 @@ quem compõe as duas: pega o usuário de `features/team` e o painel de
 estatísticas de `features/refunds`. A composição de features acontece sempre na
 camada `app`, porque é a única com permissão para isso.
 
+O Dashboard tem quatro gráficos, e todos chegam à tela por **um** contêiner
+(`DashboardCharts`), que é o único módulo de gráfico que a fachada exporta e o
+único ponto de `import()` dinâmico. Nenhum gráfico é reexportado: uma reexportação
+estática traria a árvore do nivo de volta ao bundle de entrada sem erro nenhum. A
+verificação é o **tamanho da entrada** no `npm run build`, não a existência de um
+chunk separado — o chunk existe de qualquer forma.
+
+**Dívida de acessibilidade aberta:** a paleta de gráficos falha 4 das 6 checagens
+do validador, incluindo o piso de visão normal entre "aprovada" e "paga" (ΔE 12,9,
+piso 15). Mitigada no gráfico empilhado, não corrigida. Registrada no
+[`roadmap.md`](../roadmap.md) com as cores que passam.
+
 O painel compartilhado é o `RefundStatsPanel` (rosca por status + as
 solicitações de uma pessoa), usado pela tela de revisão através do
 `RequesterPanel` e pela página do membro direto. Ele **não** renderiza `Card`

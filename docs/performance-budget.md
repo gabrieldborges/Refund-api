@@ -63,6 +63,35 @@ O gráfico de rosca da tela de revisão usa `@nivo/pie`, que traz junto
 | `RefundDonutChart` (sob demanda) | 222,8 kB | **74,2 kB** |
 | Entrada (`index`) | 708,7 kB | 219,4 kB |
 
+### Gráficos (nivo), re-medido em 2026-08-11 após o Dashboard
+
+O Dashboard trouxe `@nivo/bar` e `@nivo/line`, e o Rollup redistribuiu a árvore do
+nivo em vários chunks compartilhados. Os nomes dos chunks são o de um módulo
+pequeno que caiu dentro deles (`chartPalette`, `ChartFrame`) — o conteúdo é o
+vendor.
+
+| Chunk | Bruto | Gzip |
+|---|---|---|
+| `chartPalette` (núcleo do nivo + d3) | 189,2 kB | 65,4 kB |
+| `RefundLineChart` | 53,7 kB | 17,8 kB |
+| `nivo-bar` | 41,5 kB | 13,0 kB |
+| `ChartFrame` | 33,0 kB | 10,9 kB |
+| `RefundDonutChart` | 35,3 kB | 10,7 kB |
+| `RefundBarChart` + `RefundStackedBarChart` + `line` | 6,3 kB | 3,1 kB |
+| **Total de gráficos, sob demanda** | **359,0 kB** | **≈120,7 kB** |
+| Entrada (`index`) | 568,0 kB | **174,1 kB** |
+
+**O custo de gráficos subiu de 74,2 para ≈120,7 kB gzip** — os 46,5 kB a mais são
+`@nivo/bar` e `@nivo/line`. **A entrada subiu 0,9 kB**, de 173,1 para 174,1: a
+divisão continua de pé. Se esses 120 kB estivessem na entrada, ela estaria perto de
+294 kB gzip, e é essa comparação que serve de verificação — não a presença de um
+chunk separado, que existe de qualquer forma.
+
+O que mantém a divisão: **nenhum gráfico é reexportado por fachada nenhuma**. Quem
+a fachada de `features/refunds` exporta é o `DashboardCharts`, que faz o `import()`
+dos quatro por dentro. Um `export { default as RefundBarChart } from …` desfaria
+isso sem erro nenhum.
+
 **74 kB gzip é um terço de todo o resto da aplicação somado** — por isso o
 gráfico é carregado com `React.lazy` a partir do `RequesterPanel`, e não
 importado direto. Quem abre a Home, faz login ou cria uma solicitação nunca

@@ -204,7 +204,29 @@ Páginas e rotas, na camada `app`:
 - `src/components/core/Sidebar.test.tsx` afirma `getAllByText("em breve")`
   com length **3**; passa a **2**.
 
-## Ciclo 2 — Dashboard (todos, com escopo por papel)
+## Ciclo 2 — Dashboard (todos, com escopo por papel) — **CONCLUÍDO em 2026-08-11**
+
+Spec: [`2026-08-11-dashboard-design.md`](../superpowers/specs/2026-08-11-dashboard-design.md).
+Plan: [`2026-08-11-dashboard.md`](../superpowers/plans/2026-08-11-dashboard.md).
+
+**O que a skill de visualização mudou neste panorama.** A paleta foi submetida ao
+validador e **falha 4 das 6 checagens** nos dois modos, incluindo uma falha dura:
+`#A8DADC` (aprovada) e `#F1FAEE` (paga) têm ΔE 12,9 em visão normal, abaixo do piso
+de 15. A rosca escapa porque tem leader line com rótulo em cada fatia; o empilhado
+não teria. Decisão: **manter a paleta e mitigar** (gap de 2px, legenda com
+quadrados, tooltip por segmento), registrando como falha conhecida — o piso de
+visão normal é a única checagem que codificação secundária não desculpa. Trocar a
+paleta muda a cor da rosca já entregue, e é ciclo próprio.
+
+Duas decisões de forma vieram da análise, não do gosto: as barras por categoria são
+**uma série com uma cor** (a categoria já está no eixo, e a paleta tem 4 slots para
+5 categorias — ciclar repetiria a primeira sem erro), e a linha mostra **só valor**
+(contagem já está no empilhado; juntar seria eixo duplo).
+
+Custo medido: os gráficos foram de 74,2 para **≈120,7 kB gzip**; a entrada subiu
+**0,9 kB**, de 173,1 para 174,1 — a divisão continua de pé.
+
+### O plano original do Ciclo 2, para referência
 
 ### Backend
 

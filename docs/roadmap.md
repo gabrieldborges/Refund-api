@@ -31,6 +31,23 @@ Os estados possíveis são:
   (`role`) no lugar. Só vale a pena com um caminho de escrita: o admin editando
   o cargo na página do usuário.
 
+- **Trocar a paleta de gráficos pelas cores validadas.** A paleta atual
+  (`chartPalette.ts`: `#1D3557`, `#457B9D`, `#A8DADC`, `#F1FAEE`, `#E63946`)
+  **falha 4 das 6 checagens** do validador de paletas nos dois modos, medido em
+  2026-08-11. A grave: `#A8DADC` (aprovada) e `#F1FAEE` (paga) têm **ΔE 12,9 em
+  visão normal**, abaixo do piso de 15 — difíceis de distinguir mesmo com visão de
+  cor completa. As demais: faixa de luminosidade, piso de croma e contraste contra
+  a superfície.
+
+  O Ciclo 2 do Dashboard **mitigou** no gráfico empilhado (gap de 2px, legenda com
+  quadrados, tooltip por segmento) em vez de corrigir, porque trocar a paleta muda
+  a cor da rosca já entregue na tela de revisão. **Codificação secundária não
+  desculpa o piso de visão normal** — esta é uma dívida de acessibilidade aberta.
+
+  Quatro slots que passam nas duas modalidades: `#2a78d6`, `#eb6834`, `#1baf7a`,
+  `#eda100`. Preservar o caráter azul/teal atual **não é possível** em quatro
+  slots — foi testado, e dois azuis ficam em ΔE 14,4.
+
 ## Em análise
 
 - ~~**Subir a versão do Python.** O projeto roda 3.9, que já não recebe
@@ -54,11 +71,14 @@ Os estados possíveis são:
   cada uma virou um ciclo, a ser construído na ordem **Time → Dashboard →
   Calendário**, com spec+plan próprios no início de cada ciclo. Todas as três
   exigem backend novo — nenhuma é trabalho só de frontend.
-  - **Ciclo 1, Time (admin).** Listagem de usuários com busca por nome e página
-    por usuário, somente leitura. Precisa de `GET /users` e `GET /users/{id}`,
-    que não existem: `UsersRepository` não tem busca nem paginação.
-  - **Ciclo 2, Dashboard (todos, com escopo por papel).** Quatro gráficos em
-    Nivo. Precisa de `GET /refunds/summary`, o agregado citado nas ideias acima.
+  - ~~**Ciclo 1, Time (admin).** Listagem de usuários com busca por nome e página
+    por usuário, somente leitura.~~ **CONCLUÍDO em 2026-08-11.**
+  - ~~**Ciclo 2, Dashboard (todos, com escopo por papel).** Quatro gráficos em
+    Nivo. Precisa de `GET /refunds/summary`, o agregado citado nas ideias acima.~~
+    **CONCLUÍDO em 2026-08-11.** O `GET /refunds/summary` existe e atende também a
+    ideia do agregado por status cruzando usuários. O card de dinheiro da Home
+    **continua** mostrando o total solicitado: o endpoint que o corrige agora
+    existe, mas mudar a Home ficou fora do escopo daquele ciclo.
   - **Ciclo 3, Calendário (todos, com escopo por papel).** Grade do mês com
     contagem por dia e as solicitações do dia escolhido. Precisa de filtro por
     data em `GET /refunds`, que hoje não existe, e de `GET /refunds/daily-counts`.

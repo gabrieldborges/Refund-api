@@ -6591,3 +6591,104 @@ falha pode estar acusando a premissa do teste, não o código.**
 - Duas features irmãs não se importam entre si; quem compõe é a página.
 - O gráfico não pode ser reexportado por fachada nenhuma, e o teste disso é uma
   linha da saída do `npm run build`.
+
+## Ciclo de feature — Dashboard (2026-08-11)
+
+Ciclo 2 do [panorama das três telas](plans/2026-08-11-tres-telas-panorama.md).
+Entregou `GET /refunds/summary`, quatro gráficos em Nivo e a tela `/dashboard`,
+para todos os papéis com os dados no escopo de quem olha.
+
+Suítes: backend **371 → 400** (mais 72 de integração), frontend **372 → 387**.
+
+### Lição 1 — A paleta é computável, então compute
+
+A skill de visualização tem um validador executável. Rodei na paleta que já estava
+**em produção**: ela falha 4 das 6 checagens nos dois modos, e uma é falha dura —
+`#A8DADC` e `#F1FAEE` com ΔE 12,9 em visão normal, contra um piso de 15.
+
+Eu não teria descoberto isso olhando. As duas cores "parecem" diferentes numa
+rosca com rótulo ao lado de cada fatia; o que o número diz é que, sem o rótulo,
+não parecem.
+
+**O que aprendi sobre mitigar:** as seis checagens não são igualmente
+negociáveis. O aviso de contraste é resolvido por rótulo visível. O piso de visão
+normal **não é** — codificação secundária não o desculpa. Manter a paleta foi
+decisão consciente, e o que a torna aceitável é estar escrita como falha conhecida,
+com o número, em vez de esquecida.
+
+### Lição 2 — Cor codifica identidade, e só quando o eixo não codifica
+
+Eu ia colorir as cinco categorias. Duas coisas impediram.
+
+A primeira é aritmética: a paleta tem 4 cores. `sliceColor` fecha com
+`% PALETTE.length`, então a quinta barra receberia a **primeira cor**, sem erro e
+sem aviso — duas categorias da mesma cor, e cor que não distingue não codifica
+nada.
+
+A segunda é mais interessante: mesmo com 5 cores disponíveis, colorir seria
+**errado**. A categoria já está no eixo, como texto. A cor estaria repetindo
+informação que já existe, e cor repetida gasta a única coisa que ela poderia estar
+dizendo.
+
+Uma série, uma cor. E um comentário cercando `sliceColor` a status, que tem
+exatamente 4 valores.
+
+### Lição 3 — Dois eixos y é o erro que parece sofisticação
+
+Meu impulso foi um gráfico de "valor e contagem por mês". Duas escalas no mesmo
+plano tornam qualquer cruzamento das linhas coincidência de escala, não fato — e
+quem escolhe os mínimos escolhe a narrativa. Contagem por mês foi para o
+empilhado; a linha mostra valor. **Duas perguntas, dois gráficos.**
+
+O eixo da linha começa em zero pelo mesmo motivo: um eixo truncado faz a mesma
+série ler como salto ou como reta.
+
+### Lição 4 — Uma rota que passa em todo teste unitário e falha no primeiro uso
+
+`GET /refunds/summary` tinha de ser declarada **antes** de `GET /{refund_id}`. O
+FastAPI casa por ordem de declaração, então com a rota de id primeiro o caminho
+`/refunds/summary` é lido como um id, falha a coerção para inteiro e responde 422 —
+com repositório, controller e view todos corretos e todos testados.
+
+O teste que pega isso não afirma "respondeu 200": afirma que **o composer
+específico foi chamado**. Um 200 poderia vir da rota errada.
+
+### Lição 5 — Um contrato pode envelhecer sozinho
+
+Os buckets de mês do resumo são derivados do dia em que o teste roda. Capturados
+crus, o arquivo de contrato ficaria obsoleto no dia 1º do mês seguinte e o CI
+falharia **sem ninguém ter mudado uma linha**. O `normalise` já fazia isso com
+`created_at`, exatamente por isso; `month` tem a mesma natureza.
+
+Colapsar os seis rótulos num só preserva o que o contrato serve para provar — a
+quantidade de buckets e a forma de cada um — e descarta o que era volátil.
+
+### Lição 6 — Relógio injetado
+
+O controller recebe `clock` em vez de chamar `datetime.now()`. Sem isso, os testes
+de janela dependeriam do mês em que rodam e passariam a falhar sozinhos na virada.
+Congelar `datetime` globalmente resolveria para o teste e criaria um problema para
+todo o resto do processo.
+
+### Verificação
+
+- Backend: `pytest` (400), `pytest -m integration` (72), `pylint src` saindo 0.
+- Frontend: `typecheck`, `lint` (0 avisos), `vitest` (387), `build`.
+- Ponta a ponta contra a API real: escopos **diferentes** de fato (padrão 3
+  solicitações e R$ 378,40; admin 4 e R$ 1.878,40, com `service` só para ele);
+  `user_id` de outro **ignorado** para o padrão e **respeitado** para o admin;
+  janela de 12 meses cruzando o ano (2025-09 → 2026-08) com 11 meses zerados
+  preenchidos; 422 em `months` 0 e 13; total de cada mês batendo com a soma dos
+  status dele.
+- Bundle: gráficos de 74,2 para **≈120,7 kB gzip**; entrada de 173,1 para
+  **174,1 kB** — subiu 0,9 kB, não 46. Se os 120 kB estivessem na entrada, ela
+  estaria perto de 294.
+
+### O que lembrar
+
+- **Rode o validador de paleta antes de escolher cor.** Uma paleta bonita e uma
+  paleta legível são perguntas diferentes, e só uma delas é opinião.
+- **Chunk separado no build não prova divisão.** O que prova é o tamanho da
+  entrada: um chunk existe de qualquer forma, mesmo se a entrada também o carregar.
+- **Ordem de declaração de rota é comportamento**, não organização.
+- Um teste de rota deve afirmar **qual** composer rodou, não que houve 200.
