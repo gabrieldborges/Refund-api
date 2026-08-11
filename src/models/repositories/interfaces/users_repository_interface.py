@@ -17,5 +17,11 @@ class UsersRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def select_users(
+        self, page: int, per_page: int, name: Optional[str] = None
+    ) -> tuple[list[dict], int]:
+        pass
+
+    @abstractmethod
     async def update_avatar(self, user_id: int, avatar_filename: Optional[str]) -> None:
         pass

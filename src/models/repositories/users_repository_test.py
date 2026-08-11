@@ -151,3 +151,122 @@ async def test_update_avatar_accepts_none_to_clear_the_picture(mock_connection, 
     params = statement.compile().params
     assert params["avatar_filename"] is None
     assert params["id_1"] == 7
+
+
+# select_users runs TWO queries in one session: the count first, then the page.
+# This helper wires the session to answer them in that order, so each test can
+# reach either statement by index.
+def _wire_select_users(mock_db, rows, total):
+    count_result = MagicMock()
+    count_result.scalar_one = MagicMock(return_value=total)
+    page_result = MagicMock()
+    page_result.fetchall = MagicMock(return_value=rows)
+    mock_db.session.execute = AsyncMock(side_effect=[count_result, page_result])
+
+
+def _user_row(user_id, name):
+    row = MagicMock()
+    row._mapping = {
+        "id": user_id,
+        "name": name,
+        "email": f"{name}@example.com",
+        "password": "hashed",
+        "role": "standard",
+        "avatar_filename": None,
+        "created_at": None,
+    }
+    return row
+
+
+def _count_statement(mock_db):
+    return str(mock_db.session.execute.call_args_list[0][0][0])
+
+
+def _page_statement(mock_db):
+    return str(mock_db.session.execute.call_args_list[1][0][0])
+
+
+# The page comes back as plain dicts because the serializer indexes them by key.
+@pytest.mark.asyncio
+async def test_select_users_returns_the_rows_as_dicts_and_the_total(mock_connection, mock_db):
+    _wire_select_users(mock_db, [_user_row(1, "ana"), _user_row(2, "bruno")], total=2)
+
+    users, total = await UsersRepository(mock_connection).select_users(page=1, per_page=10)
+
+    assert total == 2
+    assert [user["name"] for user in users] == ["ana", "bruno"]
+    assert isinstance(users[0], dict)
+
+
+@pytest.mark.asyncio
+async def test_select_users_pages_with_limit_and_offset(mock_connection, mock_db):
+    _wire_select_users(mock_db, [], total=0)
+
+    await UsersRepository(mock_connection).select_users(page=3, per_page=10)
+
+    statement = mock_db.session.execute.call_args_list[1][0][0]
+    assert "LIMIT" in str(statement) and "OFFSET" in str(statement)
+    params = statement.compile().params
+    assert params["param_1"] == 10
+    assert params["param_2"] == 20
+
+
+# Two ordering keys, not one. PostgreSQL guarantees no order among rows whose
+# sort key ties, so with LIMIT/OFFSET a tie can show one row on two pages while
+# another never appears at all. Namesakes are ordinary, so this tie is not
+# hypothetical — same reasoning as RefundsRepository.__order_by.
+@pytest.mark.asyncio
+async def test_select_users_orders_by_name_with_id_as_the_tiebreaker(mock_connection, mock_db):
+    _wire_select_users(mock_db, [], total=0)
+
+    await UsersRepository(mock_connection).select_users(page=1, per_page=10)
+
+    assert "ORDER BY users.name ASC, users.id ASC" in _page_statement(mock_db)
+
+
+# ilike renders as lower(...) LIKE lower(...), which is the case-insensitive
+# partial match the Home's refund search already uses.
+@pytest.mark.asyncio
+async def test_select_users_filters_by_partial_name(mock_connection, mock_db):
+    _wire_select_users(mock_db, [], total=0)
+
+    await UsersRepository(mock_connection).select_users(page=1, per_page=10, name="an")
+
+    statement = mock_db.session.execute.call_args_list[1][0][0]
+    assert "lower(users.name) LIKE lower" in str(statement)
+    assert statement.compile().params["name_1"] == "%an%"
+
+
+# A count that ignored the filter would make total_pages promise pages the page
+# query can never fill.
+@pytest.mark.asyncio
+async def test_select_users_counts_with_the_same_filter_as_the_page(mock_connection, mock_db):
+    _wire_select_users(mock_db, [], total=0)
+
+    await UsersRepository(mock_connection).select_users(page=1, per_page=10, name="an")
+
+    assert "lower(users.name) LIKE lower" in _count_statement(mock_db)
+
+
+# An empty string is not a search: it must not become LIKE '%%', which would
+# read as a filter in the SQL while matching everything.
+@pytest.mark.asyncio
+async def test_select_users_treats_an_empty_name_as_no_filter(mock_connection, mock_db):
+    _wire_select_users(mock_db, [], total=0)
+
+    await UsersRepository(mock_connection).select_users(page=1, per_page=10, name="")
+
+    assert "LIKE" not in _page_statement(mock_db)
+    assert "LIKE" not in _count_statement(mock_db)
+
+
+# The password column is still selected — the repository's job is the row, and
+# keeping it out of responses is user_serializer's. This test pins that split so
+# nobody "fixes" it in the wrong layer.
+@pytest.mark.asyncio
+async def test_select_users_returns_the_whole_row_including_the_hash(mock_connection, mock_db):
+    _wire_select_users(mock_db, [_user_row(1, "ana")], total=1)
+
+    users, _ = await UsersRepository(mock_connection).select_users(page=1, per_page=10)
+
+    assert users[0]["password"] == "hashed"
