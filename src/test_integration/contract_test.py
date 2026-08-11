@@ -99,14 +99,11 @@ def create_refund(client, headers):
     )
 
 
-@pytest.mark.integration
-def test_the_contract_file_matches_what_the_api_actually_returns(authenticated, admin_headers):
-    client, headers, user_id = authenticated
-
+def capture_refunds(client, headers, user_id):
     created = create_refund(client, headers)
     refund_id = created.json()["attributes"]["id"]
 
-    refunds_contract = {
+    return {
         "refundCreate": created.json(),
         "refundList": client.get("/refunds", headers=headers).json(),
         "refundDetail": client.get(f"/refunds/{refund_id}", headers=headers).json(),
@@ -115,7 +112,9 @@ def test_the_contract_file_matches_what_the_api_actually_returns(authenticated, 
         "refundStats": client.get(f"/users/{user_id}/refund-stats", headers=headers).json(),
     }
 
-    app_contract = {
+
+def capture_app(client):
+    return {
         # Flat, with no {type, count, attributes} envelope — unlike every refund
         # response above. Three envelope styles coexist in this API; capturing
         # them is how the frontend finds out instead of guessing.
@@ -127,22 +126,34 @@ def test_the_contract_file_matches_what_the_api_actually_returns(authenticated, 
         "problemDocument": client.get("/rota-inexistente").json(),
     }
 
-    # Captured with admin_headers, not `headers`: both routes are admin-only
-    # (BR-025), so a standard user's token would record a 403 body as if it were
-    # the contract. With both fixtures active there are two users — Ana from
-    # `authenticated` and Chefe from `admin_headers` — so the list snapshot has
-    # more than one row and a per-row shape error cannot hide.
-    users_contract = {
+
+def capture_users(client, admin_headers, user_id):
+    """Captured with the ADMIN's headers, not the standard user's.
+
+    Both routes are admin-only (BR-025), so a standard user's token would record
+    a 403 body as if it were the contract. With both fixtures active there are
+    two users — Ana from `authenticated` and Chefe from `admin_headers` — so the
+    list snapshot has more than one row and a per-row shape error cannot hide in
+    a single-element array.
+    """
+    return {
         "userList": client.get("/users", headers=admin_headers).json(),
         "userDetail": client.get(f"/users/{user_id}", headers=admin_headers).json(),
     }
 
+
+@pytest.mark.integration
+def test_the_contract_file_matches_what_the_api_actually_returns(authenticated, admin_headers):
+    client, headers, user_id = authenticated
+
+    captures = (
+        ("refunds", capture_refunds(client, headers, user_id)),
+        ("app", capture_app(client)),
+        ("users", capture_users(client, admin_headers, user_id)),
+    )
+
     stale = []
-    for name, captured in (
-        ("refunds", refunds_contract),
-        ("app", app_contract),
-        ("users", users_contract),
-    ):
+    for name, captured in captures:
         path = CONTRACT_PATHS[name]
         current = json.dumps(normalise(captured), ensure_ascii=False, indent=2, sort_keys=True)
         current += "\n"
