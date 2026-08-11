@@ -6,7 +6,7 @@
 #        necessarily looks like users_repository_test.py's — both fake the same connection
 #        protocol for a different repository. Extracting a shared fixture would couple two
 #        independent test files to one mock shape for no real reuse benefit.
-from datetime import datetime
+from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 from .refunds_repository import RefundsRepository
@@ -569,3 +569,116 @@ async def test_summarize_refunds_uses_a_half_open_window(mock_connection, mock_d
     for statement in _summary_statements(mock_db):
         assert "refunds.created_at >=" in statement
         assert "refunds.created_at <" in statement
+
+
+# The half-open upper bound is what makes "one day" mean the whole day: created_at is
+# a timestamp, so `<= to` with a bare date would compare against midnight and keep
+# only the first instant.
+@pytest.mark.asyncio
+async def test_select_refunds_filters_from_a_date(mock_connection, mock_db):
+    await RefundsRepository(mock_connection).select_refunds(
+        page=1, per_page=10, created_from=date(2026, 8, 3)
+    )
+
+    statement = str(mock_db.session.execute.call_args_list[0][0][0])
+    assert "refunds.created_at >=" in statement
+
+
+@pytest.mark.asyncio
+async def test_select_refunds_turns_created_to_into_the_next_day(mock_connection, mock_db):
+    await RefundsRepository(mock_connection).select_refunds(
+        page=1, per_page=10, created_to=date(2026, 8, 3)
+    )
+
+    statement = mock_db.session.execute.call_args_list[0][0][0]
+    assert "refunds.created_at <" in str(statement)
+    # The bound is the 4th, not the 3rd: asking for the 3rd must include the 3rd.
+    assert date(2026, 8, 4) in statement.compile().params.values()
+
+
+# A single day: both bounds, and the day itself is inside them.
+@pytest.mark.asyncio
+async def test_select_refunds_can_ask_for_one_whole_day(mock_connection, mock_db):
+    day = date(2026, 8, 3)
+
+    await RefundsRepository(mock_connection).select_refunds(
+        page=1, per_page=10, created_from=day, created_to=day
+    )
+
+    params = mock_db.session.execute.call_args_list[0][0][0].compile().params.values()
+    assert day in params
+    assert date(2026, 8, 4) in params
+
+
+@pytest.mark.asyncio
+async def test_select_refunds_without_dates_does_not_filter_by_date(mock_connection, mock_db):
+    await RefundsRepository(mock_connection).select_refunds(page=1, per_page=10)
+
+    assert "created_at" not in str(mock_db.session.execute.call_args_list[0][0][0])
+
+
+# The count and the page share the filter list, so a date filter must reach both —
+# otherwise total_pages would promise pages the page query cannot fill.
+@pytest.mark.asyncio
+async def test_select_refunds_dates_reach_the_count_and_the_page(mock_connection, mock_db):
+    await RefundsRepository(mock_connection).select_refunds(
+        page=1, per_page=10, created_from=date(2026, 8, 1), created_to=date(2026, 8, 31)
+    )
+
+    for call in mock_db.session.execute.call_args_list[:2]:
+        assert "refunds.created_at >=" in str(call[0][0])
+        assert "refunds.created_at <" in str(call[0][0])
+
+
+def _wire_days(mock_db, rows):
+    result = MagicMock()
+    result.fetchall = MagicMock(return_value=rows)
+    mock_db.session.execute = AsyncMock(return_value=result)
+
+
+@pytest.mark.asyncio
+async def test_count_by_day_returns_a_dict_keyed_by_iso_date(mock_connection, mock_db):
+    _wire_days(mock_db, [(date(2026, 8, 3), 2), (date(2026, 8, 9), 1)])
+
+    counts = await RefundsRepository(mock_connection).count_by_day(
+        user_id=None, since=date(2026, 8, 1), until=date(2026, 9, 1)
+    )
+
+    assert counts == {"2026-08-03": 2, "2026-08-09": 1}
+
+
+@pytest.mark.asyncio
+async def test_count_by_day_groups_by_day_inside_the_window(mock_connection, mock_db):
+    _wire_days(mock_db, [])
+
+    await RefundsRepository(mock_connection).count_by_day(
+        user_id=None, since=date(2026, 8, 1), until=date(2026, 9, 1)
+    )
+
+    statement = str(mock_db.session.execute.call_args[0][0])
+    assert "GROUP BY" in statement
+    assert "refunds.created_at >=" in statement and "refunds.created_at <" in statement
+
+
+# Scoped like every other aggregate: a standard user must not see which days OTHER
+# people filed on.
+@pytest.mark.asyncio
+async def test_count_by_day_filters_by_user(mock_connection, mock_db):
+    _wire_days(mock_db, [])
+
+    await RefundsRepository(mock_connection).count_by_day(
+        user_id=7, since=date(2026, 8, 1), until=date(2026, 9, 1)
+    )
+
+    assert "refunds.user_id =" in str(mock_db.session.execute.call_args[0][0])
+
+
+@pytest.mark.asyncio
+async def test_count_by_day_without_a_user_does_not_filter(mock_connection, mock_db):
+    _wire_days(mock_db, [])
+
+    await RefundsRepository(mock_connection).count_by_day(
+        user_id=None, since=date(2026, 8, 1), until=date(2026, 9, 1)
+    )
+
+    assert "refunds.user_id =" not in str(mock_db.session.execute.call_args[0][0])

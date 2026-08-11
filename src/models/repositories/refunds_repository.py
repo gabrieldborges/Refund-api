@@ -1,5 +1,5 @@
 # pylint: disable=w0212
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 from sqlalchemy import insert, select, delete, func
 from src.models.entities.refunds import Refunds
@@ -30,6 +30,16 @@ class RefundsRepository(RefundsRepositoryInterface):
             await session.commit()
             return result.inserted_primary_key[0]
 
+    # too-many-locals: R0914 conta PARÂMETROS como locais, e este método tem nove —
+    # cada um um filtro legítimo da listagem (página, tamanho, nome, solicitante,
+    # status, ordenação, direção e as duas datas). Agrupá-los num objeto faria a
+    # mudança atravessar view, controller e interface para esconder um número, num
+    # método cujo trabalho é exatamente "receber os parâmetros da listagem".
+    #
+    # A montagem do WHERE saiu para __list_filters de qualquer forma, porque seis
+    # condicionais mereciam nome — mas isso é legibilidade, não o que o R0914 estava
+    # apontando.
+    # pylint: disable=too-many-locals
     async def select_refunds(
         self,
         page: int,
@@ -39,15 +49,11 @@ class RefundsRepository(RefundsRepositoryInterface):
         status: Optional[str] = None,
         sort: Optional[str] = None,
         order: Optional[str] = None,
+        created_from: Optional[date] = None,
+        created_to: Optional[date] = None,
     ) -> tuple[list[dict], int, int]:
         async with self.__db_connection.connect() as session:
-            filters = []
-            if user_id is not None:
-                filters.append(Refunds.c.user_id == user_id)
-            if name:
-                filters.append(Refunds.c.name.ilike(f"%{name}%"))
-            if status:
-                filters.append(Refunds.c.status == status)
+            filters = self.__list_filters(user_id, name, status, created_from, created_to)
 
             # count and sum share the same filters, so they ride in one query
             # instead of two round trips. SUM over an empty set returns NULL,
@@ -77,6 +83,41 @@ class RefundsRepository(RefundsRepositoryInterface):
 
             return [self.__to_refund(row) for row in rows], total, total_amount or 0
 
+    def __list_filters(
+        self,
+        user_id: Optional[int],
+        name: Optional[str],
+        status: Optional[str],
+        created_from: Optional[date],
+        created_to: Optional[date],
+    ) -> list:
+        """The WHERE of the listing, in one place.
+
+        Extracted when the two date parameters pushed select_refunds past pylint's
+        local-variable ceiling — but the ceiling was pointing at something real:
+        with six optional filters, the query building was most of that method.
+
+        The count and the page share this list, which is what keeps total_pages
+        from promising pages the page query cannot fill.
+        """
+        filters = []
+        if user_id is not None:
+            filters.append(Refunds.c.user_id == user_id)
+        if name:
+            filters.append(Refunds.c.name.ilike(f"%{name}%"))
+        if status:
+            filters.append(Refunds.c.status == status)
+        if created_from is not None:
+            filters.append(Refunds.c.created_at >= created_from)
+        if created_to is not None:
+            # `< to + 1 dia`, e não `<= to`. created_at é um timestamp: com `<=`
+            # uma data pura viria como meia-noite e o dia inteiro seria descartado
+            # exceto o primeiro instante. Assim created_from == created_to devolve
+            # aquele dia completo, que é o que a tela do calendário pede — e
+            # ninguém precisa nomear 23:59:59, que perde o último segundo.
+            filters.append(Refunds.c.created_at < created_to + timedelta(days=1))
+        return filters
+
     async def select_refund_by_id(self, refund_id: int) -> Optional[dict]:
         async with self.__db_connection.connect() as session:
             query = (
@@ -105,6 +146,37 @@ class RefundsRepository(RefundsRepositoryInterface):
             if user_id is not None:
                 query = query.where(Refunds.c.user_id == user_id)
             return [int(row[0]) for row in (await session.execute(query)).fetchall()]
+
+    async def count_by_day(
+        self, user_id: Optional[int], since: date, until: date
+    ) -> dict:
+        """How many refunds each day of the window has, keyed by ISO date.
+
+        Only the days that HAVE refunds come back. Filling the rest of the month
+        with zeros is the controller's job, for the same reason it fills the months
+        in the summary: how many days a month has is calendar knowledge, not
+        storage knowledge — and February is where getting it from the database
+        instead of the calendar goes wrong.
+
+        Count only, no sum. The question this feeds is "when", and the answer is
+        "how many"; publishing an amount here would create a field with no
+        consumer.
+        """
+        async with self.__db_connection.connect() as session:
+            day = func.date(Refunds.c.created_at)
+            filters = [Refunds.c.created_at >= since, Refunds.c.created_at < until]
+            if user_id is not None:
+                filters.append(Refunds.c.user_id == user_id)
+
+            query = (
+                select(day, func.count())  # pylint: disable=not-callable
+                .select_from(Refunds)
+                .where(*filters)
+                .group_by(day)
+            )
+            rows = (await session.execute(query)).fetchall()
+
+            return {row[0].isoformat(): row[1] for row in rows}
 
     async def summarize_refunds(
         self, user_id: Optional[int], since: datetime, until: datetime

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 
@@ -19,6 +19,8 @@ class RefundsRepositoryInterface(ABC):
         status: Optional[str] = None,
         sort: Optional[str] = None,
         order: Optional[str] = None,
+        created_from: Optional[date] = None,
+        created_to: Optional[date] = None,
     ) -> tuple[list[dict], int, int]:
         pass
 
@@ -42,4 +44,10 @@ class RefundsRepositoryInterface(ABC):
 
     @abstractmethod
     async def available_years(self, user_id: Optional[int]) -> list[int]:
+        pass
+
+    @abstractmethod
+    async def count_by_day(
+        self, user_id: Optional[int], since: date, until: date
+    ) -> dict:
         pass
