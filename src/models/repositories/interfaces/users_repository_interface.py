@@ -1,3 +1,10 @@
+# pylint: disable=duplicate-code
+# duplicate-code: R0801 started flagging this file against
+# refunds_repository_interface once select_users made it long enough. What the
+# two share is the @abstractmethod / async def / pass rhythm that declaring an
+# ABC requires — the shape belongs to the language, not to us, and the method
+# names and signatures have nothing in common. Same disable, for the same
+# reason, as main/routes/user_routes.py.
 from abc import ABC, abstractmethod
 from typing import Optional
 
