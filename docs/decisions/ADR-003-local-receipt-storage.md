@@ -206,7 +206,7 @@ bater. O `S3FileStorage` passa a forçar `addressing_style="virtual"` — mas
 **apenas quando `s3_endpoint_url` está vazio**, ou seja, só na AWS de verdade:
 contra o MinIO o endereçamento virtual produziria `bucket.localhost:9100`, um
 nome que não resolve — o endereçamento virtual sem condição teria derrubado os
-72 testes de integração. Os **9** testes de integração contra o MinIO não
+**9** testes de integração. Os **9** testes de integração contra o MinIO não
 podiam ver esse defeito, mesmo com três deles sendo especificamente sobre URL
 assinada, porque **o MinIO não tem endpoint regional para errar**.
 

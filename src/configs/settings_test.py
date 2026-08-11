@@ -211,6 +211,26 @@ def test_the_error_names_every_missing_s3_variable():
     assert "S3_BUCKET" in message
     assert "S3_ACCESS_KEY_ID" in message
     assert "S3_SECRET_ACCESS_KEY" in message
+    assert "S3_REGION" in message
+
+
+# S3_REGION used to default to "us-east-1" and was never on the required list,
+# so a bucket outside that region with S3_REGION unset would silently address
+# the global host again — the exact defect 057f339 fixed, reopened through the
+# one field nothing checked at startup.
+def test_s3_backend_without_a_region_aborts_startup():
+    with pytest.raises(ValidationError) as error:
+        Settings(
+            _env_file=None,
+            database_url="postgresql+asyncpg://a:b@c/d",
+            jwt_secret="s",
+            storage_backend="s3",
+            s3_bucket="refund-prod",
+            s3_access_key_id="AKIA...",
+            s3_secret_access_key="secret",
+        )
+
+    assert "S3_REGION" in str(error.value)
 
 
 def test_a_fully_configured_s3_backend_is_accepted():
@@ -220,6 +240,7 @@ def test_a_fully_configured_s3_backend_is_accepted():
         jwt_secret="s",
         storage_backend="s3",
         s3_bucket="refund-prod",
+        s3_region="us-east-1",
         s3_access_key_id="AKIA...",
         s3_secret_access_key="secret",
     )
@@ -245,6 +266,7 @@ def test_the_s3_secret_does_not_appear_in_the_repr():
         jwt_secret="s",
         storage_backend="s3",
         s3_bucket="b",
+        s3_region="us-east-1",
         s3_access_key_id="k",
         s3_secret_access_key="super-secret-s3-value",
     )

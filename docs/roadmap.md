@@ -31,8 +31,8 @@ Os estados possíveis são:
   `boto3` já anunciou o fim do suporte. É a pendência mais grave registrada, e
   provavelmente destrava boa parte das 37 vulnerabilidades que o Dependabot
   aponta no `Refund-api` — eram 14 dois dias antes, sobre exatamente as
-  mesmas dependências.~~ **ENDEREÇADO na branch `chore/python-313-upgrade`
-  (2026-08-10, não mesclada):** o projeto roda 3.13, a imagem de produção é
+  mesmas dependências.~~ **ENDEREÇADO na branch `chore/python-313-upgrade`,
+  mesclada em `18b8678`:** o projeto roda 3.13, a imagem de produção é
   construída sobre `python:3.13-slim`, e o terceiro ponto deixou de ser
   suposição — foi medido: os 19 advisories distintos por trás dos 37 alertas
   estão todos satisfeitos pelas versões fixadas nesta branch. Confira com

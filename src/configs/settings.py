@@ -74,7 +74,10 @@ class Settings(BaseSettings):
     # S3-compatible provider — R2, B2, Spaces — and boto3 cannot tell the
     # difference.
     s3_endpoint_url: str = ""
-    s3_region: str = "us-east-1"
+    # No safe default: a silent "us-east-1" here is exactly what let 057f339's
+    # bug back in for any bucket outside that region. See
+    # require_s3_configuration_when_selected below.
+    s3_region: str = ""
     s3_access_key_id: str = ""
     s3_secret_access_key: SecretStr = SecretStr("")
 
@@ -180,6 +183,7 @@ class Settings(BaseSettings):
             name
             for name, value in (
                 ("S3_BUCKET", self.s3_bucket),
+                ("S3_REGION", self.s3_region),
                 ("S3_ACCESS_KEY_ID", self.s3_access_key_id),
                 ("S3_SECRET_ACCESS_KEY", self.s3_secret_access_key.get_secret_value()),
             )

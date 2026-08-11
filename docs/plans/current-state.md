@@ -56,11 +56,15 @@ partida e não como afirmação durável:
   uma.
 
 **Desde 2026-08-10 há uma diferença que nenhum ciclo anterior teve, e ela muda
-o que "apagar uma branch" custa.** Existem duas branches de trabalho não
-mescladas — `feat/first-deploy` (`Refund-api`) e `feat/serve-static`
-(`Refund-FrontEnd`) — e os serviços da Railway **implantam a partir delas**,
-não da `main`. Apagar uma delas com o serviço ainda apontado para lá quebra a
-produção. Ver a pendência dedicada na seção de pendências, que também diz onde
+o que "apagar uma branch" custa.** Há **duas branches das quais a Railway
+implanta diretamente** — `feat/first-deploy` (`Refund-api`) e
+`feat/serve-static` (`Refund-FrontEnd`) — e não da `main`. Apagar uma delas
+com o serviço ainda apontado para lá quebra a produção. **Isto não é a
+contagem total de branches não mescladas do momento** — o `Refund-api` também
+tem `docs/preset-folder-refs`, de fato não mesclada (confira com `git cherry
+-v main docs/preset-folder-refs`, que mostra `+ 166627e`) — só não é uma
+branch que a Railway implanta, e é por isso que ela fica de fora desta
+contagem. Ver a pendência dedicada na seção de pendências, que também diz onde
 conferir a referência de cada serviço (é no painel, não no repositório).
 
 **Esta data já esteve errada de novo.** Em 2026-08-09 ela dizia 2026-08-07, com
@@ -130,6 +134,42 @@ onda final de correções antes de oferecer a branch para merge (2026-08-10). A
 lição de escopo: **uma varredura de "arquivos que mudaram" não é a mesma coisa
 que uma varredura de "arquivos que citam o fato que mudou"** — os dois exigem
 buscas diferentes, e só a segunda pega isso.
+
+**DÉCIMA SEGUNDA, DÉCIMA TERCEIRA E DÉCIMA QUARTA OCORRÊNCIAS, achadas na
+revisão de branch inteira do ciclo do primeiro deploy — e diferentes das onze
+anteriores porque nasceram falsas, em vez de terem apodrecido depois.** As
+três viviam no bloco que este próprio documento usa para decidir se é seguro
+apagar uma branch — o que torna o erro mais grave que os anteriores, não
+menos, porque é exatamente o bloco cuja confiabilidade sustenta essa decisão.
+
+- **Décima segunda:** este documento (`:1721`, `:1897`, `:2095`, antes desta
+  correção) e o `docs/roadmap.md` (`:34-35`) descreviam `chore/python-313-upgrade`
+  como "não mesclada" / "ainda não mesclada". **Está mesclada** — seus seis
+  commits (`8a56ba5`, `8b12240`, `581cd85`, `5458777`, `5bf4e2e`, `6ef5632`)
+  são todos ancestrais de `18b8678`, que é o próprio *merge base* desta branch
+  com a `main`; confira com `git merge-base --is-ancestor <commit> 18b8678`
+  para qualquer um deles. A branch nem existe mais localmente.
+- **Décima terceira:** a linha `:2470` (antes desta correção) descrevia
+  `fix/auth-storage-access` (`d9d8b6b`, no `Refund-FrontEnd`) como "não
+  mesclada", enquanto a linha `:2185`, **no mesmo arquivo**, já registrava que
+  ela foi mesclada em 2026-08-05 (`d33fb65..d9d8b6b`, fast-forward). O
+  documento se contradizia a poucas centenas de linhas de distância. Confira
+  com `git -C ../Refund-FrontEnd merge-base --is-ancestor d9d8b6b main`.
+- **Décima quarta:** o bloco de `:58-64` (antes desta correção) afirmava
+  "duas branches de trabalho não mescladas", como se fosse a contagem total do
+  momento. O `Refund-api` também tem `docs/preset-folder-refs`, de fato não
+  mesclada (`git cherry -v main docs/preset-folder-refs` mostra `+ 166627e`).
+  A frase foi reescrita para escopar às duas branches **das quais a Railway
+  implanta**, que é o fato do qual a pendência de segurança realmente precisa.
+
+O que diferencia estas três das onze anteriores: aquelas nasceram verdadeiras
+e morreram em silêncio quando o mundo mudou depois de escritas. Estas já
+estavam falsas no instante em que a versão final desta branch (`08506d1`) foi
+commitada — os merges de `chore/python-313-upgrade` e de
+`fix/auth-storage-access` já tinham acontecido havia muito quando as frases
+foram lidas e deixadas como estavam, dentro do próprio bloco cuja função
+declarada é ser confiável o bastante para decidir se apagar uma branch é
+seguro.
 
 **Correção registrada:** até 2026-08-07 este documento afirmava, nos itens 15
 e 16, que aquelas branches não tinham sido mescladas. Já tinham. O bloco de
@@ -1718,7 +1758,7 @@ completo e obrigatório está em
   - Verificação: `pytest` **334**, integração **70**, `pylint` exit 0.
 
 - ~~**A imagem é construída sobre Python 3.9, sem correções de segurança.**~~
-  **RESOLVIDO na branch `chore/python-313-upgrade` (2026-08-10, não mesclada):**
+  **RESOLVIDO na branch `chore/python-313-upgrade`, mesclada em `18b8678`:**
   o `Dockerfile` usa `python:3.13-slim` nos dois estágios, e a imagem foi
   construída e rodada nessa base. Confira com
   `grep -n "FROM python" Dockerfile`. O registro original, porque a dívida foi
@@ -1894,7 +1934,7 @@ completo e obrigatório está em
 
 - **Onda final de correções — revisão de branch inteira do ciclo de Python
   3.13, ANTES do merge.** Três achados Importantes, zero Crítico, na mesma
-  branch `chore/python-313-upgrade` (2026-08-10, ainda não mesclada).
+  branch `chore/python-313-upgrade`, mesclada em `18b8678`.
   - **`docs/roadmap.md` e `.github/workflows/ci.yml` eram a décima e a décima
     primeira ocorrência** do padrão descrito no bloco de estado dos
     repositórios acima — texto que era verdade quando escrito e parou de ser
@@ -1941,8 +1981,10 @@ completo e obrigatório está em
     `.superpowers/sdd/2026-08-09-python-upgrade-and-dependencies/final-fixes-report.md`.
 
 - **Ciclo — PRIMEIRO DEPLOY (Railway + S3): CONCLUÍDO NA BRANCH, o projeto
-  está no ar.** Branches `feat/first-deploy` (`Refund-api`, `2ee7add..057f339`)
-  e `feat/serve-static` (`Refund-FrontEnd`, `b26385e..1d77232`). Executado em 9
+  está no ar.** Branches `feat/first-deploy` (`Refund-api`, commits de código
+  `2ee7add..057f339`; o commit de spec `e3a3f5e` vem antes dessa faixa) e
+  `feat/serve-static` (`Refund-FrontEnd`, commits de código `b26385e..1d77232`;
+  o commit de README `0d0e4cb` vem depois). Executado em 9
   tasks de **natureza dividida**: as tasks 1–3 e 9 são de agente; as 4–8
   exigiam console da AWS e painel da Railway e foram feitas pelo Gabriel, com o
   agente preparando valores e conferindo evidências. Detalhes e lições no
@@ -2002,7 +2044,10 @@ completo e obrigatório está em
     uma URL assinada da AWS de verdade**, aprovar, marcar como pago com
     comprovante de pagamento (um **segundo** caminho de upload e um **segundo**
     prefixo de URL assinada), o histórico de revisões e um erro aparecendo na
-    tela. Ele se promoveu a admin com `init/promote_admin.py`.
+    tela. Ele se promoveu a admin com
+    `python -m init.promote_admin <email>` — a forma de caminho simples falha
+    porque `src` não fica no `sys.path`, como o próprio docstring do script
+    explica; a mesma forma já estava correta em `README.md:141`.
   - **Verificado de fora, por sonda:** `/health` **200**, `/ready` **200**
     (ou seja, o banco é alcançado e a guarda do driver não disparou), o
     fallback da SPA respondendo **200** numa rota profunda, e um **404
@@ -2023,6 +2068,22 @@ completo e obrigatório está em
   - Verificação: `pytest` **340 passed / 72 deselected** (partiu de 335: +3 da
     guarda do driver, +2 do endereçamento do S3), `pytest -m integration`
     **72 passed**, `pylint src` **exit 0**.
+  - **ONDA FINAL DE CORREÇÕES DESTE CICLO, achada pela revisão de branch
+    inteira — `S3_REGION` não era obrigatória.** `require_s3_configuration_when_selected`
+    (`src/configs/settings.py`) exigia `S3_BUCKET`, `S3_ACCESS_KEY_ID` e
+    `S3_SECRET_ACCESS_KEY`, mas `s3_region` tinha um default silencioso,
+    `"us-east-1"`. Isso reabria a porta que o próprio `057f339` acabara de
+    fechar: com um bucket fora de `us-east-1` e `S3_REGION` não configurada na
+    Railway, o endereçamento virtual volta a resolver para o **host global**
+    — o defeito exato deste ciclo, de novo, e sem nada barrando o startup para
+    avisar. **Correção:** `s3_region` perdeu o default (passou a `""`) e
+    entrou na lista de obrigatórias, no mesmo padrão dos outros três campos.
+    TDD: o teste novo (`test_s3_backend_without_a_region_aborts_startup`) foi
+    rodado FALHANDO antes da mudança (`DID NOT RAISE ValidationError`) e
+    PASSANDO depois; os testes que montavam um `Settings` s3 "totalmente
+    configurado" sem região foram atualizados para incluir `s3_region`.
+    Verificação: `pytest` **341 passed / 72 deselected** (340 + 1),
+    `pytest -m integration` **72 passed**, `pylint src` **exit 0**.
 
 - **CORREÇÃO IMPORTANTE — "pylint 10.00/10" nunca significou aprovação.**
   Descoberto pelo CI em 2026-08-06, no primeiro dia. O `pylint src` imprime
@@ -2092,7 +2153,7 @@ completo e obrigatório está em
   corrigido na hora, de propósito. Sugestão de ordem, do mais grave ao menos:
   1. ~~**Python 3.9 sem correção de segurança** + **37 alertas do
      Dependabot**~~ — **ERAM UM ITEM SÓ, e foram ENDEREÇADOS na branch
-     `chore/python-313-upgrade` (2026-08-10, não mesclada).** Esta lista os
+     `chore/python-313-upgrade`, mesclada em `18b8678`.** Esta lista os
      tratava como as pendências 1 e 2, separadas. Não eram: **toda versão
      corrigida exige `>= 3.10`**, e o `botocore` prendia o `urllib3` na linha
      vulnerável `1.26` através do marcador de ambiente
@@ -2468,7 +2529,8 @@ deploy nenhuma delas fazia sentido.
   plataforma real do outro lado.
 - ~~**`AuthContext.loadStoredUser` lê `localStorage` FORA do próprio
   `try`.**~~ **RESOLVIDO em 2026-08-05**, na branch `fix/auth-storage-access`
-  do `Refund-FrontEnd` (commit `d9d8b6b`, **não mesclada**): a leitura entrou
+  do `Refund-FrontEnd` (commit `d9d8b6b`, **mesclada** — ver "3c" na seção de
+  encerramento da sessão de 2026-07-31 → 2026-08-03): a leitura entrou
   no bloco que já existia, e a aplicação passa a bootar anônima em vez de
   quebrar. **A prova não foi o teste passar** — o teste novo (`boots anonymous
   when localStorage access itself throws`, com `Storage.prototype.getItem`
@@ -3276,7 +3338,8 @@ deploy nenhuma delas fazia sentido.
 
 - **A saída dos testes deixou de ser limpa: `StarletteDeprecationWarning`.**
   Depois do major, o `TestClient` avisa para usar `httpx2`, e o aviso aparece
-  nas duas suítes — é o `1 warning` que acompanha os 335 e os 72. Ele é
+  nas duas suítes — é o `1 warning` que acompanha os 340 e os 72 (ver
+  `:2068` acima, que já registra a suíte mockada em 340). Ele é
   reportado em `fastapi/testclient.py:1` (o reexport), não no arquivo do
   Starlette de onde vem; procurar pela origem no `starlette/` não acha.
   Não afeta resultado nenhum. Fica registrado porque saída de teste suja é

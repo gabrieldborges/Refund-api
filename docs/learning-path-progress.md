@@ -4931,6 +4931,12 @@ E o **CORS do bucket**: uma implantação com S3 precisa liberar o domínio do
 frontend no provedor, ou o navegador bloqueia o download cross-origin. É
 configuração de painel, não código, e o startup não tem como verificar.
 
+**Esta afirmação foi derrubada pelo primeiro deploy.** Não precisa — não para
+a forma como esta UI consome o comprovante (`<img src>`, sem JavaScript lendo
+os bytes). Ver a correção completa em ["A afirmação sobre CORS de bucket que a
+verificação derrubou"](#a-afirmação-sobre-cors-de-bucket-que-a-verificação-derrubou),
+mais adiante neste mesmo diário, e em ADR-003.
+
 ### O que lembrar
 
 - **Uma boa interface paga juros.** `read() -> bytes` foi escrito dois ciclos
@@ -6282,9 +6288,9 @@ Aplicar as duas "por segurança" teria funcionado e ensinado a lição errada.
 
 **E a correção é CONDICIONAL, por medição também.** O endereçamento virtual
 contra o MinIO produz `bucket.localhost:9100` — um nome que não resolve, porque
-o MinIO não tem DNS curinga. Aplicá-lo sem condição teria quebrado **os 72
-testes de integração**. Por isso o `Config` só entra quando `s3_endpoint_url`
-está vazio, ou seja, só na AWS de verdade:
+o MinIO não tem DNS curinga. Aplicá-lo sem condição teria quebrado **os 9
+testes de integração** do MinIO. Por isso o `Config` só entra quando
+`s3_endpoint_url` está vazio, ou seja, só na AWS de verdade:
 
 ```python
 config = None if settings.s3_endpoint_url else Config(s3={"addressing_style": "virtual"})
@@ -6293,6 +6299,56 @@ config = None if settings.s3_endpoint_url else Config(s3={"addressing_style": "v
 Os dois testes novos seguem essa fronteira: um afirma que a região aparece no
 host quando o endpoint está vazio, o outro que o host continua sendo
 `localhost:9100` — e nunca `receipts-bucket.localhost:9100` — quando não está.
+
+**Nota tardia sobre este mesmo número.** As duas frases acima diziam "72" até
+uma revisão de branch inteira apontar o erro — o número tinha sido copiado de
+um ledger de rascunho para a documentação definitiva sem nunca ser contado, o
+mesmo erro que a nota "Se dá para contar, conte", umas oitenta linhas acima
+neste diário, condena. Registrar aqui em vez de só corrigir o dígito é o
+ponto: a lição já estava escrita neste arquivo quando o erro que ela descreve
+ainda estava sem corrigir, mais adiante no mesmo texto.
+
+### A porta que a própria correção do S3 deixou destrancada: `S3_REGION` sem obrigatoriedade
+
+A mesma revisão de branch inteira que corrigiu o "72" achou um segundo
+problema, este de código, no mesmo validador que o Item 22 escreveu:
+`require_s3_configuration_when_selected` (`src/configs/settings.py`) recusava
+subir sem `S3_BUCKET`, `S3_ACCESS_KEY_ID` e `S3_SECRET_ACCESS_KEY`, mas não
+sem `S3_REGION` — porque `s3_region` tinha um default silencioso,
+`"us-east-1"`.
+
+**Por que isso é perigoso justamente agora, e não era antes.** Antes da
+correção do endereçamento virtual (`057f339`), a região errada não tinha como
+causar o sintoma do host global — o bug vinha do endereçamento, não da
+região. Depois da correção, o endereçamento virtual **usa** `s3_region` para
+montar o host (`bucket.s3.<região>.amazonaws.com`). Um bucket fora de
+`us-east-1`, implantado sem `S3_REGION` na Railway, cai de volta no default
+`"us-east-1"` **silenciosamente certo o bastante para não quebrar a
+assinatura localmente, e errado o bastante para reproduzir o defeito exato
+que este mesmo ciclo acabou de corrigir** — sem nenhum erro de startup
+avisando, porque nada checava esse campo.
+
+**A correção segue o padrão TDD do projeto.** Um teste novo,
+`test_s3_backend_without_a_region_aborts_startup`, foi escrito primeiro e
+rodado **FALHANDO** (`Failed: DID NOT RAISE ValidationError`) contra o código
+antigo — a prova de que o teste testava a coisa certa. A correção removeu o
+default de `s3_region` (virou `""`) e acrescentou `S3_REGION` à lista de
+campos obrigatórios, no mesmo formato dos outros três. O teste passou a
+**PASSAR**, e os dois testes que montavam um `Settings` s3 "totalmente
+configurado" sem informar região foram atualizados para incluir
+`s3_region="us-east-1"` — sem isso eles teriam quebrado por um motivo que não
+tinha nada a ver com o que testavam.
+
+**Por que registrar isto vale a pena além do bug em si:** é o mesmo padrão do
+Item 17 e do Item 22 — uma validação de configuração que está certa no que
+cobre e errada no alcance. A diferença aqui é o tempo: o campo não obrigatório
+sempre existiu, mas só virou perigoso quando a correção do endereçamento
+passou a **depender** dele. Uma correção que fecha uma porta pode abrir outra
+que não existia antes dela — vale reconferir os campos vizinhos de qualquer
+validador que uma correção toca, não só o campo que a motivou.
+
+Verificação: `pytest` **341 passed / 72 deselected** (340 + 1 do teste novo),
+`pytest -m integration` **72 passed**, `pylint src` **exit 0**.
 
 ### A armadilha do driver síncrono, e por que ela burlava a guarda do Item 17
 
@@ -6407,8 +6463,8 @@ não interpretar a primeira implantação falha como defeito.
 - **Meça a correção antes de escrevê-la.** Das duas candidatas plausíveis, a
   intuitiva (`signature_version`) não fazia nada.
 - **Uma correção de produção que não é condicional pode quebrar o
-  desenvolvimento.** O endereçamento virtual contra o MinIO teria derrubado 72
-  testes.
+  desenvolvimento.** O endereçamento virtual contra o MinIO teria derrubado os
+  9 testes de integração do MinIO.
 - **Uma validação de configuração pode estar correta e ter o alcance errado.**
   "Faz parse?" não é "leva a um driver que temos?".
 - **Duas decisões corretas podem se combinar num sintoma mentiroso.** `baseURL`
@@ -6419,3 +6475,9 @@ não interpretar a primeira implantação falha como defeito.
   nada; exige rebuild.
 - **O primeiro deploy tem um impasse circular de URLs que nenhum deploy
   seguinte tem.** Implantar, colher o domínio, configurar, implantar de novo.
+- **Uma correção pode abrir a porta que a correção anterior fechou.** Forçar o
+  endereçamento virtual passou a depender de `S3_REGION`; como o campo tinha
+  um default silencioso e não era obrigatório, um bucket fora de `us-east-1`
+  sem a variável configurada reproduzia o defeito do host global de novo, sem
+  aviso de startup. Vale reconferir os campos vizinhos de um validador sempre
+  que uma correção passa a depender de um deles.
