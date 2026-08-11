@@ -6,6 +6,7 @@
 #        necessarily looks like users_repository_test.py's — both fake the same connection
 #        protocol for a different repository. Extracting a shared fixture would couple two
 #        independent test files to one mock shape for no real reuse benefit.
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 from .refunds_repository import RefundsRepository
@@ -380,3 +381,127 @@ async def test_count_by_status_filters_by_user_and_groups_by_status(mock_connect
     statement = str(mock_db.session.execute.call_args[0][0])
     assert "refunds.user_id =" in statement
     assert "GROUP BY refunds.status" in statement
+
+
+# summarize_refunds runs THREE GROUP BY queries in one session; this wires the
+# session to answer them in call order so each test can reach any of the three.
+def _wire_summary(mock_db, status_rows, category_rows, month_rows):
+    results = []
+    for rows in (status_rows, category_rows, month_rows):
+        result = MagicMock()
+        result.fetchall = MagicMock(return_value=rows)
+        results.append(result)
+    mock_db.session.execute = AsyncMock(side_effect=results)
+
+
+def _summary_statements(mock_db):
+    return [str(call[0][0]) for call in mock_db.session.execute.call_args_list]
+
+
+@pytest.mark.asyncio
+async def test_summarize_refunds_groups_by_status(mock_connection, mock_db):
+    _wire_summary(mock_db, [("pending", 2, 3000), ("paid", 1, 1000)], [], [])
+
+    by_status, _, _ = await RefundsRepository(mock_connection).summarize_refunds(
+        user_id=None, since=datetime(2026, 3, 1)
+    )
+
+    assert by_status == {
+        "pending": {"count": 2, "amount_in_cents": 3000},
+        "paid": {"count": 1, "amount_in_cents": 1000},
+    }
+
+
+@pytest.mark.asyncio
+async def test_summarize_refunds_groups_by_category(mock_connection, mock_db):
+    _wire_summary(mock_db, [], [("food", 3, 4500)], [])
+
+    _, by_category, _ = await RefundsRepository(mock_connection).summarize_refunds(
+        user_id=None, since=datetime(2026, 3, 1)
+    )
+
+    assert by_category == {"food": {"count": 3, "amount_in_cents": 4500}}
+
+
+# The month rows carry status too: that cross-tab is what feeds the stacked chart,
+# and asking for it separately would be a fourth scan of the same rows.
+@pytest.mark.asyncio
+async def test_summarize_refunds_crosses_month_with_status(mock_connection, mock_db):
+    _wire_summary(mock_db, [], [], [(datetime(2026, 7, 1), "paid", 2, 5000)])
+
+    _, _, by_month = await RefundsRepository(mock_connection).summarize_refunds(
+        user_id=None, since=datetime(2026, 3, 1)
+    )
+
+    assert by_month == [
+        {"month": "2026-07", "status": "paid", "count": 2, "amount_in_cents": 5000}
+    ]
+
+
+# A NULL sum cannot happen in a group that has rows, but an all-NULL column would
+# produce one — the same guard count_by_status carries.
+@pytest.mark.asyncio
+async def test_summarize_refunds_guards_a_null_sum(mock_connection, mock_db):
+    _wire_summary(mock_db, [("pending", 1, None)], [], [])
+
+    by_status, _, _ = await RefundsRepository(mock_connection).summarize_refunds(
+        user_id=None, since=datetime(2026, 3, 1)
+    )
+
+    assert by_status["pending"]["amount_in_cents"] == 0
+
+
+# The window has to be in ALL THREE queries: a status total that ignored it would
+# disagree with the months that are supposed to add up to it.
+@pytest.mark.asyncio
+async def test_summarize_refunds_applies_the_window_to_every_query(mock_connection, mock_db):
+    _wire_summary(mock_db, [], [], [])
+
+    await RefundsRepository(mock_connection).summarize_refunds(
+        user_id=None, since=datetime(2026, 3, 1)
+    )
+
+    statements = _summary_statements(mock_db)
+    assert len(statements) == 3
+    for statement in statements:
+        assert "refunds.created_at >=" in statement
+
+
+# Same for the user filter — it is the whole point of the scope rule.
+@pytest.mark.asyncio
+async def test_summarize_refunds_filters_by_user_in_every_query(mock_connection, mock_db):
+    _wire_summary(mock_db, [], [], [])
+
+    await RefundsRepository(mock_connection).summarize_refunds(
+        user_id=7, since=datetime(2026, 3, 1)
+    )
+
+    for statement in _summary_statements(mock_db):
+        assert "refunds.user_id =" in statement
+
+
+@pytest.mark.asyncio
+async def test_summarize_refunds_without_a_user_does_not_filter(mock_connection, mock_db):
+    _wire_summary(mock_db, [], [], [])
+
+    await RefundsRepository(mock_connection).summarize_refunds(
+        user_id=None, since=datetime(2026, 3, 1)
+    )
+
+    for statement in _summary_statements(mock_db):
+        assert "refunds.user_id =" not in statement
+
+
+# The stacked chart needs month AND status as grouping keys, in that order.
+@pytest.mark.asyncio
+async def test_summarize_refunds_groups_the_month_query_by_both_keys(mock_connection, mock_db):
+    _wire_summary(mock_db, [], [], [])
+
+    await RefundsRepository(mock_connection).summarize_refunds(
+        user_id=None, since=datetime(2026, 3, 1)
+    )
+
+    month_statement = _summary_statements(mock_db)[2]
+    assert "GROUP BY date_trunc" in month_statement
+    assert "refunds.status" in month_statement
+    assert "ORDER BY date_trunc" in month_statement

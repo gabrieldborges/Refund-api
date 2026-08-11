@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Optional
 
 
@@ -31,4 +32,10 @@ class RefundsRepositoryInterface(ABC):
 
     @abstractmethod
     async def count_by_status(self, user_id: int) -> dict:
+        pass
+
+    @abstractmethod
+    async def summarize_refunds(
+        self, user_id: Optional[int], since: datetime
+    ) -> tuple[dict, dict, list]:
         pass

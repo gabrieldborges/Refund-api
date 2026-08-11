@@ -1,4 +1,5 @@
 # pylint: disable=w0212
+from datetime import datetime
 from typing import Optional
 from sqlalchemy import insert, select, delete, func
 from src.models.entities.refunds import Refunds
@@ -89,6 +90,81 @@ class RefundsRepository(RefundsRepositoryInterface):
             )
             refund = (await session.execute(query)).fetchone()
             return self.__to_refund(refund) if refund else None
+
+    async def summarize_refunds(
+        self, user_id: Optional[int], since: datetime
+    ) -> tuple[dict, dict, list]:
+        """Three independent aggregations over the same filtered set.
+
+        Three queries and not one: grouping by status AND category AND month in a
+        single statement would return the cross product of all three, and the
+        caller would have to re-aggregate it twice to get the totals it wanted.
+
+        The window and the user filter are in EVERY one of them. A status total
+        that ignored the window would disagree with the months that are supposed
+        to add up to it.
+        """
+        async with self.__db_connection.connect() as session:
+            filters = [Refunds.c.created_at >= since]
+            if user_id is not None:
+                filters.append(Refunds.c.user_id == user_id)
+
+            by_status = self.__grouped(
+                await session.execute(self.__group_query(Refunds.c.status, filters))
+            )
+            by_category = self.__grouped(
+                await session.execute(self.__group_query(Refunds.c.category, filters))
+            )
+
+            # The month rows carry status as a second key. That cross-tab is what
+            # feeds the stacked chart, and asking for it separately would be a
+            # fourth scan of the same rows.
+            month = func.date_trunc("month", Refunds.c.created_at)
+            month_query = (
+                select(
+                    month,
+                    Refunds.c.status,
+                    func.count(),  # pylint: disable=not-callable
+                    func.sum(Refunds.c.amount_in_cents),
+                )
+                .select_from(Refunds)
+                .where(*filters)
+                .group_by(month, Refunds.c.status)
+                .order_by(month.asc())
+            )
+            by_month = [
+                {
+                    "month": row[0].strftime("%Y-%m"),
+                    "status": row[1],
+                    "count": row[2],
+                    "amount_in_cents": row[3] or 0,
+                }
+                for row in (await session.execute(month_query)).fetchall()
+            ]
+
+            return by_status, by_category, by_month
+
+    def __group_query(self, column, filters):
+        return (
+            select(
+                column,
+                func.count(),  # pylint: disable=not-callable
+                func.sum(Refunds.c.amount_in_cents),
+            )
+            .select_from(Refunds)
+            .where(*filters)
+            .group_by(column)
+        )
+
+    def __grouped(self, result) -> dict:
+        # `or 0` guards the NULL an all-NULL column would produce — the same guard
+        # count_by_status carries. Only the keys the database returned are here;
+        # filling the missing ones with zeros is the controller's job, because the
+        # canonical key lists are a contract decision, not a storage one.
+        return {
+            key: {"count": count, "amount_in_cents": total or 0}
+            for key, count, total in result.fetchall()
+        }
 
     def __order_by(self, sort: Optional[str], order: Optional[str]):
         column = SORTABLE_COLUMNS.get(sort or "created_at", Refunds.c.created_at)
