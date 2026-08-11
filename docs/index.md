@@ -13,6 +13,9 @@ frontend e pela API.
   comparações, exemplos antes/depois e conclusões de cada item.
 - [Retrospectiva de processo](retrospectiva-processo.md) — onde houve
   retrabalho, o que o causou e o que fazer diferente no próximo projeto.
+- [Panorama das três telas "em breve"](plans/2026-08-11-tres-telas-panorama.md) —
+  decisões travadas e ordem de construção de Time, Dashboard e Calendário. Não é
+  spec: cada ciclo ganha o seu no início.
 
 ## Produto
 - [Visão do produto](vision.md)

@@ -1,0 +1,317 @@
+# Panorama — as três telas "em breve": Time, Dashboard e Calendário
+
+Data: 2026-08-11.
+Repositórios afetados: **`Refund-api` e `Refund-FrontEnd`**, os três ciclos tocam
+os dois.
+
+Este documento **não é um spec**. Ele trava as decisões das três telas e a ordem
+de construção, para que cada ciclo depois vire um spec+plan próprio, no formato
+de `docs/superpowers/specs/` do repositório afetado. Requisitos canônicos
+continuam nos demais documentos de [`docs/`](../index.md) — este é um plano, como
+o [`current-state.md`](current-state.md).
+
+## O ponto de partida
+
+O `Refund-FrontEnd` tem três entradas de menu marcadas como "em breve" em
+`src/components/core/nav-items.tsx`, com `enabled: false`: Dashboard, Time e
+Calendário. Não existem rotas nem páginas para elas — só o item desabilitado, que
+`Sidebar.tsx` renderiza como botão inerte com um `SidebarMenuBadge`.
+
+A intenção é preencher as três. O planejamento veio antes da construção porque
+elas compartilham fundação (agregação no backend, escopo por papel, gráficos), e
+decidir isso três vezes separadamente produziria três respostas diferentes.
+
+## O que a exploração desmentiu
+
+Quatro premissas caíram ao ler o código. Ficam registradas porque cada uma
+mudaria o escopo de um ciclo se fosse descoberta durante a implementação.
+
+1. **Não é trabalho só de frontend.** Não existe endpoint que liste usuários:
+   `UsersRepository` (`src/models/repositories/users_repository.py`) expõe apenas
+   `insert_user`, `select_user_by_email`, `select_user_by_id` e `update_avatar` —
+   nada de busca ou paginação, nem na interface. E não existe agregado global:
+   `GET /users/{id}/refund-stats` é por usuário e **deliberadamente não tem total
+   entre status** (UC-014). Cada uma das três telas exige backend novo.
+2. **A biblioteca de gráficos é o Nivo, não o recharts.** `@nivo/core` e
+   `@nivo/pie` já estão no `package.json` do frontend, com `@react-spring/web`,
+   que é a animação do Nivo. A suposição inicial era recharts, e estava errada.
+3. **O gráfico de rosca já existe, pronto e testado**, em
+   `src/features/refunds/components/RefundDonutChart.tsx` com
+   `src/features/refunds/lib/donutPalette.ts`. Ele já resolve paleta com cor
+   semântica, cromo por tema, `prefers-reduced-motion`, rótulo acessível e
+   carregamento sob demanda. O Dashboard **reaproveita**; reescrever seria perder
+   cinco lições já pagas (listadas no Ciclo 2).
+4. **`GET /refunds` não filtra por data.** O calendário depende de um parâmetro
+   que ainda não existe.
+
+### Dependência de branch, verificada em 2026-08-11
+
+O donut, a paleta e o hook `usePrefersReducedMotion` de que o Ciclo 2 depende
+**ainda não estavam commitados** quando este panorama foi escrito: eram arquivos
+não rastreados na branch `feat/serve-static` do frontend, junto de mudanças em
+`Sidebar.tsx`, `RequesterPanel.tsx` e nos catálogos de locale.
+
+Consequência prática: **o Ciclo 2 só começa depois que essa branch for mesclada.**
+Se ela mudar a forma das props de `RefundDonutChart` ou de `sliceColor`, o spec do
+Ciclo 2 é que se ajusta a elas — não o contrário.
+
+Por isso este documento cita as partes internas desses arquivos **por
+identificador** (`CHROME`, `sliceColor`, o ramo `isError`) em vez de por número de
+linha. É a mesma lição que o [`current-state.md`](current-state.md) registra sobre
+os SHAs: a forma que não envelhece descreve *como encontrar* o estado, não afirma
+qual é. Confira com:
+
+```bash
+cd Refund-FrontEnd && git log --oneline -1 && git status --short
+grep -n "CHROME\|isError\|role=\"img\"" src/features/refunds/components/RefundDonutChart.tsx
+```
+
+## Decisões travadas
+
+| Decisão | Escolha | Razão |
+|---|---|---|
+| Visibilidade | Time só admin. Dashboard e Calendário para todos, com dados no escopo do papel | O admin vê a empresa; o usuário padrão vê as próprias solicitações |
+| Cargo na empresa | **Não adicionar coluna.** A lista de Time mostra o papel (`role`: Administrador / Padrão) | Sem ninguém que preencha, `job_title` nasceria sempre nula e a coluna mostraria "—" para todos. Evita migration e endpoint de escrita |
+| Página do usuário | Somente leitura | Promoção a admin continua sendo `init/promote_admin.py`. Mantém a superfície de risco pequena |
+| Fatiamento | Este panorama + um spec+plan por ciclo, escrito no início do ciclo | Os specs anteriores têm 223–404 linhas cada; um spec único das três viraria um plan de 40+ tarefas, difícil de executar e de revisar |
+| Ordem | **Time → Dashboard → Calendário** | Time é o único com fundação nova de verdade e não depende de nada. O Calendário fica por último e reaproveita o filtro de data e os gráficos |
+| Gráficos | Quatro: rosca por status, barras por categoria, linha por mês, barras empilhadas status × mês | Cobre proporção, comparação, tempo e composição — quatro arquétipos, não quatro variações do mesmo |
+| Grade do mês | `npx shadcn@latest add calendar` (react-day-picker v9) | Segue a regra do `AGENTS.md` do frontend: componente novo vem do registry. Teclado e ARIA de grid já resolvidos, que é justamente onde uma grade feita à mão falha |
+
+Alternativas descartadas, registradas:
+
+- **Coluna `job_title` preenchida pelo admin.** Era a opção mais completa, mas
+  exigia migration mais `PATCH` novo para um dado que a tela só exibe. Fica como
+  ideia no [`roadmap.md`](../roadmap.md).
+- **`PATCH /users/{id}/role` na interface.** Descartada por um motivo concreto: o
+  `role` vem do JWT e `get_current_user` nunca consulta o banco, então quem é
+  promovido só vira admin de fato no próximo login. Uma UI que promete efeito
+  imediato mentiria.
+- **Grade de mês escrita à mão com `Intl` e `Date`.** Zero dependência nova, mas
+  fuso horário e semana de virada de mês são exatamente onde esse código erra.
+- **Uma feature `dashboard` separada no frontend.** Impossível: ver "Fronteiras"
+  abaixo.
+
+## Fronteiras que ditam o desenho do frontend
+
+O `eslint-plugin-boundaries` (`eslint.config.js:39-62`) classifica o código em
+`app`, `feature`, `ui` e `shared`, com `default: 'disallow'`. Duas consequências
+não negociáveis:
+
+- **Uma feature não pode importar outra.** Por isso os gráficos do Dashboard
+  ficam dentro de `features/refunds` (junto do `RefundDonutChart`) e não numa
+  feature `dashboard`: eles consomem dados de reembolso.
+- **Uma feature não pode importar `app`** (onde vive `src/context`). Por isso o
+  espectador é passado por prop — o `RefundViewer` de
+  `features/refunds/lib/getRefundHref.ts` é uma interface mínima local, não o
+  `AuthUser`. A página do membro do time compõe duas features **na camada
+  `app`**, que é a única com permissão para isso.
+
+## Ciclo 1 — Time (admin)
+
+### Backend
+
+A fatia completa, replicando o slice de `GET /refunds`:
+
+- `models/repositories/users_repository.py` e sua interface: `select_users(page,
+  per_page, name)` e `count_users(name)`. Busca por `ILIKE '%name%'`, como
+  `refunds_repository.py:47`. `ORDER BY name ASC` **com desempate por `id`**,
+  pelo mesmo motivo do `id DESC` em `RefundsRepository.__order_by`: sem
+  desempate, a paginação não é determinística e uma linha pode aparecer em duas
+  páginas.
+- `validators/user_lister_validator.py`: limites de `page` e `per_page`,
+  espelhando `refund_lister_validator.py`.
+- `controllers/user_serializer.py` — **o ponto crítico**: a resposta é
+  `{id, name, email, role, has_avatar, created_at}`. Nunca `password`. Módulo
+  próprio pelo mesmo motivo de `refund_serializer.py`: uma forma, um lugar. Um
+  campo sensível vazado numa lista de usuários é o pior defeito possível neste
+  ciclo, e um serializador único é o que torna isso testável de uma vez.
+- `controllers/user_lister_controller.py`: `if role != "admin"` levantando
+  `HttpForbiddenError` **antes de qualquer acesso ao banco**, que é o idioma
+  anti-enumeração de `refund_reviewer_controller.py:30`.
+- `controllers/user_finder_controller.py`, para `GET /users/{id}`: admin-only,
+  respondendo **404** e não 403, seguindo `refund_stats_finder_controller.py:19`.
+- Views, composers e registro em `main/routes/user_routes.py`.
+- Contrato (ADR-007): snapshot novo `contract/users.json`, espelhado em
+  `Refund-FrontEnd/src/features/team/contract/users.json`.
+- Documentação: UC-015 (listar usuários) e UC-016 (consultar usuário) em
+  `docs/use-cases/`, entradas em [`docs/index.md`](../index.md), e a regra de
+  acesso admin-only em [`business-rules.md`](../business-rules.md).
+
+### Frontend
+
+Feature nova `src/features/team/`, espelhando `features/refunds`, com fachada
+`index.ts` — o resto da aplicação só importa por ela:
+
+- `api/userQueries.ts`: `userKeys` hierárquico, `userListQuery` e
+  `userDetailQuery` como `queryOptions`, com `signal` repassado ao axios e Zod na
+  fronteira. Cópia fiel de `features/refunds/api/refundQueries.ts`, para o
+  loader e o hook compartilharem a mesma entrada de cache.
+- `schemas/user.ts`: `userSchema`, resposta de lista e `userListSearchParamsSchema`
+  com `.catch()` por campo, como o de refunds.
+- `constants/pagination.ts`: `USERS_PER_PAGE = 10`, importado pelo hook **e** pelo
+  loader, para não divergirem.
+- `hooks/useUsers.ts`, `hooks/useUser.ts`.
+- `components/UsersTable.tsx`: TanStack Table só com `getCoreRowModel` —
+  ordenação é server-side, o componente não ordena nada. Colunas nome, e-mail,
+  papel (`Badge`) e membro desde.
+- `contract.test.ts` validando o schema contra o snapshot.
+
+Páginas e rotas, na camada `app`:
+
+- `src/pages/PageTeam.tsx`: busca por nome, tabela e paginação. A busca
+  **reaproveita** `src/hooks/useDebouncedValue.ts` (400 ms) e o padrão
+  URL-como-estado do sub-componente `RefundSearch` (`PageHome.tsx:40-73`),
+  inclusive o `key={name ?? ""}` que remonta o input quando a URL muda por fora.
+- `src/pages/PageTeamMember.tsx`: cartão de identidade (nome, e-mail, papel,
+  membro desde) **mais o reuso de `RequesterPanel`**, que a fachada de refunds já
+  exporta. Ele já é exatamente "nome, contadores por status e as solicitações
+  daquela pessoa" — é a tela pedida, e duplicá-la seria criar uma segunda
+  verdade. Verificar as props e estender minimamente se preciso.
+- `src/router.tsx`: rotas `/team` e `/team/:id`, lazy, com `handle: { titleKey }`.
+- `src/router-loaders.ts`: `teamLoader` (normaliza `page` e `name`, redireciona
+  para retirar defaults, `ensureQueryData`) e `teamMemberLoader`. **Extrair um
+  `requireAdmin()` reutilizável** da checagem hoje embutida em
+  `router-loaders.ts:126` — não existe `AdminRoute` nem helper de papel. A guarda
+  de rota é de interface: a autorização real é do backend.
+- `nav-items.tsx`: `enabled: true` no item de Time e campo novo
+  `adminOnly?: boolean`; `Sidebar.tsx` passa a filtrar por papel.
+- i18n: chaves em `pt-BR.json` **e** `en-US.json` — `src/locales/catalogues.test.ts`
+  testa paridade entre os catálogos.
+- `src/components/core/Sidebar.test.tsx` afirma `getAllByText("em breve")`
+  com length **3**; passa a **2**.
+
+## Ciclo 2 — Dashboard (todos, com escopo por papel)
+
+### Backend
+
+Um endpoint que serve os quatro gráficos e os indicadores, para a tela inteira
+custar uma requisição e não haver cascata:
+
+`GET /refunds/summary?months=6` (default 6, máximo 12), com escopo pelo idioma já
+existente em `refund_lister_controller.py:31`
+(`filter_user_id = filter_user_id if role == "admin" else user_id`):
+
+```
+{ type: "RefundSummary", scope: "all" | "user",
+  by_status:   { pending: {count, amount_in_cents}, approved: {...},
+                 paid: {...}, rejected: {...} },
+  by_category: [ { category, count, amount_in_cents } ],
+  by_month:    [ { month: "2026-08", count, amount_in_cents,
+                   by_status: { pending: {...}, approved: {...},
+                                paid: {...}, rejected: {...} } } ] }
+```
+
+Três `GROUP BY` numa única chamada de repositório: por `status`, por `category` e
+por `date_trunc('month', created_at)` cruzado com `status`. O
+`by_month[].by_status` é o que alimenta as barras empilhadas. UC novo e snapshot
+de contrato. Atende a ideia **"agregado por status cruzando usuários"** do
+[`roadmap.md`](../roadmap.md).
+
+### Frontend
+
+- `npm i @nivo/bar @nivo/line` — mesma família já adotada; `@nivo/core` e
+  `@react-spring/web` já estão presentes.
+- **Rosca por status: reuso direto** de `RefundDonutChart`. As props `slices` e
+  `metric: "count" | "currency"` já atendem.
+- Novos `RefundBarChart.tsx` (barras horizontais por categoria),
+  `RefundLineChart.tsx` (valor por mês) e `RefundStackedBarChart.tsx`
+  (status × mês), **dentro de `features/refunds`**, exportados pela fachada.
+- Cada gráfico novo precisa repetir as **cinco lições já pagas** em
+  `RefundDonutChart.tsx`. Elas não são estilo; cada uma corrige um defeito real:
+  1. cor de cromo em hexadecimal por tema (a constante `CHROME`) — o Nivo pinta
+     por atributo SVG, onde `var(--token)` não é resolvido pelo navegador;
+  2. `usePrefersReducedMotion()` alimentando `animate` — a animação do Nivo é
+     JavaScript via react-spring, e o `@media (prefers-reduced-motion)` do
+     `index.css` não a alcança;
+  3. `theme.text.fontSize` como **string em rem**, não número — número o Nivo
+     trata como pixel, e o gráfico deixa de acompanhar a escala tipográfica;
+  4. `role="img"` no contêiner com `aria-label` **contendo os números**, para que
+     nenhum valor exista somente em pixel;
+  5. `React.lazy`, como no `RequesterPanel.tsx`, para a árvore do Nivo não
+     entrar no bundle inicial.
+- Generalizar `lib/donutPalette.ts` para `lib/chartPalette.ts`, preservando
+  `PALETTE`, `NEGATIVE_COLOR` e `sliceColor`, de modo que os quatro gráficos
+  compartilhem a paleta e `rejected` continue vermelho em todos — cor com
+  significado não pode depender da posição no ranking. O módulo tem teste
+  próprio; atualizar o import.
+- `src/pages/PageDashboard.tsx`: faixa de indicadores e os quatro gráficos,
+  reusando o idioma de `Card` / `Skeleton` / `<p role="alert">` de
+  `PageHome.tsx:253-318`. Rota `/dashboard` com `dashboardLoader` fazendo
+  `ensureQueryData`.
+- Escopo do usuário padrão: com poucas solicitações os gráficos ficam quase
+  vazios. Valem para todos o estado vazio de `RefundDonutChart`
+  (o ramo `total === 0`, com a chave `chart.empty`) e, sobretudo, a regra de
+  **nunca tratar erro como zero** (o ramo `isError`, com `chart.error`, que vem
+  antes): uma rosca vazia por falha de rede é indistinguível de
+  uma pessoa que não tem nada.
+- Testes: o jsdom não tem layout engine, então o Nivo mede o contêiner como 0×0 e
+  não desenha marca nenhuma. Asserte o rótulo acessível e a transformação dos
+  dados, não caminhos SVG. A lição já está escrita em
+  `RefundDonutChart.test.tsx` e `RequesterPanel.test.tsx`, nos comentários que
+  começam em "jsdom has no layout engine".
+- `nav-items.tsx`: Dashboard `enabled: true` — os badges "em breve" vão de 2 para 1.
+
+## Ciclo 3 — Calendário (todos, com escopo por papel)
+
+### Backend
+
+- **Aditivo em `GET /refunds`**: `created_from` e `created_to` (data ISO) no
+  validator e no `WHERE created_at >= / <`. Sendo aditivo, não quebra o contrato.
+- `GET /refunds/daily-counts?month=YYYY-MM`, com o mesmo escopo por papel,
+  retornando `{ month, days: [ { date, count, amount_in_cents } ] }` via
+  `GROUP BY date(created_at)`.
+- **Fuso horário, a decisão a tomar no spec do ciclo.** `refunds.created_at` é
+  `DateTime` com `server_default now()`, e agregar por dia em UTC coloca uma
+  solicitação criada às 22h de Brasília no dia seguinte. Duas saídas: agregar em
+  UTC e documentar como limitação conhecida, ou converter o fuso na query. A
+  primeira é mais simples e honesta; a segunda exige decidir de quem é o fuso.
+
+### Frontend
+
+- `npx shadcn@latest add calendar`, que traz `src/components/ui/calendar.tsx` e
+  react-day-picker v9.
+- `src/pages/PageCalendar.tsx`, com mês e dia **na URL**
+  (`?month=YYYY-MM&day=YYYY-MM-DD`), seguindo a convenção URL-como-estado;
+  `calendarLoader` normaliza e faz prefetch.
+- `DayButton` customizado com o contador do dia, e `modifiers` marcando os dias
+  que tiveram solicitações.
+- Clicar num dia abre o painel com as solicitações daquele dia, via
+  `useRefunds({ createdFrom, createdTo })`, com as linhas apontando por
+  `getRefundHref(refund, viewer)` — reuso obrigatório, é a implementação única da
+  BR-016.
+- Gráfico do mês: **reuso de `RefundLineChart`** do Ciclo 2, alimentado por
+  `daily-counts` (solicitações por dia).
+- `nav-items.tsx`: Calendário `enabled: true`. Os badges "em breve" chegam a
+  **zero**, e `getAllByText` **lança exceção** quando não encontra nada — o teste
+  de `Sidebar.test.tsx` precisa ser **reescrito** neste ciclo, não ter o número
+  ajustado. Por exemplo: afirmar que todos os itens são links, e que o item
+  admin-only desaparece para o usuário padrão.
+
+## Verificação de cada ciclo
+
+- Frontend, na ordem do CI (`.github/workflows/ci.yml`, do mais barato ao mais
+  caro): `npm run typecheck`, `npm run lint`, `npx vitest run`, `npm run build`.
+- Backend: `pytest` e `pylint src; echo $?` — o código de saída, não a nota. Ao
+  tocar repositories ou migrations, também `pytest -m integration` com o banco
+  descartável de pé.
+- Os testes de contrato acoplam os dois repositórios de propósito: mudar a forma
+  de uma resposta quebra a suíte do frontend, que é o aviso desejado.
+- Navegador, com a API em `localhost:3333`: tema **claro e escuro** (o cromo do
+  Nivo depende do tema) e **390 × 844** (iPhone 12 Pro, a referência do
+  `AGENTS.md` do frontend), medindo overflow por `scrollWidth` contra
+  `clientWidth` em vez de confiar em captura de tela.
+- Com usuário **admin** e usuário **padrão**: Time não pode aparecer na sidebar
+  nem responder na rota direta para o padrão, e Dashboard e Calendário devem
+  mostrar dados diferentes para cada um.
+
+## Fora de escopo nas três telas
+
+- **Cargo na empresa** (`job_title`): descartado nesta rodada, registrado como
+  ideia no [`roadmap.md`](../roadmap.md).
+- **Promover ou rebaixar admin pela interface** e **desativar usuário**: cada um
+  é produto novo, com ciclo próprio.
+- **Foto de perfil**: segue como a pendência de produto já registrada. A lista de
+  Time mostra as iniciais, como a sidebar já faz.
+- Exportar o dashboard (PDF ou CSV), intervalo de datas customizado no dashboard,
+  e gráficos por usuário dentro da página do membro.
