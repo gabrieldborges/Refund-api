@@ -56,6 +56,30 @@ todos; usuário comum, apenas os seus) e o mesmo `status`, quando informado.
 Junto com `total`, o valor cobre o conjunto filtrado inteiro, não apenas os
 itens da página atual — ambos mudam conforme `status` restringe o conjunto.
 
+## Filtro por data (acrescentado no ciclo do Calendário)
+
+`created_from` e `created_to`, ambos `YYYY-MM-DD` e ambos opcionais. **Inclusivos nas
+duas pontas** do ponto de vista de quem chama: internamente `created_to` vira
+`created_at < to + 1 dia`.
+
+A razão de não ser `<= to`: `created_at` é timestamp, então comparar com uma data pura
+descartaria o dia inteiro exceto a meia-noite. Assim
+`created_from == created_to == 2026-08-03` devolve **o dia 3 completo**, que é o que a
+tela do calendário pede — e ninguém precisa nomear `23:59:59`, que perde o último
+segundo.
+
+Os dois são tipados como `date` na rota, então o FastAPI recusa o formato antes de
+qualquer camada abaixo ver o valor. Por isso esta parte da fatia não tem lista branca.
+
+**Aditivo:** nenhum cliente anterior passava esses parâmetros, e ausentes eles não
+filtram nada.
+
+**Evidências:** `refunds_repository_test.py::test_select_refunds_turns_created_to_into_the_next_day`
+comprova o limite no dia seguinte, `::test_select_refunds_can_ask_for_one_whole_day` o
+caso de um dia só, e `::test_select_refunds_dates_reach_the_count_and_the_page` que o
+filtro vale para a contagem e para a página — sem isso `total_pages` prometeria páginas
+que a consulta não preenche.
+
 ## Fluxos alternativos e erros
 
 - Se o JWT estiver ausente, inválido ou expirado, a API responde `401`.

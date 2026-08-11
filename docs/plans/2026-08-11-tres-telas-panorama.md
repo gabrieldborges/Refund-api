@@ -359,7 +359,29 @@ Duas consequências para o spec do Ciclo 2:
   começam em "jsdom has no layout engine".
 - `nav-items.tsx`: Dashboard `enabled: true` — os badges "em breve" vão de 2 para 1.
 
-## Ciclo 3 — Calendário (todos, com escopo por papel)
+## Ciclo 3 — Calendário (todos, com escopo por papel) — **CONCLUÍDO em 2026-08-11**
+
+Spec: [`2026-08-11-calendar-design.md`](../superpowers/specs/2026-08-11-calendar-design.md).
+
+**As três telas estão entregues, e nenhum item da sidebar tem selo "em breve".**
+
+Duas coisas do plano original mudaram:
+
+1. **A regra de rótulo foi aplicada como registrado acima**: o eixo X carrega só o
+   **dia**, e o mês e o ano vivem no título do card. Isso obrigou o
+   `RefundLineChart` a parar de conhecer dinheiro — ele recebe pontos já em unidade
+   de exibição mais o valor exato para o tooltip, e quem converte é o chamador.
+2. **Nenhum badge nos dias zerados.** Num calendário a ausência de marca já lê como
+   zero; 29 zeros seriam ruído.
+
+Custo medido: o `react-day-picker` são **21,95 kB gzip**, e caíram no chunk lazy de
+`/calendar` — a entrada subiu 1,13 kB. Quem nunca abre o calendário não baixa a grade.
+
+**`NavItem.enabled` fica sem nenhum item `false`.** O mecanismo do selo continua, com
+um comentário no arquivo dizendo por quê: sem ele o mecanismo parece morto e alguém o
+remove, junto do lugar onde a próxima promessa seria feita.
+
+### O plano original do Ciclo 3, para referência
 
 ### Backend
 

@@ -6784,3 +6784,105 @@ ou o contrário. Vale olhar qual dos dois antes de mexer.**
 - **Antes de escolher a cor, pergunte o que ela significa.** Se a mesma paleta já
   significa algo dois centímetros ao lado, ela não pode significar outra coisa aqui.
 - `readableTextOn` existe: não escolha cor de texto sobre fundo variável à mão.
+
+## Ciclo de feature — Calendário (2026-08-11)
+
+Ciclo 3 e último do [panorama das três telas](plans/2026-08-11-tres-telas-panorama.md).
+Entregou o filtro por data em `GET /refunds`, `GET /refunds/daily-counts` e a tela
+`/calendar`. **As três telas prometidas na sidebar estão entregues.**
+
+Suítes: backend **405 → 438** (mais 72 de integração), frontend **416 → 433**.
+
+### Lição 1 — `<= data` descarta o dia quando a coluna é timestamp
+
+O filtro pedia "as solicitações do dia 3". A forma óbvia — `created_at <= '2026-08-03'`
+— devolve **apenas a meia-noite**: a coluna é timestamp, a data pura vira `00:00:00`, e
+tudo o que aconteceu depois fica fora.
+
+A alternativa que quase todo mundo escreve é `<= '2026-08-03 23:59:59'`, que perde o
+último segundo. A correta é semiaberta: `< '2026-08-04'`. Assim
+`created_from == created_to` devolve o dia inteiro, e ninguém precisa nomear o último
+instante de nada.
+
+Verifiquei contra a API real, não só no teste: pedir o dia de hoje devolveu as três
+solicitações criadas naquele minuto.
+
+### Lição 2 — Fevereiro e a regra do século
+
+Quantos dias tem um mês é conhecimento de **calendário**, não de banco. Usei
+`calendar.monthrange` e fixei três testes: 29 em 2024, 28 em 2026 e **28 em 2100**.
+
+O terceiro é o que importa. 2100 é divisível por 4 e **não é bissexto** — a regra do
+século. Como o endpoint aceita anos até 2100, um `ano % 4 == 0` escrito à mão
+responderia 29 dias ali, e o defeito só apareceria em produção em 2100 ou para quem
+navegasse até lá. Conferi contra a API real: 28.
+
+### Lição 3 — Um componente que "sabe" o que mede acaba com uma flag por tela
+
+O `RefundLineChart` recebia centavos e uma prop `metric`. O Calendário precisou dele
+com contagem por dia, e a saída óbvia era uma terceira ramificação.
+
+Em vez disso, o gráfico passou a receber `{ label, value, exact }` — já na unidade de
+exibição, com o valor exato para o tooltip. **Quem sabe se aquilo é dinheiro é o
+chamador.** O Dashboard aplica `valueScaleFor` e formata em reais; o Calendário passa a
+contagem crua.
+
+O gráfico ficou com uma responsabilidade só, e a próxima tela que precisar dele não
+adiciona ramificação nenhuma.
+
+### Lição 4 — Um teste que conta não pode chegar a zero
+
+Os selos "em breve" acabaram, e `getAllByText` **lança exceção** quando não encontra
+nada — não devolve lista vazia. Então a asserção não podia virar `toHaveLength(0)`.
+
+Mas o ponto maior é que **contar era a asserção errada agora**. O que importa com as
+três telas entregues é que todo item leva a algum lugar. Os dois testes que contavam
+saíram, e no lugar entrou "todo item visível é um link" e "não sobrou botão inerte".
+
+E o campo `enabled` ficou, com um comentário dizendo por quê: sem nenhum item usando
+`false`, o mecanismo parece morto e alguém o remove — junto do lugar onde a próxima
+promessa seria feita.
+
+### Lição 5 — Ausência de marca já é zero
+
+Ia colocar "0" nos dias sem solicitação, por simetria com o preenchimento do servidor.
+Num calendário isso é ruído: 29 zeros competindo com os dois números que importam. A
+grade vazia já comunica.
+
+O que não pode faltar é o **nome acessível**: o badge visível é `aria-hidden`, porque
+"2" solto não diz nada a um leitor de tela, e o botão do dia carrega "Dia 3, 2
+solicitações".
+
+### Lição 6 — `shadcn add` escreveu num diretório chamado `@`
+
+Ele criou `@/components/ui/calendar.tsx` — literalmente, sem resolver o alias. E
+emitiu um `button.tsx` junto, que é um arquivo com customizações do projeto.
+
+Conferi com `git diff` antes de qualquer coisa: **byte a byte idêntico**, nada perdido.
+Movi o calendar para `src/components/ui` e apaguei o diretório espúrio.
+
+**Uma ferramenta que escreve fora do lugar esperado pode ter sobrescrito algo. Olhe o
+diff antes de seguir**, mesmo quando o comando diz "Created" e não "Updated".
+
+### Verificação
+
+- Backend: `pytest` (438), `pytest -m integration` (72), `pylint src` saindo 0.
+- Frontend: `typecheck`, `lint` (0 avisos), `vitest` (433), `build`.
+- Ponta a ponta: fevereiro com 29/28/28 dias em 2024/2026/2100; o dia de hoje
+  devolvendo as três solicitações do dia; um intervalo sem nada devolvendo zero.
+- Acessibilidade: a grade passa no axe em WCAG A/AA — é o componente com mais
+  semântica de teclado da aplicação.
+- Bundle: `react-day-picker` são **21,95 kB gzip** no chunk lazy de `/calendar`; a
+  entrada subiu 1,13 kB.
+
+### O que lembrar
+
+- **Data pura contra coluna timestamp: use intervalo semiaberto.** `<=` perde o dia,
+  `23:59:59` perde o segundo.
+- **Comprimento de mês vem do módulo de calendário.** E teste 2100, não só um ano
+  bissexto qualquer.
+- **Se um componente precisa saber o que está medindo, suba a conversão para quem
+  chama.** Cada resposta contrária é uma flag nova.
+- **Quando um teste que conta chega a zero, reveja se contar ainda era a pergunta.**
+- Uma ferramenta de scaffolding pode escrever fora do lugar: `git diff` antes de
+  seguir.

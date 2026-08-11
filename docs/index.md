@@ -43,6 +43,7 @@ frontend e pela API.
 - [UC-015 — Listar usuários](use-cases/UC-015-list-users.md)
 - [UC-016 — Consultar usuário](use-cases/UC-016-view-user.md)
 - [UC-017 — Consultar resumo agregado de reembolsos](use-cases/UC-017-refund-summary.md)
+- [UC-018 — Consultar contagem diária de solicitações](use-cases/UC-018-refund-daily-counts.md)
 
 ## Decisões
 - [ADR-001 — Manter a arquitetura em camadas da API](decisions/ADR-001-layered-api.md)

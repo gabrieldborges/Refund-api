@@ -79,9 +79,9 @@ Os estados possíveis são:
     ideia do agregado por status cruzando usuários. O card de dinheiro da Home
     **continua** mostrando o total solicitado: o endpoint que o corrige agora
     existe, mas mudar a Home ficou fora do escopo daquele ciclo.
-  - **Ciclo 3, Calendário (todos, com escopo por papel).** Grade do mês com
-    contagem por dia e as solicitações do dia escolhido. Precisa de filtro por
-    data em `GET /refunds`, que hoje não existe, e de `GET /refunds/daily-counts`.
+  - ~~**Ciclo 3, Calendário (todos, com escopo por papel).** Grade do mês com
+    contagem por dia e as solicitações do dia escolhido.~~ **CONCLUÍDO em
+    2026-08-11.** As três telas estão entregues e a sidebar não promete mais nada.
 
 ## Dívida técnica
 

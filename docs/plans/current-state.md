@@ -323,6 +323,15 @@ estática traria a árvore do nivo de volta ao bundle de entrada sem erro nenhum
 verificação é o **tamanho da entrada** no `npm run build`, não a existência de um
 chunk separado — o chunk existe de qualquer forma.
 
+As três telas prometidas na sidebar estão entregues: `/dashboard`, `/team` (admin) e
+`/calendar`. Nenhum item tem selo "em breve", e `NavItem.enabled` segue existindo,
+documentado no arquivo, como a máquina do selo para a próxima promessa.
+
+O `RefundLineChart` é compartilhado pelo Dashboard (valor por mês) e pelo Calendário
+(contagem por dia), e **não sabe qual é**: recebe pontos já na unidade de exibição
+mais o valor exato para o tooltip. Quem converte é o chamador — foi assim que o
+Calendário reusou o gráfico sem uma terceira ramificação de métrica.
+
 **Dívida de acessibilidade aberta:** a paleta de gráficos falha 4 das 6 checagens
 do validador, incluindo o piso de visão normal entre "aprovada" e "paga" (ΔE 12,9,
 piso 15). Mitigada no gráfico empilhado, não corrigida. Registrada no
