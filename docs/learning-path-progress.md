@@ -7164,3 +7164,24 @@ Duas coisas que a coexistência exige, e que estão em teste:
 - **Ao reabrir uma decisão, confira a premissa antes da conclusão.**
 - Paleta nova se valida por script. Duas paletas no mesmo produto precisam de teste
   provando que não se cruzam.
+
+### Adendo do mesmo dia — o desenho colorido foi revertido
+
+O gráfico voltou ao formato horizontal, com os nomes das categorias no eixo Y e uma
+cor só, e a paleta de categoria saiu com ele. Frontend **490 → 485** (os cinco testes
+da paleta foram embora com ela).
+
+O que fica desta ida e volta:
+
+- **A Lição 1 continua no código.** Arredondar o rótulo em vez da geometria não tem
+  aparência nenhuma — vale igual nos dois desenhos, e é o que o Gabriel havia
+  reportado. Reverter junto teria devolvido o defeito.
+- **A Lição 2 se confirmou nas duas direções.** Com os nomes de volta no eixo, a cor
+  volta a ser redundante e a paleta perde a razão de existir. Manter um módulo de cinco
+  cores que nada usa é manter algo que sai de validação sem ninguém notar — por isso
+  ele foi apagado, não deixado "para depois".
+- **Preferência visual não se deduz.** O argumento de acessibilidade era correto e o
+  desenho ainda assim não agradou. Mudança de aparência precisa de olho no navegador
+  antes do merge; a implicação é ir de branch quando a mudança é estética, o que é
+  exatamente o que salvou este caso — o `git checkout <sha> -- <arquivo>` devolveu o
+  arquivo idêntico, sem reconstruí-lo de memória.
