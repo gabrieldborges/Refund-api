@@ -53,6 +53,28 @@ rolldown-based. **Ressalva:** o agrupamento cortava nomes no primeiro hífen,
 então as famílias `react-*` aparecem somadas. Suficiente para decidir, não para
 citar por pacote.
 
+### Gráficos (nivo), medido em 2026-08-11
+
+O gráfico de rosca da tela de revisão usa `@nivo/pie`, que traz junto
+`@nivo/core`, `@nivo/arcs`, `react-spring`, `lodash` e sete pacotes `d3-*`.
+
+| Chunk | Bruto | Gzip |
+|---|---|---|
+| `RefundDonutChart` (sob demanda) | 222,8 kB | **74,2 kB** |
+| Entrada (`index`) | 708,7 kB | 219,4 kB |
+
+**74 kB gzip é um terço de todo o resto da aplicação somado** — por isso o
+gráfico é carregado com `React.lazy` a partir do `RequesterPanel`, e não
+importado direto. Quem abre a Home, faz login ou cria uma solicitação nunca
+baixa nada disso; o custo só existe para o admin que abre uma revisão.
+
+O que mantém essa separação de pé, e quebra em silêncio se alguém mexer: o
+`RefundDonutChart` **não** pode ser reexportado pela fachada da feature
+(`src/features/refunds/index.ts`). Uma reexportação estática traria o chunk
+inteiro de volta para o bundle de entrada, sem erro nenhum — só um `index` 74 kB
+mais gordo. Confira no `npm run build`: enquanto houver uma linha
+`dist/assets/RefundDonutChart-*.js` separada, a divisão está funcionando.
+
 ## Backend
 
 Consulta de listagem (JOIN com `users`, filtro por dono, ordenação por data,
