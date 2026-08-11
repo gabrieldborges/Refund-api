@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from src.views.http_types.http_request import HttpRequest
 from src.main.composer.refund_creator_composer import refund_creator_composer
 from src.main.composer.refund_lister_composer import refund_lister_composer
+from src.main.composer.refund_summary_composer import refund_summary_composer
 from src.main.composer.refund_finder_composer import refund_finder_composer
 from src.main.composer.refund_deleter_composer import refund_deleter_composer
 from src.main.composer.refund_reviewer_composer import refund_reviewer_composer
@@ -64,6 +65,28 @@ async def list_refunds(
         token_info=token_info,
     )
     view = refund_lister_composer()
+    response = await view.handle(http_request)
+    return JSONResponse(content=response.body, status_code=response.status_code)
+
+
+# DECLARED BEFORE "/{refund_id}", and the order is load-bearing: FastAPI matches
+# in declaration order, so with the id route first the path "/refunds/summary"
+# would be read as an id, fail int coercion and answer 422 — a defect that passes
+# every unit test of the layers below and fails on first use.
+@refund_routes.get("/summary")
+async def summarize_refunds(
+    months: int = Query(6, ge=1, le=12),
+    # Typed as int so FastAPI rejects garbage, like the listing's user_id. Only an
+    # admin's request is actually narrowed by it: for a standard user the
+    # controller ignores it, since they are already locked to themselves.
+    user_id: Optional[int] = Query(None),
+    token_info: dict = Depends(get_current_user),
+):
+    http_request = HttpRequest(
+        query={"months": months, "user_id": user_id},
+        token_info=token_info,
+    )
+    view = refund_summary_composer()
     response = await view.handle(http_request)
     return JSONResponse(content=response.body, status_code=response.status_code)
 
