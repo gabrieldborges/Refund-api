@@ -6984,3 +6984,125 @@ layout engine — e a mesma resposta: afirme o encanamento, não o pixel.
   linha, porque a API responde igual para "sem foto" e "sem usuário".
 - Uma query dentro de um componente de layout custa um provider em todo teste que o
   monta.
+
+## Ciclo de ajuste — Uso real das três telas (2026-08-11)
+
+Correções e acréscimos que vieram de usar o produto, não de planejar. Fecharam três
+defeitos de comportamento, uma costura de tema, duas de layout no mobile, e trocaram
+a contagem do calendário por um mapa de calor.
+
+Suítes: frontend **433 → 482**. Backend inalterado — nada disto precisou de API nova.
+
+### Lição 1 — "Pular X" e "avançar depois de X" não são a mesma asserção
+
+O botão "Próxima pendente" ficava em pingue-pongue entre duas solicitações. A consulta
+já era global e ordenada da mais antiga; o defeito era o cálculo — "próxima" era *a
+primeira da fila que não é a atual*.
+
+Com a fila `[B, C, D]`: em B devolve C, em C devolve **B**. Para sempre. E como
+vizinhos numa fila por data costumam ser do mesmo solicitante, o sintoma relatado foi
+"só vai para o pendente daquele usuário".
+
+O teste que existia dizia `skips the refund currently open`, e cobria só metade da
+afirmação. **Pular a atual não é avançar depois dela.**
+
+### Lição 2 — Um teste verde pode estar segurando o defeito
+
+O link "Ver todas as solicitações de X na Home" apontava para `/?name=<pessoa>`. Nunca
+funcionou: o `name` da listagem filtra o nome da **solicitação**.
+
+E havia um teste passando que afirmava exatamente aquele `href`. Ele não estava errado
+sobre o código — estava errado sobre o que o código deveria fazer, e por isso protegia
+o defeito de qualquer refatoração. Corrigir exigiu **apagar um teste verde** e dizer
+por quê.
+
+### Lição 3 — Reimplementar componente de registry custa o que ele fazia de graça
+
+Escolher um dia no calendário não dava retorno visual. Meu `DayButton` reimplementava
+o do shadcn do zero e perdeu o `data-selected-single` e as classes penduradas nele.
+
+O marcador de **hoje** sobreviveu, porque vem da célula e não do botão — foi essa
+assimetria que apontou a causa. A correção foi **envolver** o componente do registry
+em vez de substituí-lo. `components` numa lib raramente quer dizer "escreva o seu".
+
+### Lição 4 — A mesma cor pode ser certa num tema e errada no outro
+
+A "separação de cores marcada" na tela de login no escuro não era valor digitado
+errado. No claro `--background` e `--card` são o **mesmo branco**, então o card só
+tinha a borda. No escuro divergem (`L=0.145` contra `L=0.205`), e o card virava um
+retângulo 41% mais claro numa tela onde ele está sozinho.
+
+**Uma tela desenhada em um tema pode ganhar elementos que ninguém escolheu no outro.**
+
+### Lição 5 — `object-fit` ausente é `fill`, e `fill` estica
+
+A foto de perfil chegava deformada. O `AvatarImage` do registry traz `aspect-square
+size-full` e **nenhum `object-fit`** — e o padrão é `fill`.
+
+`object-cover` é a correção, e vale a distinção: `cover` escala e recorta preservando
+a proporção; `contain` mostra o quadro inteiro com faixas. Avatar quer `cover`;
+ampliar a foto para vê-la quer `contain`. As duas coisas na mesma tela, com fits
+opostos, e cada um certo no seu lugar.
+
+### Lição 6 — Um componente novo na shell muda a natureza da shell
+
+Ao mostrar a foto, a sidebar passou a consumir server state. **Dezesseis testes dela
+caíram de uma vez** com "No QueryClient set".
+
+Não era defeito: era a shell mudando de categoria. O custo de pôr uma query num
+componente de layout é um provider em todo teste que o monta.
+
+### Lição 7 — A escala de cor é computável, e frio→quente falha a conta
+
+Para o mapa de calor foi pedida uma escala frio→quente. Medida, ela **não tem
+luminância monotônica**: o amarelo do meio é mais claro que o verde antes dele. Isso
+quebra a ordenação por escuridão, que é o canal pré-atentivo — com ela, ordenar dias
+exige decodificar matiz contra a legenda em vez de bater o olho. E verde contra
+vermelho aproxima os dois **extremos** da escala para daltonismo deuterânope.
+
+Uma matiz quente só, do pálido ao escuro, mantém a sensação de mapa de calor e a
+ordenação.
+
+Duas consequências que a medição impôs:
+
+- **O tema escuro tem rampa própria, crescendo em luminância.** Reaproveitar a clara
+  faria o creme de "1 solicitação" ficar mais proeminente que o vermelho do dia mais
+  movimentado. O que ordena não é "mais escuro" — é mais contraste contra a
+  superfície.
+- **Existe uma faixa proibida de luminância** (0,183 a 0,270) onde nem texto branco
+  nem escuro alcançam 4,5:1. Como o número do dia fica sobre a cor, a rampa salta
+  essa faixa entre o 3º e o 4º degrau. Pior par medido: 4,56:1.
+
+### Lição 8 — Escala adaptativa exagera quando o máximo é minúsculo
+
+Dois testes meus se contradiziam, e a contradição era real: com domínio adaptativo ao
+mês, um mês com **uma** solicitação punha aquele dia no degrau mais escuro — vermelho
+de alarme para um pedido só, porque ele era tecnicamente o máximo.
+
+Um piso no número de degraus resolve. O degrau mais escuro volta a significar
+"movimentado", e um mês de duas solicitações não tem dia movimentado. O mesmo piso
+vale na legenda, senão ela anuncia faixas que a grade nunca usa.
+
+**Domínio adaptativo precisa de piso, e a legenda precisa usar o mesmo.**
+
+### Verificação
+
+- Frontend: `typecheck`, `lint` (0 avisos), `vitest` (482), `build`.
+- Bundle: entrada em **177,5 kB gzip**. Somando os quatro ciclos (Time, Dashboard,
+  Calendário, foto), ela cresceu **3,4 kB** apesar de quatro dependências novas — tudo
+  o que é pesado está atrás de `import()`.
+
+### O que lembrar
+
+- **Pular e avançar são asserções diferentes.** Um teste que cobre só a primeira
+  deixa passar ciclo infinito.
+- **Teste verde pode ser o defeito.** Quando o comportamento errado tem teste,
+  corrigir passa por apagá-lo.
+- **Envolva o componente do registry**, não o reescreva.
+- **Confira as duas metades do tema**: uma tela desenhada no claro pode ganhar
+  arestas no escuro.
+- **`object-fit` ausente é `fill`.** E `cover` e `contain` respondem perguntas
+  diferentes: preencher recortando, ou mostrar inteiro.
+- **Escala sequencial ordena por luminância.** Se a rampa não é monotônica, ela exige
+  legenda para o que deveria ser um olhar.
+- **Domínio adaptativo sem piso mente na ponta pequena.**

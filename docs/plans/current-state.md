@@ -345,6 +345,13 @@ O `RefundLineChart` é compartilhado pelo Dashboard (valor por mês) e pelo Cale
 mais o valor exato para o tooltip. Quem converte é o chamador — foi assim que o
 Calendário reusou o gráfico sem uma terceira ramificação de métrica.
 
+O calendário mostra a contagem por dia como **mapa de calor**, não como número: uma
+matiz quente só, pálido a escuro, com rampa PRÓPRIA no tema escuro (crescendo em
+luminância, porque em fundo escuro o que ordena é contraste contra a superfície). O
+domínio é adaptativo ao mês, com piso no número de degraus e legenda obrigatória — a
+mesma cor vale contagens diferentes em meses diferentes. Cada par de cor e número do
+dia foi medido: pior caso 4,56:1.
+
 **Dívida de acessibilidade aberta:** a paleta de gráficos falha 4 das 6 checagens
 do validador, incluindo o piso de visão normal entre "aprovada" e "paga" (ΔE 12,9,
 piso 15). Mitigada no gráfico empilhado, não corrigida. Registrada no

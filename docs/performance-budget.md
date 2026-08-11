@@ -87,6 +87,23 @@ divisão continua de pé. Se esses 120 kB estivessem na entrada, ela estaria per
 294 kB gzip, e é essa comparação que serve de verificação — não a presença de um
 chunk separado, que existe de qualquer forma.
 
+### Calendário (react-day-picker), medido em 2026-08-11
+
+| Chunk | Bruto | Gzip |
+|---|---|---|
+| `PageCalendar` (rota sob demanda) | 74,7 kB | **22,0 kB** |
+| Entrada (`index`) | 580,3 kB | 177,5 kB |
+
+O `react-day-picker` inteiro caiu **no chunk da rota**, não na entrada: quem nunca
+abre `/calendar` não baixa a grade. É consequência de a rota ser `lazy` no
+`router.tsx`, como todas as outras.
+
+A entrada foi de 174,1 para 177,5 kB gzip ao longo dos ciclos do Time, Dashboard,
+Calendário e foto de perfil — **+3,4 kB no total**, apesar de terem entrado quatro
+dependências. O que segurou foi tudo o que é pesado estar atrás de `import()`
+dinâmico. As exceções entram na entrada de propósito: o `Avatar` do Radix, porque a
+sidebar é parte da shell e carrega junto.
+
 O que mantém a divisão: **nenhum gráfico é reexportado por fachada nenhuma**. Quem
 a fachada de `features/refunds` exporta é o `DashboardCharts`, que faz o `import()`
 dos quatro por dentro. Um `export { default as RefundBarChart } from …` desfaria
