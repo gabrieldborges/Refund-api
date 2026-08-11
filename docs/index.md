@@ -40,6 +40,8 @@ frontend e pela API.
 - [UC-012 — Pagar solicitação de reembolso](use-cases/UC-012-pay-refund.md)
 - [UC-013 — Consultar histórico de revisões](use-cases/UC-013-list-refund-reviews.md)
 - [UC-014 — Consultar estatísticas de reembolso por usuário](use-cases/UC-014-user-refund-stats.md)
+- [UC-015 — Listar usuários](use-cases/UC-015-list-users.md)
+- [UC-016 — Consultar usuário](use-cases/UC-016-view-user.md)
 
 ## Decisões
 - [ADR-001 — Manter a arquitetura em camadas da API](decisions/ADR-001-layered-api.md)

@@ -48,9 +48,12 @@ import pytest
 #
 #   refunds.json -> Refund-FrontEnd/src/features/refunds/contract/
 #   app.json     -> Refund-FrontEnd/src/test/contract/
+#
+#   users.json   -> Refund-FrontEnd/src/features/team/contract/
 CONTRACT_PATHS = {
     "refunds": pathlib.Path("contract/refunds.json"),
     "app": pathlib.Path("contract/app.json"),
+    "users": pathlib.Path("contract/users.json"),
 }
 
 
@@ -97,7 +100,7 @@ def create_refund(client, headers):
 
 
 @pytest.mark.integration
-def test_the_contract_file_matches_what_the_api_actually_returns(authenticated):
+def test_the_contract_file_matches_what_the_api_actually_returns(authenticated, admin_headers):
     client, headers, user_id = authenticated
 
     created = create_refund(client, headers)
@@ -124,8 +127,22 @@ def test_the_contract_file_matches_what_the_api_actually_returns(authenticated):
         "problemDocument": client.get("/rota-inexistente").json(),
     }
 
+    # Captured with admin_headers, not `headers`: both routes are admin-only
+    # (BR-025), so a standard user's token would record a 403 body as if it were
+    # the contract. With both fixtures active there are two users — Ana from
+    # `authenticated` and Chefe from `admin_headers` — so the list snapshot has
+    # more than one row and a per-row shape error cannot hide.
+    users_contract = {
+        "userList": client.get("/users", headers=admin_headers).json(),
+        "userDetail": client.get(f"/users/{user_id}", headers=admin_headers).json(),
+    }
+
     stale = []
-    for name, captured in (("refunds", refunds_contract), ("app", app_contract)):
+    for name, captured in (
+        ("refunds", refunds_contract),
+        ("app", app_contract),
+        ("users", users_contract),
+    ):
         path = CONTRACT_PATHS[name]
         current = json.dumps(normalise(captured), ensure_ascii=False, indent=2, sort_keys=True)
         current += "\n"
@@ -141,5 +158,6 @@ def test_the_contract_file_matches_what_the_api_actually_returns(authenticated):
         f"The API's responses changed and {', '.join(stale)} was stale. It has been "
         "regenerated — review the diff, commit it, AND copy it to the frontend "
         "(refunds.json -> src/features/refunds/contract/, app.json -> "
-        "src/test/contract/), or the frontend keeps validating the old shape."
+        "src/test/contract/, users.json -> src/features/team/contract/), or the "
+        "frontend keeps validating the old shape."
     )

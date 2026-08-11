@@ -326,3 +326,47 @@ bytes no stream ASGI.
 `src/test_integration/api_test.py::test_an_oversized_body_is_refused_before_it_is_buffered`
 comprova o `413`, e `::test_a_normal_upload_is_unaffected` que um envio normal
 segue passando.
+
+## BR-025 — Acesso ao diretório de usuários
+
+Somente usuários com papel `admin` podem listar usuários
+([UC-015](use-cases/UC-015-list-users.md)) ou consultar um usuário específico
+([UC-016](use-cases/UC-016-view-user.md)).
+
+**Os dois endpoints recusam com códigos diferentes, e a diferença é a regra.**
+
+A **listagem** responde `403`. Ela não recebe nem revela nada sobre um `id` em
+particular, então pode ser honesta sobre a falta de permissão sem entregar
+informação nenhuma.
+
+A **consulta individual** responde `404`, com a mesma mensagem que responde para
+um `id` inexistente. Um `403` ali confirmaria que aquele `user_id` existe a quem
+não pode vê-lo — o mesmo raciocínio anti-enumeração da
+[BR-013](#br-013--recurso-inexistente-ou-alheio), já aplicado em UC-014. As duas
+mensagens são idênticas byte a byte por requisito: uma mensagem mais útil em um
+dos casos desfaria a razão de escolher `404`.
+
+Nos dois casos a checagem acontece **antes de qualquer acesso ao banco**. Recusar
+depois de consultar executaria trabalho para uma requisição que nunca foi
+permitida, e o tempo de resposta ainda diria a um estranho quantos usuários
+existem, aproximadamente.
+
+**Nenhum dos dois expõe `password`.** A tabela `users` guarda o hash bcrypt na
+mesma linha que nome e e-mail; a forma pública é montada campo a campo em
+`src/controllers/user_serializer.py`, em vez de a linha ser devolvida sem algumas
+chaves. Apagando chaves, uma coluna adicionada a `users` no futuro passaria a
+vazar sozinha.
+
+**Limitação conhecida:** o papel é lido das claims do JWT e não é reconsultado no
+banco, então uma promoção só vale no próximo login. Vale para todo o sistema, e
+não só para estas rotas.
+
+**Evidências:** `src/controllers/user_lister_controller.py` e
+`src/controllers/user_finder_controller.py` aplicam as duas recusas;
+`user_lister_controller_test.py::test_the_repository_is_never_reached_for_a_standard_user`
+e `user_finder_controller_test.py::test_the_repository_is_never_reached_for_a_standard_user`
+comprovam que nenhuma consulta roda antes da checagem;
+`user_finder_controller_test.py::test_a_standard_user_gets_not_found` e
+`::test_a_missing_user_gets_not_found` comprovam que as mensagens coincidem;
+`user_serializer_test.py::test_only_the_public_fields_are_exposed` fixa o
+conjunto exato de campos públicos.
