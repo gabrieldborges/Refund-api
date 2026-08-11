@@ -352,6 +352,13 @@ domínio é adaptativo ao mês, com piso no número de degraus e legenda obrigat
 mesma cor vale contagens diferentes em meses diferentes. Cada par de cor e número do
 dia foi medido: pior caso 4,56:1.
 
+**Duas paletas categóricas convivem**, e é deliberado: a de status
+(`chartPalette`, quatro slots mais o vermelho reservado a "rejeitada") e a de
+categoria de despesa (`categoryPalette`, cinco slots, validada nas seis checagens nos
+dois temas). Elas aparecem em cards diferentes do Dashboard, e um teste garante que
+não compartilham hexadecimal — cor repetida significaria duas coisas. Se algum dia as
+duas precisarem do mesmo gráfico, uma tem de sair.
+
 **Dívida de acessibilidade aberta:** a paleta de gráficos falha 4 das 6 checagens
 do validador, incluindo o piso de visão normal entre "aprovada" e "paga" (ΔE 12,9,
 piso 15). Mitigada no gráfico empilhado, não corrigida. Registrada no

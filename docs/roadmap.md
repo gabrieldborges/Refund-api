@@ -52,6 +52,13 @@ Os estados possíveis são:
   `#eda100`. Preservar o caráter azul/teal atual **não é possível** em quatro
   slots — foi testado, e dois azuis ficam em ΔE 14,4.
 
+  **A dívida é da paleta de STATUS, e só dela.** Em 2026-08-11 nasceu uma segunda
+  paleta categórica, para as cinco categorias de despesa
+  (`features/refunds/lib/categoryPalette.ts`), e essa **passa as seis checagens nos
+  dois modos**. As duas convivem no Dashboard, em cards separados, e um teste garante
+  que não compartilham nenhum hexadecimal. Quando a troca acontecer, a paleta de
+  categoria é o precedente de como validar.
+
 ## Em análise
 
 - ~~**Subir a versão do Python.** O projeto roda 3.9, que já não recebe

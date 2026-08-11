@@ -7106,3 +7106,61 @@ vale na legenda, senão ela anuncia faixas que a grade nunca usa.
 - **Escala sequencial ordena por luminância.** Se a rampa não é monotônica, ela exige
   legenda para o que deveria ser um olhar.
 - **Domínio adaptativo sem piso mente na ponta pequena.**
+
+## Ajuste — Gráfico de categoria: valores apagados e cor com propósito (2026-08-11)
+
+Frontend **482 → 490**. Nenhuma mudança de API.
+
+### Lição 1 — Arredondar a geometria apaga o dado; arredondar o rótulo não
+
+O eixo do gráfico de valor por categoria mostrava só 0 e 1. A causa foi minha:
+`scaleValue` arredondava o **valor da barra**, não a marca do eixo.
+
+Quando uma categoria é grande o bastante para a unidade virar milhares, todas as
+menores caem para exatamente 0 — e 0 já significa "categoria sem nenhuma
+solicitação". Uma categoria de R$ 300 ao lado de uma de R$ 15.000 é uma barra fina,
+não uma barra ausente, e o gráfico afirmava que era ausente.
+
+Reproduzi com números antes de tocar em nada, e o corte que eu tinha posto em dez mil
+piorou o diagnóstico: ele considerava o **máximo**, não a **dispersão**. Um máximo
+alto com o resto baixo é exatamente o caso que apaga o resto.
+
+**A separação certa: a barra desenha do valor cru, o formatador da marca arredonda.**
+O valor exato já estava no tooltip, então nada se perdeu ao parar de arredondar.
+
+### Lição 2 — A mesma decisão de cor pode inverter quando o desenho muda
+
+Eu havia argumentado — e implementado — uma cor só nas barras de categoria, porque a
+identidade já estava escrita no eixo X e colorir seria codificação redundante.
+
+O pedido de tirar os rótulos do eixo e deixar a categoria só na legenda **desfaz esse
+argumento**: sem rótulo no eixo, a cor passa a ser a única identidade, e aí ela não é
+redundante — é necessária. A regra não mudou; a premissa mudou.
+
+Vale lembrar disto ao reler uma decisão registrada: **o registro guarda o porquê, e o
+porquê pode deixar de valer.** Sem o porquê escrito, eu teria defendido a conclusão
+antiga sem perceber que a base dela tinha ido.
+
+### Lição 3 — Cinco entidades exigem cinco slots, e slots se validam
+
+Colorir cinco categorias com uma paleta de quatro obrigaria a ciclar, o que repete a
+primeira cor na quinta entidade. Nasceu uma segunda paleta categórica, e ela foi
+**validada**, não escolhida: as seis checagens passam nos dois modos. O par mais fraco
+é amarelo contra verde (ΔE 9,1 protan; 5,8 tritan), e a legenda é a codificação
+secundária que torna isso legal.
+
+Duas coisas que a coexistência exige, e que estão em teste:
+
+- **As duas paletas não podem compartilhar hexadecimal.** As duas aparecem no
+  Dashboard, e cor repetida significaria duas coisas.
+- **A paleta de categoria não pode ser uma rampa de luminância.** Ela é categórica; uma
+  rampa sugeriria ordem entre categorias, que não existe.
+
+### O que lembrar
+
+- **Arredonde o rótulo, nunca a geometria.** Zero desenhado é uma afirmação, e ela
+  colide com "não existe".
+- **Uma escala compartilhada se escolhe pela dispersão, não só pelo máximo.**
+- **Ao reabrir uma decisão, confira a premissa antes da conclusão.**
+- Paleta nova se valida por script. Duas paletas no mesmo produto precisam de teste
+  provando que não se cruzam.
