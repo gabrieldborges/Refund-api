@@ -79,6 +79,13 @@ VOLATILE = {
     "token": "eyJhbGciOiJIUzI1NiJ9.CONTRACT.SIGNATURE",
     "created_at": "2026-01-01T12:00:00",
     "reviewed_at": "2026-01-01T12:00:00",
+    # The summary's month buckets are derived from the day the test runs, so
+    # without this the file would go stale by itself on the first of every month
+    # and fail CI with nobody having changed a line. Same nature as created_at.
+    # Normalising all six to one value keeps what the contract is for — the array
+    # length and each bucket's shape — and drops only the labels, which the
+    # frontend validates as a plain string.
+    "month": "2026-01",
     "url": "http://localhost:3333/files/receipts/file.png?token=CONTRACT",
     "request_id": "00000000-0000-0000-0000-000000000000",
 }
@@ -99,7 +106,7 @@ def create_refund(client, headers):
     )
 
 
-def capture_refunds(client, headers, user_id):
+def capture_refunds(client, headers, admin_headers, user_id):
     created = create_refund(client, headers)
     refund_id = created.json()["attributes"]["id"]
 
@@ -110,6 +117,11 @@ def capture_refunds(client, headers, user_id):
         "receiptUrl": client.get(f"/refunds/{refund_id}/receipt", headers=headers).json(),
         "refundReviews": client.get(f"/refunds/{refund_id}/reviews", headers=headers).json(),
         "refundStats": client.get(f"/users/{user_id}/refund-stats", headers=headers).json(),
+        # BOTH scopes, because they are different shapes to validate: `scope` is
+        # "user" for a standard token and "all" for an admin's, and the frontend
+        # branches on nothing else to know which one it got.
+        "refundSummary": client.get("/refunds/summary", headers=headers).json(),
+        "refundSummaryAsAdmin": client.get("/refunds/summary", headers=admin_headers).json(),
     }
 
 
@@ -147,7 +159,7 @@ def test_the_contract_file_matches_what_the_api_actually_returns(authenticated, 
     client, headers, user_id = authenticated
 
     captures = (
-        ("refunds", capture_refunds(client, headers, user_id)),
+        ("refunds", capture_refunds(client, headers, admin_headers, user_id)),
         ("app", capture_app(client)),
         ("users", capture_users(client, admin_headers, user_id)),
     )

@@ -87,5 +87,375 @@
     },
     "type": "RefundStats",
     "user_id": 1
+  },
+  "refundSummary": {
+    "by_category": {
+      "food": {
+        "amount_in_cents": 4590,
+        "count": 1
+      },
+      "lodging": {
+        "amount_in_cents": 0,
+        "count": 0
+      },
+      "others": {
+        "amount_in_cents": 0,
+        "count": 0
+      },
+      "service": {
+        "amount_in_cents": 0,
+        "count": 0
+      },
+      "transport": {
+        "amount_in_cents": 0,
+        "count": 0
+      }
+    },
+    "by_month": [
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2026-01"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2026-01"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2026-01"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2026-01"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2026-01"
+      },
+      {
+        "amount_in_cents": 4590,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 4590,
+            "count": 1
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 1,
+        "month": "2026-01"
+      }
+    ],
+    "by_status": {
+      "approved": {
+        "amount_in_cents": 0,
+        "count": 0
+      },
+      "paid": {
+        "amount_in_cents": 0,
+        "count": 0
+      },
+      "pending": {
+        "amount_in_cents": 4590,
+        "count": 1
+      },
+      "rejected": {
+        "amount_in_cents": 0,
+        "count": 0
+      }
+    },
+    "months": 6,
+    "scope": "user",
+    "type": "RefundSummary"
+  },
+  "refundSummaryAsAdmin": {
+    "by_category": {
+      "food": {
+        "amount_in_cents": 4590,
+        "count": 1
+      },
+      "lodging": {
+        "amount_in_cents": 0,
+        "count": 0
+      },
+      "others": {
+        "amount_in_cents": 0,
+        "count": 0
+      },
+      "service": {
+        "amount_in_cents": 0,
+        "count": 0
+      },
+      "transport": {
+        "amount_in_cents": 0,
+        "count": 0
+      }
+    },
+    "by_month": [
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2026-01"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2026-01"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2026-01"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2026-01"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2026-01"
+      },
+      {
+        "amount_in_cents": 4590,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 4590,
+            "count": 1
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 1,
+        "month": "2026-01"
+      }
+    ],
+    "by_status": {
+      "approved": {
+        "amount_in_cents": 0,
+        "count": 0
+      },
+      "paid": {
+        "amount_in_cents": 0,
+        "count": 0
+      },
+      "pending": {
+        "amount_in_cents": 4590,
+        "count": 1
+      },
+      "rejected": {
+        "amount_in_cents": 0,
+        "count": 0
+      }
+    },
+    "months": 6,
+    "scope": "all",
+    "type": "RefundSummary"
   }
 }
