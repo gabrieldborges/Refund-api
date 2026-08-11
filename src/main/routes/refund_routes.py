@@ -75,7 +75,10 @@ async def list_refunds(
 # every unit test of the layers below and fails on first use.
 @refund_routes.get("/summary")
 async def summarize_refunds(
-    months: int = Query(6, ge=1, le=12),
+    # Sem default literal: o ano corrente não pode ser assado na assinatura, que
+    # é avaliada na importação. Ausente significa "o ano de hoje", e quem decide
+    # isso é o controller, com o relógio injetável dele.
+    year: Optional[int] = Query(None, ge=2000, le=2100),
     # Typed as int so FastAPI rejects garbage, like the listing's user_id. Only an
     # admin's request is actually narrowed by it: for a standard user the
     # controller ignores it, since they are already locked to themselves.
@@ -83,7 +86,7 @@ async def summarize_refunds(
     token_info: dict = Depends(get_current_user),
 ):
     http_request = HttpRequest(
-        query={"months": months, "user_id": user_id},
+        query={"year": year, "user_id": user_id},
         token_info=token_info,
     )
     view = refund_summary_composer()

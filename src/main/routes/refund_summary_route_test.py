@@ -45,28 +45,31 @@ def test_a_numeric_id_still_reaches_the_finder():
     assert f.called
 
 
-def test_the_route_passes_months_and_the_token_through():
+def test_the_route_passes_the_year_and_the_token_through():
     view = _view({"type": "RefundSummary"})
 
     with patch("src.main.routes.refund_routes.refund_summary_composer", return_value=view):
-        client.get("/refunds/summary?months=3")
+        client.get("/refunds/summary?year=2025")
 
     request = view.handle.call_args[0][0]
-    assert request.query == {"months": 3, "user_id": None}
+    assert request.query == {"year": 2025, "user_id": None}
     assert request.token_info == STANDARD
 
 
-def test_the_route_defaults_to_six_months():
+# No literal default in the signature: the current year cannot be baked into a
+# parameter evaluated at import time. Absent means "today's year", and the
+# controller decides that with its injectable clock.
+def test_the_route_leaves_an_absent_year_absent():
     view = _view({"type": "RefundSummary"})
 
     with patch("src.main.routes.refund_routes.refund_summary_composer", return_value=view):
         client.get("/refunds/summary")
 
-    assert view.handle.call_args[0][0].query["months"] == 6
+    assert view.handle.call_args[0][0].query["year"] is None
 
 
-# Two barriers on the ceiling: FastAPI's Query(le=12) on the route, and the
+# Two barriers on the bounds: FastAPI's Query(ge=, le=) on the route, and the
 # validator behind it. This asserts the outer one.
-def test_the_route_refuses_a_window_past_the_ceiling():
-    assert client.get("/refunds/summary?months=13").status_code == 422
-    assert client.get("/refunds/summary?months=0").status_code == 422
+def test_the_route_refuses_a_year_outside_the_bounds():
+    assert client.get("/refunds/summary?year=1999").status_code == 422
+    assert client.get("/refunds/summary?year=2101").status_code == 422

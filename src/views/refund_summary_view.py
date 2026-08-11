@@ -13,15 +13,15 @@ class RefundSummaryView:
 
     async def handle(self, http_request: HttpRequest) -> HttpResponse:
         try:
-            # Validator first, like RefundListerView: the ceiling on `months` is
-            # what bounds the table scan, so nothing past it may reach the
-            # repository.
+            # Validator first, like RefundListerView: the bounds on `year` are
+            # what keep an absurd value from reaching the repository — and from
+            # building an invalid datetime in the controller.
             refund_summary_validator(http_request)
 
             response = await self.__controller.summarize(
                 user_id=http_request.token_info["user_id"],
                 role=http_request.token_info["role"],
-                months=http_request.query["months"],
+                year=http_request.query.get("year"),
                 filter_user_id=http_request.query.get("user_id"),
             )
             return HttpResponse(body=response, status_code=200)

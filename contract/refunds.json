@@ -89,6 +89,9 @@
     "user_id": 1
   },
   "refundSummary": {
+    "available_years": [
+      2000
+    ],
     "by_category": {
       "food": {
         "amount_in_cents": 4590,
@@ -133,7 +136,7 @@
           }
         },
         "count": 0,
-        "month": "2026-01"
+        "month": "2000-01"
       },
       {
         "amount_in_cents": 0,
@@ -156,7 +159,7 @@
           }
         },
         "count": 0,
-        "month": "2026-01"
+        "month": "2000-02"
       },
       {
         "amount_in_cents": 0,
@@ -179,7 +182,7 @@
           }
         },
         "count": 0,
-        "month": "2026-01"
+        "month": "2000-03"
       },
       {
         "amount_in_cents": 0,
@@ -202,7 +205,7 @@
           }
         },
         "count": 0,
-        "month": "2026-01"
+        "month": "2000-04"
       },
       {
         "amount_in_cents": 0,
@@ -225,7 +228,53 @@
           }
         },
         "count": 0,
-        "month": "2026-01"
+        "month": "2000-05"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2000-06"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2000-07"
       },
       {
         "amount_in_cents": 4590,
@@ -248,7 +297,99 @@
           }
         },
         "count": 1,
-        "month": "2026-01"
+        "month": "2000-08"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2000-09"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2000-10"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2000-11"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2000-12"
       }
     ],
     "by_status": {
@@ -269,11 +410,14 @@
         "count": 0
       }
     },
-    "months": 6,
     "scope": "user",
-    "type": "RefundSummary"
+    "type": "RefundSummary",
+    "year": 2000
   },
   "refundSummaryAsAdmin": {
+    "available_years": [
+      2000
+    ],
     "by_category": {
       "food": {
         "amount_in_cents": 4590,
@@ -318,7 +462,7 @@
           }
         },
         "count": 0,
-        "month": "2026-01"
+        "month": "2000-01"
       },
       {
         "amount_in_cents": 0,
@@ -341,7 +485,7 @@
           }
         },
         "count": 0,
-        "month": "2026-01"
+        "month": "2000-02"
       },
       {
         "amount_in_cents": 0,
@@ -364,7 +508,7 @@
           }
         },
         "count": 0,
-        "month": "2026-01"
+        "month": "2000-03"
       },
       {
         "amount_in_cents": 0,
@@ -387,7 +531,7 @@
           }
         },
         "count": 0,
-        "month": "2026-01"
+        "month": "2000-04"
       },
       {
         "amount_in_cents": 0,
@@ -410,7 +554,53 @@
           }
         },
         "count": 0,
-        "month": "2026-01"
+        "month": "2000-05"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2000-06"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2000-07"
       },
       {
         "amount_in_cents": 4590,
@@ -433,7 +623,99 @@
           }
         },
         "count": 1,
-        "month": "2026-01"
+        "month": "2000-08"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2000-09"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2000-10"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2000-11"
+      },
+      {
+        "amount_in_cents": 0,
+        "by_status": {
+          "approved": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "paid": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "pending": {
+            "amount_in_cents": 0,
+            "count": 0
+          },
+          "rejected": {
+            "amount_in_cents": 0,
+            "count": 0
+          }
+        },
+        "count": 0,
+        "month": "2000-12"
       }
     ],
     "by_status": {
@@ -454,8 +736,8 @@
         "count": 0
       }
     },
-    "months": 6,
     "scope": "all",
-    "type": "RefundSummary"
+    "type": "RefundSummary",
+    "year": 2000
   }
 }

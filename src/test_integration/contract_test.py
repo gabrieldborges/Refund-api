@@ -79,19 +79,31 @@ VOLATILE = {
     "token": "eyJhbGciOiJIUzI1NiJ9.CONTRACT.SIGNATURE",
     "created_at": "2026-01-01T12:00:00",
     "reviewed_at": "2026-01-01T12:00:00",
-    # The summary's month buckets are derived from the day the test runs, so
-    # without this the file would go stale by itself on the first of every month
-    # and fail CI with nobody having changed a line. Same nature as created_at.
-    # Normalising all six to one value keeps what the contract is for — the array
-    # length and each bucket's shape — and drops only the labels, which the
-    # frontend validates as a plain string.
-    "month": "2026-01",
     "url": "http://localhost:3333/files/receipts/file.png?token=CONTRACT",
     "request_id": "00000000-0000-0000-0000-000000000000",
 }
 
 
+# A fixed year for anything that carries one. The summary defaults to the CURRENT
+# year, so without this the file would go stale by itself on the 1st of January and
+# fail CI with nobody having changed a line — the same nature as created_at.
+#
+# Only the year is replaced, not the whole label: "2026-03" becomes "2000-03", so
+# the twelve buckets stay twelve DISTINCT months. Collapsing them all to one value
+# would have kept the array length while losing the thing the contract is meant to
+# prove — that January through December are all present, in order.
+CONTRACT_YEAR = 2000
+
+
 def normalise_field(key, value):
+    if key == "month" and isinstance(value, str) and "-" in value:
+        return f"{CONTRACT_YEAR}-{value.split('-', 1)[1]}"
+    if key == "year" and isinstance(value, int):
+        return CONTRACT_YEAR
+    if key == "available_years" and isinstance(value, list):
+        # Deduplicated after the fact: two real years both become CONTRACT_YEAR, so
+        # keeping duplicates would record a shape the API never returns.
+        return sorted({CONTRACT_YEAR for _ in value})
     if key in VOLATILE and not isinstance(value, (dict, list)):
         return VOLATILE[key]
     return normalise(value)

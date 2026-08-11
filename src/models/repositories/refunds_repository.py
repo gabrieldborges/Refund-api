@@ -91,8 +91,23 @@ class RefundsRepository(RefundsRepositoryInterface):
             refund = (await session.execute(query)).fetchone()
             return self.__to_refund(refund) if refund else None
 
+    async def available_years(self, user_id: Optional[int]) -> list[int]:
+        """The years that actually have refunds, oldest first.
+
+        Exists so the year picker offers only years that could show something. The
+        alternative — the client guessing "this year and the four before" — would
+        offer years that are empty by construction, and an empty chart the user was
+        invited to open is worse than a year not offered.
+        """
+        async with self.__db_connection.connect() as session:
+            year = func.extract("year", Refunds.c.created_at)  # pylint: disable=not-callable
+            query = select(year).select_from(Refunds).group_by(year).order_by(year.asc())
+            if user_id is not None:
+                query = query.where(Refunds.c.user_id == user_id)
+            return [int(row[0]) for row in (await session.execute(query)).fetchall()]
+
     async def summarize_refunds(
-        self, user_id: Optional[int], since: datetime
+        self, user_id: Optional[int], since: datetime, until: datetime
     ) -> tuple[dict, dict, list]:
         """Three independent aggregations over the same filtered set.
 
@@ -103,9 +118,13 @@ class RefundsRepository(RefundsRepositoryInterface):
         The window and the user filter are in EVERY one of them. A status total
         that ignored the window would disagree with the months that are supposed
         to add up to it.
+
+        The window is half-open, [since, until): a closed upper bound would need to
+        name the last instant of the year, and "23:59:59" silently drops whatever
+        happens in the final second.
         """
         async with self.__db_connection.connect() as session:
-            filters = [Refunds.c.created_at >= since]
+            filters = [Refunds.c.created_at >= since, Refunds.c.created_at < until]
             if user_id is not None:
                 filters.append(Refunds.c.user_id == user_id)
 

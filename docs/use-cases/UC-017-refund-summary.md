@@ -34,13 +34,24 @@ e tempo no mesmo gráfico.
 
 | Parâmetro | Padrão | Faixa | Efeito |
 | --- | --- | --- | --- |
-| `months` | `6` | `1`–`12` | Tamanho da janela, em meses, incluindo o corrente. |
+| `year` | o ano corrente | `2000`–`2100` | Ano-calendário a resumir, de janeiro a dezembro. |
 | `user_id` | ausente | inteiro | Restringe a um solicitante. **Ignorado** para usuário `standard`. |
 
-**O teto de `months` é uma regra, não formatação.** Ele é a única coisa que limita
-quanto da tabela este endpoint varre. Acima do teto a requisição é **recusada com
-`422`**, não silenciosamente reduzida: reduzir responderia uma pergunta diferente
-da que foi feita, sem avisar.
+**É um ano-calendário, não uma janela deslizante.** O Dashboard nomeia o ano no
+título de cada card e põe apenas o mês no eixo X — o que só lê corretamente se cada
+resposta cobrir janeiro a dezembro de um ano só. Uma janela deslizante colocaria
+dois anos diferentes num eixo de nomes de mês sem ano.
+
+**A janela é semiaberta**, `[1º de janeiro do ano, 1º de janeiro do seguinte)`. Um
+limite superior fechado exigiria nomear o último instante do ano, e `23:59:59`
+descarta em silêncio o que acontecer no último segundo.
+
+**Os limites de `year` são regra, não formatação:** eles impedem um valor absurdo
+de chegar ao repositório e de construir um `datetime` inválido. Fora da faixa a
+requisição é **recusada com `422`**.
+
+**Sem `year`, o ano é o corrente**, decidido pelo relógio do controller — que é
+injetável justamente para os testes não dependerem do ano em que rodam.
 
 ## Resposta
 
@@ -48,7 +59,8 @@ da que foi feita, sem avisar.
 {
   "type": "RefundSummary",
   "scope": "user",
-  "months": 6,
+  "year": 2026,
+  "available_years": [2025, 2026],
   "by_status": {
     "pending":  { "count": 2, "amount_in_cents": 30000 },
     "approved": { "count": 5, "amount_in_cents": 65000 },
@@ -79,16 +91,18 @@ zeros, pela mesma razão de UC-014: uma chave ausente obriga o cliente a tratar
 `undefined`, e num gráfico a barra ausente simplesmente desaparece — "zero" e "não
 existe" são afirmações diferentes.
 
-**`by_month` traz todos os meses da janela**, do mais antigo ao mais recente,
-inclusive os sem nenhuma solicitação. Um buraco na série faria o gráfico de linha
-mentir sobre a inclinação.
+**`by_month` traz sempre doze entradas**, de janeiro a dezembro, inclusive os meses
+sem nenhuma solicitação. Um buraco na série faria o gráfico de linha mentir sobre a
+inclinação, e um primeiro mês parcial leria como uma queda que nunca houve.
+
+**`available_years` lista apenas os anos que têm solicitações**, do mais antigo ao
+mais recente, no mesmo escopo do resto da resposta. Existe para o seletor de ano
+não convidar ninguém a abrir um gráfico vazio por construção — e é escopado como
+tudo o mais: um usuário `standard` não descobre em que anos **outras** pessoas
+tiveram solicitações.
 
 **O total de cada mês é a soma dos status dele**, calculada no servidor para o
 cliente nunca somar por conta e nunca discordar da API.
-
-**A janela começa no primeiro dia do mês mais antigo**, não em "`months` × 30 dias
-atrás". Um mês mais antigo parcial apareceria como uma barra curta ao lado de
-barras cheias, e leria como uma queda que nunca houve.
 
 **Não há total geral entre status.** Somar os quatro juntaria previsão
 (`pending`), passivo (`approved`), despesa realizada (`paid`) e nada
@@ -108,11 +122,11 @@ dinheiro soma `approved + paid`, que é o número que o card da Home deveria mos
 | --- | --- |
 | `200` | Resumo devolvido, possivelmente todo zerado. |
 | `401` | JWT ausente, inválido ou expirado. |
-| `422` | `months` fora de `1`–`12`, ou `user_id` não numérico. |
+| `422` | `year` fora de `2000`–`2100`, ou `user_id` não numérico. |
 
 ## Fluxos alternativos e erros
 
-- Sem nenhuma solicitação na janela, a API responde `200` com tudo zerado e os
+- Sem nenhuma solicitação no ano, a API responde `200` com tudo zerado e os
   meses presentes — não é um erro.
 - Um `admin` consultando um `user_id` inexistente recebe `200` zerado, pela mesma
   limitação registrada em UC-014: não há checagem de existência.
@@ -141,13 +155,13 @@ quem olha o gráfico — e essa decisão não foi tomada.
   comprova que a ordem funciona, e `::test_a_numeric_id_still_reaches_the_finder`
   que a rota anterior não foi quebrada.
 - `src/validators/refund_summary_validator.py` recusa a janela fora da faixa;
-  `refund_summary_validator_test.py::test_a_month_count_above_the_ceiling_raises`.
+  `refund_summary_validator_test.py::test_a_year_outside_the_range_raises`.
 - `src/controllers/refund_summary_controller.py` aplica o escopo e preenche zeros;
   `refund_summary_controller_test.py::test_a_standard_user_only_ever_aggregates_themselves`,
-  `::test_every_month_in_the_window_is_present_in_order`,
+  `::test_the_year_is_always_twelve_months_from_january`,
   `::test_an_empty_month_is_zero_rather_than_absent`,
-  `::test_the_window_starts_at_the_first_day_of_the_oldest_month` e
-  `::test_the_window_crosses_the_year_boundary`.
+  `::test_the_window_is_the_calendar_year_half_open` e
+  `::test_an_absent_year_falls_back_to_the_current_one`.
 - `src/models/repositories/refunds_repository.py::summarize_refunds` executa as
   três agregações; `refunds_repository_test.py::test_summarize_refunds_applies_the_window_to_every_query`
   e `::test_summarize_refunds_filters_by_user_in_every_query` provam que janela e

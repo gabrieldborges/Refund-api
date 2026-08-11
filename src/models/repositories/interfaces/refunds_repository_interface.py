@@ -36,6 +36,10 @@ class RefundsRepositoryInterface(ABC):
 
     @abstractmethod
     async def summarize_refunds(
-        self, user_id: Optional[int], since: datetime
+        self, user_id: Optional[int], since: datetime, until: datetime
     ) -> tuple[dict, dict, list]:
+        pass
+
+    @abstractmethod
+    async def available_years(self, user_id: Optional[int]) -> list[int]:
         pass

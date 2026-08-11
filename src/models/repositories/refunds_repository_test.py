@@ -403,7 +403,7 @@ async def test_summarize_refunds_groups_by_status(mock_connection, mock_db):
     _wire_summary(mock_db, [("pending", 2, 3000), ("paid", 1, 1000)], [], [])
 
     by_status, _, _ = await RefundsRepository(mock_connection).summarize_refunds(
-        user_id=None, since=datetime(2026, 3, 1)
+        user_id=None, since=datetime(2026, 1, 1), until=datetime(2027, 1, 1)
     )
 
     assert by_status == {
@@ -417,7 +417,7 @@ async def test_summarize_refunds_groups_by_category(mock_connection, mock_db):
     _wire_summary(mock_db, [], [("food", 3, 4500)], [])
 
     _, by_category, _ = await RefundsRepository(mock_connection).summarize_refunds(
-        user_id=None, since=datetime(2026, 3, 1)
+        user_id=None, since=datetime(2026, 1, 1), until=datetime(2027, 1, 1)
     )
 
     assert by_category == {"food": {"count": 3, "amount_in_cents": 4500}}
@@ -430,7 +430,7 @@ async def test_summarize_refunds_crosses_month_with_status(mock_connection, mock
     _wire_summary(mock_db, [], [], [(datetime(2026, 7, 1), "paid", 2, 5000)])
 
     _, _, by_month = await RefundsRepository(mock_connection).summarize_refunds(
-        user_id=None, since=datetime(2026, 3, 1)
+        user_id=None, since=datetime(2026, 1, 1), until=datetime(2027, 1, 1)
     )
 
     assert by_month == [
@@ -445,7 +445,7 @@ async def test_summarize_refunds_guards_a_null_sum(mock_connection, mock_db):
     _wire_summary(mock_db, [("pending", 1, None)], [], [])
 
     by_status, _, _ = await RefundsRepository(mock_connection).summarize_refunds(
-        user_id=None, since=datetime(2026, 3, 1)
+        user_id=None, since=datetime(2026, 1, 1), until=datetime(2027, 1, 1)
     )
 
     assert by_status["pending"]["amount_in_cents"] == 0
@@ -458,7 +458,7 @@ async def test_summarize_refunds_applies_the_window_to_every_query(mock_connecti
     _wire_summary(mock_db, [], [], [])
 
     await RefundsRepository(mock_connection).summarize_refunds(
-        user_id=None, since=datetime(2026, 3, 1)
+        user_id=None, since=datetime(2026, 1, 1), until=datetime(2027, 1, 1)
     )
 
     statements = _summary_statements(mock_db)
@@ -473,7 +473,7 @@ async def test_summarize_refunds_filters_by_user_in_every_query(mock_connection,
     _wire_summary(mock_db, [], [], [])
 
     await RefundsRepository(mock_connection).summarize_refunds(
-        user_id=7, since=datetime(2026, 3, 1)
+        user_id=7, since=datetime(2026, 1, 1), until=datetime(2027, 1, 1)
     )
 
     for statement in _summary_statements(mock_db):
@@ -485,7 +485,7 @@ async def test_summarize_refunds_without_a_user_does_not_filter(mock_connection,
     _wire_summary(mock_db, [], [], [])
 
     await RefundsRepository(mock_connection).summarize_refunds(
-        user_id=None, since=datetime(2026, 3, 1)
+        user_id=None, since=datetime(2026, 1, 1), until=datetime(2027, 1, 1)
     )
 
     for statement in _summary_statements(mock_db):
@@ -498,10 +498,74 @@ async def test_summarize_refunds_groups_the_month_query_by_both_keys(mock_connec
     _wire_summary(mock_db, [], [], [])
 
     await RefundsRepository(mock_connection).summarize_refunds(
-        user_id=None, since=datetime(2026, 3, 1)
+        user_id=None, since=datetime(2026, 1, 1), until=datetime(2027, 1, 1)
     )
 
     month_statement = _summary_statements(mock_db)[2]
     assert "GROUP BY date_trunc" in month_statement
     assert "refunds.status" in month_statement
     assert "ORDER BY date_trunc" in month_statement
+
+
+def _wire_years(mock_db, rows):
+    result = MagicMock()
+    result.fetchall = MagicMock(return_value=rows)
+    mock_db.session.execute = AsyncMock(return_value=result)
+
+
+# EXTRACT returns a numeric type, not an int, so the cast is what keeps a Decimal
+# out of the JSON response.
+@pytest.mark.asyncio
+async def test_available_years_returns_ints(mock_connection, mock_db):
+    _wire_years(mock_db, [(2024.0,), (2026.0,)])
+
+    years = await RefundsRepository(mock_connection).available_years(user_id=None)
+
+    assert years == [2024, 2026]
+    assert all(isinstance(year, int) for year in years)
+
+
+@pytest.mark.asyncio
+async def test_available_years_groups_and_orders_ascending(mock_connection, mock_db):
+    _wire_years(mock_db, [])
+
+    await RefundsRepository(mock_connection).available_years(user_id=None)
+
+    statement = str(mock_db.session.execute.call_args[0][0])
+    assert "GROUP BY" in statement
+    assert "ORDER BY" in statement and "ASC" in statement
+
+
+# Scoped like every other aggregate: a standard user must not learn which years
+# OTHER people have refunds in.
+@pytest.mark.asyncio
+async def test_available_years_filters_by_user(mock_connection, mock_db):
+    _wire_years(mock_db, [])
+
+    await RefundsRepository(mock_connection).available_years(user_id=7)
+
+    assert "refunds.user_id =" in str(mock_db.session.execute.call_args[0][0])
+
+
+@pytest.mark.asyncio
+async def test_available_years_without_a_user_does_not_filter(mock_connection, mock_db):
+    _wire_years(mock_db, [])
+
+    await RefundsRepository(mock_connection).available_years(user_id=None)
+
+    assert "refunds.user_id =" not in str(mock_db.session.execute.call_args[0][0])
+
+
+# The half-open upper bound: a closed one would need to name the last instant of
+# the year, and "23:59:59" silently drops the final second.
+@pytest.mark.asyncio
+async def test_summarize_refunds_uses_a_half_open_window(mock_connection, mock_db):
+    _wire_summary(mock_db, [], [], [])
+
+    await RefundsRepository(mock_connection).summarize_refunds(
+        user_id=None, since=datetime(2026, 1, 1), until=datetime(2027, 1, 1)
+    )
+
+    for statement in _summary_statements(mock_db):
+        assert "refunds.created_at >=" in statement
+        assert "refunds.created_at <" in statement
