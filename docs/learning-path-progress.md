@@ -6692,3 +6692,95 @@ todo o resto do processo.
   entrada: um chunk existe de qualquer forma, mesmo se a entrada também o carregar.
 - **Ordem de declaração de rota é comportamento**, não organização.
 - Um teste de rota deve afirmar **qual** composer rodou, não que houve 200.
+
+## Ciclo de ajuste — Gráficos do Dashboard (2026-08-11)
+
+Correções pedidas depois de usar a tela: datas ilegíveis no mobile, seletor de ano,
+escala de valor em inteiros, barras de categoria verticais e cards de indicador
+coloridos.
+
+Suítes: backend **400 → 405**, frontend **387 → 406**.
+
+### Lição 1 — O que não varia entre as marcas não pertence ao eixo
+
+O eixo mostrava "2026-03" em doze marcas. Doze rótulos de dez caracteres não cabem
+em 390px: eles colidem ou o Nivo os corta.
+
+A correção não foi encolher a fonte. Foi perceber que **o ano é idêntico nas doze
+marcas** — ele não distingue uma da outra, então não está informando nada ali. Subiu
+para o título do card, e o eixo ficou com "mar.", que é o que muda.
+
+A mesma regra resolveu duas outras coisas de uma vez: a unidade do valor ("em
+reais") também é igual para todas as marcas, então subiu para cima do gráfico em vez
+de virar "R$" repetido em cada tick. E no mobile os rótulos rareiam para um a cada
+dois — **a série continua com os doze pontos**, só a rotulagem afina.
+
+Isso obrigou o backend a mudar de janela deslizante para ano-calendário: um eixo de
+meses sem ano só é honesto se todos os meses forem do mesmo ano.
+
+### Lição 2 — Uma escala fixa mente em uma das duas pontas
+
+Pedido: eixo em inteiros, "cada mil reais" no rótulo. Com os volumes reais do
+projeto (R$ 1.878 no total) isso mostraria `2`, e cada categoria abaixo de R$ 500
+mostraria `0` — indistinguível de categoria sem solicitação nenhuma.
+
+A unidade passou a sair do **maior valor da série**: reais, milhares ou milhões. E o
+corte para milhares é em **dez** mil, não mil — entre mil e dez mil a divisão
+produz 1, 2, 3, que é perder resolução sem ganhar legibilidade.
+
+Duas coisas que fazem o arredondamento ser aceitável: a unidade escolhida vale para
+**todos** os pontos (duas unidades no mesmo eixo tornariam as alturas
+incomparáveis), e o **tooltip carrega o valor exato**. O eixo pode arredondar porque
+existe onde ler o número inteiro.
+
+### Lição 3 — Cor de fundo é cor com significado, ou não é nada
+
+Os três cards ganharam fundo da paleta dos gráficos. A pergunta que importava não
+era "quais três cores", era **o que a cor está dizendo**.
+
+Na rosca aquelas cores significam status. Então "Pendentes" recebeu exatamente a
+cor de pendente e "Aprovado + pago" a de aprovada — mesma entidade, mesma cor. Já
+"Solicitações" é um total, que não é status nenhum; recebeu o azul escuro, que
+nenhuma fatia usa nesta tela. Pegar os três primeiros slots na ordem da paleta
+faria "Pendentes" aparecer com a cor que a rosca ao lado usa para "paga".
+
+E o texto é **calculado** do fundo por `readableTextOn`, que já existia: dois dos
+fundos são pastéis claros e dois são escuros, então qualquer cor de texto fixa
+falharia em metade deles.
+
+Os cards ficam **neutros enquanto carregam e em erro**. Um bloco de cor com uma
+mensagem de erro dentro parece um estado válido, e não é.
+
+### Lição 4 — Margem separa pixels, não texto
+
+O título ficou "Solicitações por status" mais um `<span>` com o ano, separados por
+`ml-2`. Visualmente correto. O nome acessível saía **"Solicitações por
+status2026"** — o JSX descarta o espaço entre elementos em linhas diferentes, e
+margem não é caractere.
+
+Descobri porque um teste de heading falhou. A tentação era ajustar o regex do teste;
+o defeito era do componente. Um `{" "}` explícito resolveu.
+
+**Um teste que falha pode estar certo sobre o código e errado sobre a expectativa —
+ou o contrário. Vale olhar qual dos dois antes de mexer.**
+
+### Verificação
+
+- Backend: `pytest` (405), `pytest -m integration` (72), `pylint src` saindo 0.
+- Frontend: `typecheck`, `lint` (0 avisos), `vitest` (406), `build`.
+- Ponta a ponta: ano corrente por padrão (2026) com 12 meses de janeiro a dezembro;
+  `year=2025` devolvendo 12 meses zerados; `available_years` continuando a listar só
+  os anos com dado mesmo ao visualizar um ano vazio.
+- Bundle: entrada de 174,1 para **174,5 kB gzip** — os 0,5 kB são o seletor e os
+  dois helpers. A divisão dos gráficos continua de pé.
+
+### O que lembrar
+
+- **Pergunte se a informação varia entre as marcas.** Se não varia, ela pertence ao
+  título ou ao rótulo da unidade, não ao eixo. Foi o que resolveu mobile, escala e
+  legibilidade de uma vez.
+- **Escala fixa quebra numa das pontas.** Adapte pelo maior valor e deixe o exato no
+  tooltip.
+- **Antes de escolher a cor, pergunte o que ela significa.** Se a mesma paleta já
+  significa algo dois centímetros ao lado, ela não pode significar outra coisa aqui.
+- `readableTextOn` existe: não escolha cor de texto sobre fundo variável à mão.

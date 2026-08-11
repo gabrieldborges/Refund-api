@@ -226,6 +226,33 @@ Duas decisões de forma vieram da análise, não do gosto: as barras por categor
 Custo medido: os gráficos foram de 74,2 para **≈120,7 kB gzip**; a entrada subiu
 **0,9 kB**, de 173,1 para 174,1 — a divisão continua de pé.
 
+**Ajuste de 2026-08-11, depois do uso.** O resumo passou de janela deslizante de
+`months` para **ano-calendário** com `year`, mais `available_years`. O motivo é de
+leitura: o eixo X carrega **só o mês** e o ano vive no **título do card** — o ano é
+o mesmo para as doze marcas, e no eixo gastaria a largura que falta em 390px com a
+única informação que não varia. Isso só lê corretamente se cada resposta cobrir
+janeiro a dezembro de um ano; uma janela deslizante colocaria dois anos num eixo de
+nomes de mês sem ano.
+
+**Regra de rótulo, para o Ciclo 3 herdar.** O período vai no título, a unidade do
+eixo vai acima do gráfico, e o eixo carrega só o que varia entre as marcas:
+
+| Granularidade | Título do card | Eixo X |
+|---|---|---|
+| Mensal (Dashboard) | o **ano** | só o **mês** |
+| Diária (Calendário, Ciclo 3) | o **mês e o ano** | só o **dia** |
+
+O `ChartCard` já recebe o período por prop (`period`), então o Calendário passa
+"agosto de 2026" sem tocar no componente.
+
+**Escala de valor.** O eixo mostra inteiros e a unidade é nomeada uma vez acima do
+gráfico ("em reais", "em milhares de reais", "em milhões de reais"), escolhida pelo
+**maior valor da série**. Fixar em milhares funciona com números grandes e mente com
+pequenos: com os volumes atuais do projeto o eixo leria 2, e categorias abaixo de
+R$ 500 leriam 0 — indistinguível de categoria sem nenhuma solicitação. O corte para
+milhares é em dez mil, não mil, porque entre os dois a divisão produz 1, 2, 3: perda
+de resolução sem ganho de legibilidade.
+
 ### O plano original do Ciclo 2, para referência
 
 ### Backend
